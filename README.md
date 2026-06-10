@@ -49,3 +49,5 @@ Mientras esta vacio, los botones abren WhatsApp con el mensaje preparado para qu
 ## Siguiente fase
 
 Ver `BACKEND-NEXT-STEPS.md` para convertir esta pagina estatica en una herramienta real con base de datos, panel administrativo, storage de fotos/videos, analytics y dominio propio.
+
+Ver `CLIENT-PROPOSAL.md` para una estructura de venta por fases y rangos sugeridos de precio.

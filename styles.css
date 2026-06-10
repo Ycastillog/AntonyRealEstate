@@ -493,7 +493,8 @@ main {
 
 .video-section,
 .zones-section,
-.testimonials-section {
+.testimonials-section,
+.client-ready-section {
   margin-top: 22px;
   padding: 22px;
   background: white;
@@ -583,6 +584,36 @@ main {
   border: 1px solid #f1d8a7;
   border-radius: 999px;
   font-weight: 850;
+}
+
+.ready-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.ready-grid article {
+  display: grid;
+  gap: 10px;
+  min-height: 170px;
+  align-content: start;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.ready-grid svg {
+  color: var(--gold-strong);
+}
+
+.ready-grid strong {
+  font-size: 1.05rem;
+}
+
+.ready-grid span {
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .delivered-section {
@@ -1206,6 +1237,7 @@ textarea {
   .lead-section,
   .video-grid,
   .testimonial-grid,
+  .ready-grid,
   .case-grid,
   .delivered-grid {
     grid-template-columns: 1fr;
@@ -1271,6 +1303,7 @@ textarea {
   .profile-stats,
   .professional-grid,
   .portfolio-metrics,
+  .ready-grid,
   .trust-strip {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1332,6 +1365,7 @@ textarea {
   .delivered-section,
   .zones-section,
   .testimonials-section,
+  .client-ready-section,
   .lead-section,
   .workspace,
   .floating-whatsapp,
