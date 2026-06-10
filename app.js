@@ -197,7 +197,7 @@ function render() {
   document.querySelector("#totalListings").textContent = listings.length;
   document.querySelector("#readyListings").textContent = listings.filter((item) => item.status === "ready").length;
   document.querySelector("#projectListings").textContent = listings.filter((item) => item.status === "project").length;
-  document.querySelector("#resultsTitle").textContent = `${filtered.length} ${filtered.length === 1 ? "propiedad" : "propiedades"}`;
+  document.querySelector("#resultsTitle").textContent = `${filtered.length} ${filtered.length === 1 ? "unidad en inventario" : "unidades en inventario"}`;
 
   if (window.lucide) lucide.createIcons();
 }

@@ -645,6 +645,136 @@ main {
   line-height: 1.45;
 }
 
+.portfolio-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.portfolio-metrics span {
+  display: grid;
+  gap: 4px;
+  min-height: 86px;
+  align-content: center;
+  padding: 14px;
+  background: var(--ink);
+  color: #d8e1ec;
+  border-radius: 8px;
+}
+
+.portfolio-metrics strong {
+  color: #f2c66d;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.portfolio-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.portfolio-tabs a {
+  padding: 10px 14px;
+  background: #fff7e8;
+  color: var(--gold-strong);
+  border: 1px solid #f1d8a7;
+  border-radius: 999px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.case-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.case-card {
+  display: grid;
+  overflow: hidden;
+  min-width: 0;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.featured-case {
+  grid-column: span 2;
+}
+
+.case-photo {
+  min-height: 230px;
+  background: #d7dde7 center/cover;
+}
+
+.featured-case .case-photo {
+  min-height: 280px;
+}
+
+.case-award {
+  background-image: url("https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1100&q=85");
+}
+
+.case-family {
+  background-image: url("https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=900&q=85");
+}
+
+.case-investor {
+  background-image: url("https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=900&q=85");
+}
+
+.case-project {
+  background-image: url("https://images.unsplash.com/photo-1600047509358-9dc75507daeb?auto=format&fit=crop&w=900&q=85");
+}
+
+.case-copy {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.case-copy strong {
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.case-copy p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.case-copy a {
+  color: var(--gold-strong);
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.case-status {
+  width: max-content;
+  padding: 7px 9px;
+  background: var(--ink);
+  color: white;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.case-status.delivered {
+  background: #128c7e;
+}
+
+.case-status.ready {
+  background: var(--gold-strong);
+}
+
+.case-status.project {
+  background: var(--rose);
+}
+
 .lead-section {
   display: grid;
   grid-template-columns: minmax(0, 0.8fr) minmax(320px, 1.2fr);
@@ -1069,8 +1199,17 @@ textarea {
   .lead-section,
   .video-grid,
   .testimonial-grid,
+  .case-grid,
   .delivered-grid {
     grid-template-columns: 1fr;
+  }
+
+  .featured-case {
+    grid-column: span 1;
+  }
+
+  .portfolio-metrics {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .professional-grid {
@@ -1124,8 +1263,14 @@ textarea {
 
   .profile-stats,
   .professional-grid,
+  .portfolio-metrics,
   .trust-strip {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .case-photo,
+  .featured-case .case-photo {
+    min-height: 210px;
   }
 
   .brand-divider {
