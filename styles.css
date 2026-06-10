@@ -933,6 +933,21 @@ textarea {
   font-size: clamp(1.35rem, 2vw, 2rem);
 }
 
+.content-note {
+  max-width: 720px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.inventory-secondary {
+  opacity: 0.96;
+}
+
+.inventory-secondary .content-area {
+  border-color: #e7c982;
+}
+
 .listing-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));

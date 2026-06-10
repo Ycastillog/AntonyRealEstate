@@ -194,10 +194,15 @@ function render() {
   grid.innerHTML = filtered.map(renderCard).join("");
   emptyState.hidden = filtered.length !== 0;
 
-  document.querySelector("#totalListings").textContent = listings.length;
-  document.querySelector("#readyListings").textContent = listings.filter((item) => item.status === "ready").length;
-  document.querySelector("#projectListings").textContent = listings.filter((item) => item.status === "project").length;
-  document.querySelector("#resultsTitle").textContent = `${filtered.length} ${filtered.length === 1 ? "unidad en inventario" : "unidades en inventario"}`;
+  const totalListings = document.querySelector("#totalListings");
+  const readyListings = document.querySelector("#readyListings");
+  const projectListings = document.querySelector("#projectListings");
+
+  if (totalListings) totalListings.textContent = listings.length;
+  if (readyListings) readyListings.textContent = listings.filter((item) => item.status === "ready").length;
+  if (projectListings) projectListings.textContent = listings.filter((item) => item.status === "project").length;
+
+  document.querySelector("#resultsTitle").textContent = `${filtered.length} ${filtered.length === 1 ? "referencia disponible" : "referencias disponibles"}`;
 
   if (window.lucide) lucide.createIcons();
 }
