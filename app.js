@@ -11,7 +11,6 @@ const seedListings = [
     beds: 3,
     meters: 180,
     status: "ready",
-    availability: "available",
     hook: "Millon penthouse | 3 habitaciones | 3 parqueos",
     notes: "Penthouse en El Millon con 3 habitaciones, 3 parqueos y espacios amplios para familia o inversion.",
     photos: [
@@ -27,7 +26,6 @@ const seedListings = [
     beds: 3,
     meters: 115,
     status: "ready",
-    availability: "reserved",
     hook: "Jacobo Majluta | 3 habitaciones | 2 banos",
     notes: "Apartamento familiar con buena distribucion, sala amplia, balcon y ubicacion practica para vivir.",
     photos: [
@@ -43,7 +41,6 @@ const seedListings = [
     beds: 3,
     meters: 135,
     status: "ready",
-    availability: "available",
     hook: "Las Praderas | 3 habitaciones | 3 banos | 2 parqueos",
     notes: "Unidad lista en Las Praderas con 3 habitaciones, 3 banos, 2 parqueos y terminaciones modernas.",
     photos: [
@@ -59,7 +56,6 @@ const seedListings = [
     beds: 2,
     meters: 84,
     status: "project",
-    availability: "available",
     hook: "Proyecto con respaldo real | reserva flexible",
     notes: "Proyecto para inversion con plan de pago flexible, amenidades y alto potencial de renta.",
     photos: [
@@ -118,16 +114,6 @@ function number(value) {
 
 function statusLabel(status) {
   return status === "project" ? "Proyecto" : "Listo";
-}
-
-function availabilityLabel(availability) {
-  const labels = {
-    available: "Disponible",
-    reserved: "Reservado",
-    sold: "Vendido"
-  };
-
-  return labels[availability] || "Disponible";
 }
 
 function whatsappUrl(message) {
@@ -202,7 +188,7 @@ function render() {
   if (readyListings) readyListings.textContent = listings.filter((item) => item.status === "ready").length;
   if (projectListings) projectListings.textContent = listings.filter((item) => item.status === "project").length;
 
-  document.querySelector("#resultsTitle").textContent = `${filtered.length} ${filtered.length === 1 ? "referencia disponible" : "referencias disponibles"}`;
+  document.querySelector("#resultsTitle").textContent = `${filtered.length} ${filtered.length === 1 ? "referencia para conversar" : "referencias para conversar"}`;
 
   if (window.lucide) lucide.createIcons();
 }
@@ -220,7 +206,7 @@ function renderCard(listing) {
         <div class="card-image" ${imageStyle}>
           ${mediaMarkup}
           <span class="badge ${listing.status}">${statusLabel(listing.status)}</span>
-          <span class="availability-badge ${listing.availability || "available"}">${availabilityLabel(listing.availability)}</span>
+          <span class="reference-badge">Confirmar con Antony</span>
           <span class="card-hook">${escapeHtml(listing.hook || listing.title)}</span>
         </div>
         <div class="card-copy">
@@ -283,7 +269,7 @@ function openDetail(id) {
     })
     .join("");
   document.querySelector("#detailMeta").innerHTML = [
-    availabilityLabel(listing.availability),
+    "Referencia a validar",
     money(listing.price),
     listing.location,
     `${listing.beds} hab.`,
@@ -424,7 +410,6 @@ listingForm.addEventListener("submit", async (event) => {
     beds: Number(formData.get("beds")),
     meters: Number(formData.get("meters")),
     status: formData.get("status").toString(),
-    availability: formData.get("availability").toString(),
     notes: formData.get("notes").toString().trim(),
     media,
     photos: media.filter((item) => item.type === "image").map((item) => item.src)

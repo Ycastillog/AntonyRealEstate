@@ -1005,7 +1005,7 @@ textarea {
   font-weight: 900;
 }
 
-.availability-badge {
+.reference-badge {
   position: absolute;
   z-index: 1;
   right: 10px;
@@ -1016,14 +1016,6 @@ textarea {
   border-radius: 8px;
   font-size: 0.78rem;
   font-weight: 900;
-}
-
-.availability-badge.reserved {
-  background: rgba(148, 103, 19, 0.92);
-}
-
-.availability-badge.sold {
-  background: rgba(181, 74, 98, 0.94);
 }
 
 .card-hook {
