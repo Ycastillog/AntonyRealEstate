@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Antony Fulgencio Real Estate</title>
+    <link rel="preconnect" href="https://images.unsplash.com" />
+    <link rel="stylesheet" href="styles.css?v=sales-tools" />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Antony Fulgencio Real Estate">
+        <img class="brand-logo" src="assets/antony-fulgencio-logo.png" alt="Antony Fulgencio Real Estate" />
+        <span>
+          <strong>Antony Fulgencio</strong>
+          <small>Asesoria · Inversion · Resultados</small>
+        </span>
+      </a>
+      <nav class="nav-actions" aria-label="Acciones">
+        <a class="icon-button" href="https://www.instagram.com/antony.tucasard" target="_blank" rel="noreferrer" title="Instagram">
+          <i data-lucide="instagram"></i>
+        </a>
+        <button class="icon-button" id="shareCatalog" type="button" title="Copiar enlace">
+          <i data-lucide="link"></i>
+        </button>
+        <button class="primary-button" id="newListingButton" type="button">
+          <i data-lucide="plus"></i>
+          <span>Nuevo</span>
+        </button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Antony Fulgencio Real Estate</p>
+          <h1>Compra tu casa con guia clara, respaldo real y opciones verificadas</h1>
+          <p class="hero-subtitle">Asesoria, inversion y resultados para familias e inversionistas en Republica Dominicana.</p>
+          <div class="hero-stats" aria-label="Resumen">
+            <span><strong id="totalListings">0</strong> propiedades</span>
+            <span><strong id="readyListings">0</strong> listas</span>
+            <span><strong id="projectListings">0</strong> proyectos</span>
+          </div>
+        </div>
+        <aside class="profile-card" aria-label="Perfil de Antony">
+          <button class="profile-photo-button" id="profilePhotoButton" type="button" title="Subir foto de perfil">
+            <span id="profileFallback" hidden>AF</span>
+            <img id="profilePhoto" src="assets/antony-instagram-profile.jpg" alt="Antony Fulgencio" />
+          </button>
+          <input id="profilePhotoInput" type="file" accept="image/*" hidden />
+          <p class="profile-handle">@antony.tucasard</p>
+          <h2>Ayudo a familias e inversionistas en RD a comprar inteligente sin perder.</h2>
+          <div class="profile-stats">
+            <span><strong>21.4 mil</strong> seguidores</span>
+            <span><strong>+300</strong> familias</span>
+            <span><strong>982</strong> seguidos</span>
+          </div>
+          <a class="primary-button profile-link" href="https://www.instagram.com/antony.tucasard" target="_blank" rel="noreferrer">
+            <i data-lucide="instagram"></i>
+            <span>Ver Instagram</span>
+          </a>
+          <a class="ghost-button profile-link" href="#leadForm">
+            <i data-lucide="message-circle"></i>
+            <span>Solicitar asesoria</span>
+          </a>
+        </aside>
+      </section>
+
+      <section class="trust-strip" aria-label="Temas principales">
+        <article>
+          <i data-lucide="award"></i>
+          <span>Casos Exito</span>
+        </article>
+        <article>
+          <i data-lucide="message-circle-question"></i>
+          <span>Preguntas</span>
+        </article>
+        <article>
+          <i data-lucide="stars"></i>
+          <span>Testimonios</span>
+        </article>
+        <article>
+          <i data-lucide="user-round"></i>
+          <span>Mi Historia</span>
+        </article>
+      </section>
+
+      <section class="delivered-section" aria-label="Unidades entregadas">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Respaldo real</p>
+            <h2>Unidades entregadas</h2>
+          </div>
+          <a class="ghost-button" href="https://www.instagram.com/antony.tucasard" target="_blank" rel="noreferrer">
+            <i data-lucide="instagram"></i>
+            <span>Ver casos</span>
+          </a>
+        </div>
+        <div class="delivered-grid">
+          <article>
+            <div class="delivered-photo delivered-award"></div>
+            <strong>Reconocimientos y cierres</strong>
+            <span>Casos documentados para mostrar confianza antes de vender.</span>
+          </article>
+          <article>
+            <div class="delivered-photo delivered-family"></div>
+            <strong>Familias acompanadas</strong>
+            <span>Historias de compradores que ya recibieron su propiedad.</span>
+          </article>
+          <article>
+            <div class="delivered-photo delivered-investor"></div>
+            <strong>Inversionistas asesorados</strong>
+            <span>Opciones filtradas por ubicacion, rentabilidad y respaldo.</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="lead-section" aria-label="Solicitud de asesoria">
+        <div class="lead-copy">
+          <p class="eyebrow">Compra con direccion</p>
+          <h2>Recibe opciones segun tu presupuesto y zona</h2>
+          <p>El cliente deja sus datos y la pagina prepara un mensaje listo para enviar por WhatsApp.</p>
+        </div>
+        <form class="lead-form" id="leadForm">
+          <label>
+            Nombre
+            <input name="clientName" autocomplete="name" placeholder="Nombre del cliente" />
+          </label>
+          <label>
+            Telefono
+            <input name="clientPhone" autocomplete="tel" placeholder="809-000-0000" />
+          </label>
+          <label>
+            Presupuesto
+            <input name="clientBudget" placeholder="US$150,000 - US$250,000" />
+          </label>
+          <label>
+            Zona deseada
+            <input name="clientZone" placeholder="Santo Domingo, Punta Cana..." />
+          </label>
+          <label>
+            Compra para
+            <select name="clientIntent">
+              <option value="vivir">Vivir</option>
+              <option value="invertir">Invertir</option>
+              <option value="ambas">Vivir o invertir</option>
+            </select>
+          </label>
+          <button class="primary-button" type="submit">
+            <i data-lucide="send"></i>
+            <span>Preparar mensaje</span>
+          </button>
+        </form>
+      </section>
+
+      <section class="workspace" aria-label="Catálogo">
+        <aside class="panel">
+          <div class="panel-section">
+            <label class="field-label" for="searchInput">Buscar</label>
+            <div class="search-field">
+              <i data-lucide="search"></i>
+              <input id="searchInput" type="search" placeholder="Sector, proyecto, precio..." />
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <span class="field-label">Tipo</span>
+            <div class="segmented" role="tablist" aria-label="Tipo de propiedad">
+              <button class="active" data-filter="all" type="button">Todo</button>
+              <button data-filter="ready" type="button">Listos</button>
+              <button data-filter="project" type="button">Proyectos</button>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <span class="field-label">Rango</span>
+            <label class="range-row">
+              <span>Hasta US$</span>
+              <input id="priceRange" type="range" min="50000" max="600000" step="10000" value="600000" />
+              <strong id="priceValue">600,000</strong>
+            </label>
+          </div>
+        </aside>
+
+        <section class="content-area">
+          <div class="content-head">
+            <div>
+              <p class="eyebrow">Disponibles</p>
+              <h2 id="resultsTitle">Propiedades</h2>
+            </div>
+            <button class="ghost-button" id="resetSeed" type="button">
+              <i data-lucide="rotate-ccw"></i>
+              <span>Restaurar</span>
+            </button>
+          </div>
+          <div class="listing-grid" id="listingGrid"></div>
+          <p class="empty-state" id="emptyState" hidden>No hay propiedades con esos filtros.</p>
+        </section>
+      </section>
+    </main>
+
+    <dialog class="modal" id="listingModal">
+      <form class="modal-body" id="listingForm" method="dialog">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Inventario</p>
+            <h2>Agregar propiedad</h2>
+          </div>
+          <button class="icon-button" value="cancel" type="button" id="closeModal" title="Cerrar">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Nombre
+            <input name="title" required placeholder="Torre Vista Cana A-705" />
+          </label>
+          <label>
+            Sector
+            <input name="location" required placeholder="Punta Cana" />
+          </label>
+          <label>
+            Precio US$
+            <input name="price" type="number" min="0" step="1000" required placeholder="185000" />
+          </label>
+          <label>
+            Habitaciones
+            <input name="beds" type="number" min="0" step="1" required placeholder="2" />
+          </label>
+          <label>
+            Metros
+            <input name="meters" type="number" min="0" step="1" required placeholder="92" />
+          </label>
+          <label>
+            Estado
+            <select name="status" required>
+              <option value="ready">Listo</option>
+              <option value="project">Proyecto</option>
+            </select>
+          </label>
+          <label>
+            Disponibilidad
+            <select name="availability" required>
+              <option value="available">Disponible</option>
+              <option value="reserved">Reservado</option>
+              <option value="sold">Vendido</option>
+            </select>
+          </label>
+        </div>
+
+        <label>
+          Fotos o videos
+          <input name="photos" type="file" accept="image/*,video/*" multiple />
+        </label>
+
+        <label>
+          Notas
+          <textarea name="notes" rows="3" placeholder="Vista al mar, inicial flexible, entrega diciembre..."></textarea>
+        </label>
+
+        <div class="modal-actions">
+          <button class="ghost-button" type="button" id="cancelForm">Cancelar</button>
+          <button class="primary-button" type="submit">
+            <i data-lucide="save"></i>
+            <span>Guardar</span>
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal detail-modal" id="detailModal">
+      <article class="modal-body detail-body">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow" id="detailStatus">Propiedad</p>
+            <h2 id="detailTitle"></h2>
+          </div>
+          <button class="icon-button" type="button" id="closeDetail" title="Cerrar">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="detail-gallery" id="detailGallery"></div>
+        <div class="detail-meta" id="detailMeta"></div>
+        <p class="detail-notes" id="detailNotes"></p>
+        <div class="modal-actions">
+          <button class="ghost-button" type="button" id="deleteListing">
+            <i data-lucide="trash-2"></i>
+            <span>Eliminar</span>
+          </button>
+          <button class="ghost-button" type="button" id="whatsappListing">
+            <i data-lucide="message-circle"></i>
+            <span>WhatsApp</span>
+          </button>
+          <button class="primary-button" type="button" id="copyListingLink">
+            <i data-lucide="send"></i>
+            <span>Copiar link</span>
+          </button>
+        </div>
+      </article>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
