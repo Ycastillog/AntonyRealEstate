@@ -16,9 +16,9 @@
     <meta property="og:image" content="assets/antony-fulgencio-logo.png" />
     <meta property="og:type" content="website" />
     <link rel="preconnect" href="https://images.unsplash.com" />
-    <link rel="stylesheet" href="styles.css?v=meeting-ready" />
+    <link rel="stylesheet" href="styles.css?v=authority-upgrade" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
-    <script src="app.js?v=no-availability" defer></script>
+    <script src="app.js?v=authority-upgrade" defer></script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -47,7 +47,7 @@
         <button class="icon-button" id="shareCatalog" type="button" title="Copiar enlace">
           <i data-lucide="link"></i>
         </button>
-        <button class="primary-button" id="newListingButton" type="button">
+        <button class="primary-button admin-only" id="newListingButton" type="button">
           <i data-lucide="plus"></i>
           <span>Nuevo</span>
         </button>
@@ -58,8 +58,8 @@
       <section class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Antony Fulgencio Real Estate</p>
-          <h1>Asesoria inmobiliaria de alto nivel para comprar o invertir en RD</h1>
-          <p class="hero-subtitle">Un proceso claro, unidades verificadas y acompanamiento profesional desde la evaluacion hasta la entrega.</p>
+          <h1>Un referente para comprar e invertir con direccion en RD</h1>
+          <p class="hero-subtitle">Una asesoria pensada para clientes que necesitan claridad, pruebas y acompanamiento antes de tomar una decision inmobiliaria.</p>
           <div class="hero-actions">
             <a class="primary-button" href="#leadForm">
               <i data-lucide="clipboard-check"></i>
@@ -107,11 +107,34 @@
         <span></span>
       </section>
 
+      <section class="authority-strip" aria-label="Por que Antony">
+        <article>
+          <i data-lucide="badge-check"></i>
+          <strong>Credibilidad visible</strong>
+          <span>Marca personal, casos, contenido educativo y prueba social.</span>
+        </article>
+        <article>
+          <i data-lucide="filter"></i>
+          <strong>Opciones filtradas</strong>
+          <span>No se muestra todo; se recomienda lo que aplica al caso.</span>
+        </article>
+        <article>
+          <i data-lucide="handshake"></i>
+          <strong>Acompanamiento 1:1</strong>
+          <span>Desde la evaluacion hasta la negociacion, cierre o entrega.</span>
+        </article>
+        <article>
+          <i data-lucide="shield-check"></i>
+          <strong>Respaldo antes de separar</strong>
+          <span>El cliente recibe contexto, pruebas y pasos claros.</span>
+        </article>
+      </section>
+
       <section class="professional-profile" aria-label="Perfil profesional">
         <div class="professional-copy">
           <p class="eyebrow">Perfil profesional</p>
-          <h2>Un perfil profesional para clientes que necesitan claridad antes de comprar</h2>
-          <p>La pagina debe mostrar propiedades, pero tambien debe explicar por que confiar. Este perfil presenta el proceso de Antony antes de que el cliente pregunte por una unidad.</p>
+          <h2>Un asesor para clientes que no quieren comprar a ciegas</h2>
+          <p>El valor no esta en publicar una lista infinita de apartamentos. Esta en evaluar el caso, filtrar zonas, validar respaldo y compartir pruebas reales antes de que el cliente se mueva.</p>
         </div>
         <div class="professional-grid">
           <article>
@@ -128,6 +151,37 @@
             <i data-lucide="key-round"></i>
             <strong>Resultados</strong>
             <span>Seguimiento desde la seleccion hasta la entrega o cierre de la propiedad.</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="method-section" aria-label="Metodo de asesoria">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Metodo Antony</p>
+            <h2>De la duda a una decision con direccion</h2>
+          </div>
+        </div>
+        <div class="method-timeline">
+          <article>
+            <span>01</span>
+            <strong>Diagnostico</strong>
+            <p>Presupuesto, zona, finalidad, tiempo de compra y nivel de urgencia.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <strong>Filtro</strong>
+            <p>Opciones alineadas al caso, no inventario abierto sin contexto.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <strong>Pruebas</strong>
+            <p>Casos, entregas, documentos, ubicacion, constructora y condiciones.</p>
+          </article>
+          <article>
+            <span>04</span>
+            <strong>Accion</strong>
+            <p>Separacion, negociacion, cierre, seguimiento o entrega.</p>
           </article>
         </div>
       </section>
@@ -411,7 +465,7 @@
               <h2 id="resultsTitle">Referencias para orientar la conversacion</h2>
               <p class="content-note">Estas referencias no prometen disponibilidad. Antony valida opciones vigentes segun presupuesto, zona, tiempo de compra y perfil del cliente.</p>
             </div>
-            <button class="ghost-button" id="resetSeed" type="button">
+            <button class="ghost-button admin-only" id="resetSeed" type="button">
               <i data-lucide="rotate-ccw"></i>
               <span>Restaurar</span>
             </button>
