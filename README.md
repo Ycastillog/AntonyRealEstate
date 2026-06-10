@@ -45,3 +45,7 @@ const WHATSAPP_NUMBER = "18090000000";
 ```
 
 Mientras esta vacio, los botones abren WhatsApp con el mensaje preparado para que el usuario elija a quien enviarlo.
+
+## Siguiente fase
+
+Ver `BACKEND-NEXT-STEPS.md` para convertir esta pagina estatica en una herramienta real con base de datos, panel administrativo, storage de fotos/videos, analytics y dominio propio.

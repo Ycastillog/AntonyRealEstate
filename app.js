@@ -86,6 +86,7 @@ const profilePhoto = document.querySelector("#profilePhoto");
 const profileFallback = document.querySelector("#profileFallback");
 const profilePhotoInput = document.querySelector("#profilePhotoInput");
 const leadForm = document.querySelector("#leadForm");
+const floatingWhatsapp = document.querySelector("#floatingWhatsapp");
 
 function loadListings() {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -347,6 +348,14 @@ document.querySelector("#whatsappListing").addEventListener("click", () => {
   openWhatsapp(`Hola Antony, quiero informacion de esta propiedad: ${listing.title} (${money(listing.price)}). Link: ${url}`);
 });
 
+document.querySelector("#printListing").addEventListener("click", () => {
+  const listing = listings.find((item) => item.id === activeDetailId);
+  if (!listing) return;
+
+  document.body.dataset.printTitle = listing.title;
+  window.print();
+});
+
 leadForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const formData = new FormData(leadForm);
@@ -425,6 +434,7 @@ listingForm.addEventListener("submit", async (event) => {
 
 window.addEventListener("DOMContentLoaded", () => {
   loadProfilePhoto();
+  floatingWhatsapp.href = whatsappUrl("Hola Antony, quiero evaluar mi caso para comprar o invertir en RD.");
   render();
   const hashId = location.hash.slice(1);
   if (hashId) openDetail(hashId);

@@ -4,10 +4,32 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Antony Fulgencio Real Estate</title>
+    <meta
+      name="description"
+      content="Asesoria inmobiliaria en Republica Dominicana para comprar, invertir y evaluar propiedades con Antony Fulgencio Real Estate."
+    />
+    <meta property="og:title" content="Antony Fulgencio Real Estate" />
+    <meta
+      property="og:description"
+      content="Opciones verificadas, asesoria y acompanamiento para familias e inversionistas en Republica Dominicana."
+    />
+    <meta property="og:image" content="assets/antony-fulgencio-logo.png" />
+    <meta property="og:type" content="website" />
     <link rel="preconnect" href="https://images.unsplash.com" />
-    <link rel="stylesheet" href="styles.css?v=professional-profile" />
+    <link rel="stylesheet" href="styles.css?v=growth-upgrade" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
     <script src="app.js" defer></script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "RealEstateAgent",
+        "name": "Antony Fulgencio Real Estate",
+        "url": "https://ycastillog.github.io/AntonyRealEstate/",
+        "areaServed": "Republica Dominicana",
+        "sameAs": ["https://www.instagram.com/antony.tucasard/"],
+        "description": "Asesoria inmobiliaria para familias e inversionistas en Republica Dominicana."
+      }
+    </script>
   </head>
   <body>
     <header class="topbar">
@@ -37,7 +59,17 @@
         <div class="hero-copy">
           <p class="eyebrow">Antony Fulgencio Real Estate</p>
           <h1>Compra tu casa con guia clara, respaldo real y opciones verificadas</h1>
-          <p class="hero-subtitle">Asesoria, inversion y resultados para familias e inversionistas en Republica Dominicana.</p>
+          <p class="hero-subtitle">Te ayudo a comprar o invertir en RD con opciones filtradas, numeros claros y seguimiento hasta el cierre.</p>
+          <div class="hero-actions">
+            <a class="primary-button" href="#leadForm">
+              <i data-lucide="clipboard-check"></i>
+              <span>Evalua tu caso aqui</span>
+            </a>
+            <a class="ghost-button ghost-on-dark" href="#catalogo">
+              <i data-lucide="building-2"></i>
+              <span>Ver unidades</span>
+            </a>
+          </div>
           <div class="hero-stats" aria-label="Resumen">
             <span><strong id="totalListings">0</strong> propiedades</span>
             <span><strong id="readyListings">0</strong> listas</span>
@@ -100,6 +132,26 @@
         </div>
       </section>
 
+      <section class="exterior-section" aria-label="Comprar desde el exterior">
+        <div class="exterior-media">
+          <span>Desde el exterior</span>
+        </div>
+        <div class="exterior-copy">
+          <p class="eyebrow">Comprar desde fuera de RD</p>
+          <h2>Vives en USA, Europa o el Caribe? Puedes comprar con proceso claro.</h2>
+          <p>Antony organiza opciones, valida documentos, revisa presupuesto y acompana el proceso para que el cliente entienda cada paso antes de separar.</p>
+          <div class="process-list">
+            <span><strong>1</strong> Evaluacion del caso</span>
+            <span><strong>2</strong> Opciones segun presupuesto</span>
+            <span><strong>3</strong> Reserva, cierre y entrega</span>
+          </div>
+          <a class="primary-button" href="#leadForm">
+            <i data-lucide="send"></i>
+            <span>Evalua tu caso aqui</span>
+          </a>
+        </div>
+      </section>
+
       <section class="trust-strip" aria-label="Temas principales">
         <article>
           <i data-lucide="award"></i>
@@ -117,6 +169,36 @@
           <i data-lucide="user-round"></i>
           <span>Mi Historia</span>
         </article>
+      </section>
+
+      <section class="video-section" aria-label="Videos destacados">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Contenido que educa</p>
+            <h2>Videos destacados</h2>
+          </div>
+          <a class="ghost-button" href="https://www.instagram.com/antony.tucasard" target="_blank" rel="noreferrer">
+            <i data-lucide="instagram"></i>
+            <span>Ver reels</span>
+          </a>
+        </div>
+        <div class="video-grid">
+          <article>
+            <div class="video-thumb video-buy"></div>
+            <strong>Comprar desde el exterior</strong>
+            <span>Errores que debes evitar antes de separar una propiedad en RD.</span>
+          </article>
+          <article>
+            <div class="video-thumb video-guide"></div>
+            <strong>Despues de comprar</strong>
+            <span>Guia paso a paso para entender pagos, documentos y entrega.</span>
+          </article>
+          <article>
+            <div class="video-thumb video-invest"></div>
+            <strong>Invertir con criterio</strong>
+            <span>Como mirar ubicacion, precio, renta y respaldo del proyecto.</span>
+          </article>
+        </div>
       </section>
 
       <section class="delivered-section" aria-label="Unidades entregadas">
@@ -145,6 +227,49 @@
             <div class="delivered-photo delivered-investor"></div>
             <strong>Inversionistas asesorados</strong>
             <span>Opciones filtradas por ubicacion, rentabilidad y respaldo.</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="zones-section" aria-label="Zonas de trabajo">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Zonas donde trabajamos</p>
+            <h2>Ubicaciones para vivir o invertir</h2>
+          </div>
+        </div>
+        <div class="zones-grid">
+          <span>Santo Domingo</span>
+          <span>Punta Cana</span>
+          <span>Las Praderas</span>
+          <span>Jacobo Majluta</span>
+          <span>El Millon</span>
+          <span>Juan Dolio</span>
+        </div>
+      </section>
+
+      <section class="testimonials-section" aria-label="Testimonios">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Prueba social</p>
+            <h2>Testimonios y casos para documentar</h2>
+          </div>
+        </div>
+        <div class="testimonial-grid">
+          <article>
+            <strong>Comprador desde el exterior</strong>
+            <p>"Necesitaba entender el proceso antes de separar. La asesoria me ayudo a decidir con seguridad."</p>
+            <span>Captura o video real pendiente</span>
+          </article>
+          <article>
+            <strong>Familia compradora</strong>
+            <p>"Nos presentaron opciones dentro del presupuesto y pudimos comparar sin presion."</p>
+            <span>Foto de entrega pendiente</span>
+          </article>
+          <article>
+            <strong>Inversionista</strong>
+            <p>"La decision fue mas clara al revisar ubicacion, potencial de renta y respaldo."</p>
+            <span>Resultado documentado pendiente</span>
           </article>
         </div>
       </section>
@@ -187,7 +312,7 @@
         </form>
       </section>
 
-      <section class="workspace" aria-label="Catálogo">
+      <section class="workspace" id="catalogo" aria-label="Catalogo">
         <aside class="panel">
           <div class="panel-section">
             <label class="field-label" for="searchInput">Buscar</label>
@@ -326,6 +451,10 @@
             <i data-lucide="message-circle"></i>
             <span>WhatsApp</span>
           </button>
+          <button class="ghost-button" type="button" id="printListing">
+            <i data-lucide="file-down"></i>
+            <span>Ficha PDF</span>
+          </button>
           <button class="primary-button" type="button" id="copyListingLink">
             <i data-lucide="send"></i>
             <span>Copiar link</span>
@@ -333,6 +462,11 @@
         </div>
       </article>
     </dialog>
+
+    <a class="floating-whatsapp" id="floatingWhatsapp" href="#" aria-label="Escribir por WhatsApp">
+      <i data-lucide="message-circle"></i>
+      <span>WhatsApp</span>
+    </a>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </body>
