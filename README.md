@@ -6,6 +6,7 @@ Marca visual integrada:
 
 ```text
 assets/antony-fulgencio-logo.png
+assets/antony-fulgencio-logo-transparent.png
 assets/antony-instagram-profile.jpg
 ```
 
