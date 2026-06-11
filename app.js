@@ -188,7 +188,7 @@ function render() {
   if (readyListings) readyListings.textContent = listings.filter((item) => item.status === "ready").length;
   if (projectListings) projectListings.textContent = listings.filter((item) => item.status === "project").length;
 
-  document.querySelector("#resultsTitle").textContent = `${filtered.length} ${filtered.length === 1 ? "opcion para orientar tu solicitud" : "opciones para orientar tu solicitud"}`;
+  document.querySelector("#resultsTitle").textContent = `${filtered.length} ${filtered.length === 1 ? "unidad de referencia para orientar tu solicitud" : "unidades de referencia para orientar tu solicitud"}`;
 
   if (window.lucide) lucide.createIcons();
 }
