@@ -188,7 +188,7 @@ function render() {
   if (readyListings) readyListings.textContent = listings.filter((item) => item.status === "ready").length;
   if (projectListings) projectListings.textContent = listings.filter((item) => item.status === "project").length;
 
-  document.querySelector("#resultsTitle").textContent = `${filtered.length} ${filtered.length === 1 ? "referencia para conversar" : "referencias para conversar"}`;
+  document.querySelector("#resultsTitle").textContent = `${filtered.length} ${filtered.length === 1 ? "opcion para orientar tu solicitud" : "opciones para orientar tu solicitud"}`;
 
   if (window.lucide) lucide.createIcons();
 }
@@ -357,7 +357,7 @@ leadForm.addEventListener("submit", (event) => {
   const intent = formData.get("clientIntent").toString();
   const message = `Hola Antony, soy ${name}. Quiero asesoria inmobiliaria. Telefono: ${phone}. Presupuesto: ${budget}. Zona: ${zone}. Compra para: ${intent}.`;
 
-  copyText(message, "Mensaje preparado y copiado");
+  copyText(message, "Solicitud copiada para WhatsApp");
   openWhatsapp(message);
 });
 
