@@ -150,6 +150,40 @@ main {
   padding: 26px clamp(16px, 4vw, 44px) 48px;
 }
 
+.site-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px clamp(16px, 4vw, 44px);
+  background: white;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.site-footer div {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.site-footer img {
+  width: 54px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.site-footer span,
+.site-footer strong {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
@@ -1431,6 +1465,12 @@ textarea {
     left: 14px;
     right: 14px;
     justify-content: center;
+  }
+
+  .site-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-bottom: 78px;
   }
 }
 
