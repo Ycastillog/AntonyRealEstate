@@ -465,6 +465,68 @@ main {
   line-height: 1.45;
 }
 
+.number-one-section {
+  display: grid;
+  grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+  gap: 22px;
+  margin-top: 22px;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, rgba(255, 247, 232, 0.92), rgba(255, 255, 255, 0.96)),
+    white;
+  border: 1px solid #f1d8a7;
+  border-radius: 8px;
+}
+
+.number-one-copy {
+  align-self: center;
+}
+
+.number-one-copy h2 {
+  margin: 0;
+  font-size: clamp(1.65rem, 3vw, 3rem);
+  line-height: 1;
+}
+
+.number-one-copy p {
+  max-width: 620px;
+  color: #475467;
+  line-height: 1.6;
+}
+
+.number-one-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.number-one-grid article {
+  display: grid;
+  gap: 10px;
+  min-height: 210px;
+  align-content: start;
+  padding: 18px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.number-one-grid span {
+  color: var(--gold-strong);
+  font-weight: 950;
+}
+
+.number-one-grid strong {
+  font-size: 1.08rem;
+  line-height: 1.18;
+}
+
+.number-one-grid p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .method-section {
   margin-top: 22px;
   padding: 22px;
@@ -608,7 +670,8 @@ main {
 .video-section,
 .zones-section,
 .testimonials-section,
-.client-ready-section {
+.client-ready-section,
+.faq-section {
   margin-top: 22px;
   padding: 22px;
   background: white;
@@ -728,6 +791,59 @@ main {
 .ready-grid span {
   color: var(--muted);
   line-height: 1.45;
+}
+
+.faq-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.faq-grid article {
+  display: grid;
+  gap: 10px;
+  min-height: 170px;
+  align-content: start;
+  padding: 18px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.faq-grid strong {
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.faq-grid p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.closing-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 22px;
+  padding: 24px;
+  background:
+    linear-gradient(120deg, rgba(7, 26, 51, 0.96), rgba(7, 26, 51, 0.86)),
+    url("https://images.unsplash.com/photo-1600607688969-a5bfcd646154?auto=format&fit=crop&w=1200&q=85") center/cover;
+  color: white;
+  border-radius: 8px;
+}
+
+.closing-cta .eyebrow {
+  color: #f2c66d;
+}
+
+.closing-cta h2 {
+  max-width: 820px;
+  margin: 0;
+  font-size: clamp(1.55rem, 3vw, 2.8rem);
+  line-height: 1.02;
 }
 
 .delivered-section {
@@ -1347,6 +1463,7 @@ textarea {
   .hero,
   .workspace,
   .professional-profile,
+  .number-one-section,
   .exterior-section,
   .lead-section,
   .authority-strip,
@@ -1354,6 +1471,7 @@ textarea {
   .video-grid,
   .testimonial-grid,
   .ready-grid,
+  .faq-grid,
   .case-grid,
   .delivered-grid {
     grid-template-columns: 1fr;
@@ -1368,6 +1486,10 @@ textarea {
   }
 
   .professional-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .number-one-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
@@ -1418,8 +1540,10 @@ textarea {
 
   .profile-stats,
   .professional-grid,
+  .number-one-grid,
   .portfolio-metrics,
   .ready-grid,
+  .faq-grid,
   .authority-strip,
   .method-timeline,
   .trust-strip {
@@ -1467,6 +1591,11 @@ textarea {
     justify-content: center;
   }
 
+  .closing-cta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .site-footer {
     align-items: flex-start;
     flex-direction: column;
@@ -1483,6 +1612,7 @@ textarea {
   .hero,
   .brand-divider,
   .professional-profile,
+  .number-one-section,
   .exterior-section,
   .trust-strip,
   .video-section,
@@ -1490,7 +1620,9 @@ textarea {
   .zones-section,
   .testimonials-section,
   .client-ready-section,
+  .faq-section,
   .lead-section,
+  .closing-cta,
   .workspace,
   .floating-whatsapp,
   .toast,
