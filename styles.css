@@ -273,6 +273,7 @@ main {
 
 .profile-card {
   align-self: center;
+  position: relative;
   display: grid;
   gap: 16px;
   margin: 24px;
@@ -281,6 +282,20 @@ main {
   color: var(--ink);
   border-radius: 8px;
   box-shadow: var(--shadow);
+}
+
+.verified-badge {
+  width: max-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  background: #eef7ff;
+  color: #0b5cab;
+  border: 1px solid #c9e4ff;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 950;
 }
 
 .profile-photo-button {
@@ -321,6 +336,23 @@ main {
   font-size: 1.35rem;
   line-height: 1.18;
   letter-spacing: 0;
+}
+
+.profile-proof {
+  display: grid;
+  gap: 8px;
+}
+
+.profile-proof span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #344054;
+  font-weight: 850;
+}
+
+.profile-proof svg {
+  color: var(--gold-strong);
 }
 
 .profile-stats {
@@ -441,6 +473,40 @@ main {
   color: var(--ink);
   border-radius: 999px;
   font-weight: 950;
+}
+
+.video-caption-stack {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  background: rgba(7, 26, 51, 0.82);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+}
+
+.video-caption-stack strong {
+  font-size: 1.28rem;
+  line-height: 1.05;
+}
+
+.video-caption-stack small {
+  color: #e8eef7;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.whatsapp-hero {
+  background: #128c7e;
+}
+
+.whatsapp-hero:hover {
+  background: #0e766a;
 }
 
 .brand-divider {
@@ -1173,6 +1239,59 @@ main {
   background: white;
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.success-stories-section {
+  margin-top: 22px;
+  padding: 22px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.story-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.story-grid article {
+  overflow: hidden;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.story-grid video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 9 / 12;
+  object-fit: cover;
+  background: var(--ink);
+}
+
+.story-grid div {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.story-grid span {
+  color: var(--gold-strong);
+  font-size: 0.8rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.story-grid strong {
+  font-size: 1.1rem;
+  line-height: 1.18;
+}
+
+.story-grid p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .resource-grid,
@@ -1951,6 +2070,7 @@ textarea {
   .faq-grid,
   .resource-grid,
   .quick-chat-grid,
+  .story-grid,
   .case-grid,
   .delivered-grid {
     grid-template-columns: 1fr;
@@ -2030,6 +2150,7 @@ textarea {
   .calculator-results,
   .resource-grid,
   .quick-chat-grid,
+  .story-grid,
   .ready-grid,
   .faq-grid,
   .authority-strip,
@@ -2081,6 +2202,17 @@ textarea {
 
   .rd-map {
     min-height: 430px;
+  }
+
+  .video-caption-stack {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    padding: 12px;
+  }
+
+  .video-caption-stack strong {
+    font-size: 1.05rem;
   }
 
   .map-pin {
@@ -2142,6 +2274,7 @@ textarea {
   .calculator-section,
   .resource-section,
   .quick-chat-section,
+  .success-stories-section,
   .exterior-section,
   .trust-strip,
   .video-section,

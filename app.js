@@ -83,6 +83,7 @@ const profileFallback = document.querySelector("#profileFallback");
 const profilePhotoInput = document.querySelector("#profilePhotoInput");
 const leadForm = document.querySelector("#leadForm");
 const floatingWhatsapp = document.querySelector("#floatingWhatsapp");
+const heroWhatsapp = document.querySelector("#heroWhatsapp");
 const calcPrice = document.querySelector("#calcPrice");
 const calcPriceLabel = document.querySelector("#calcPriceLabel");
 const calcReserve = document.querySelector("#calcReserve");
@@ -462,7 +463,9 @@ listingForm.addEventListener("submit", async (event) => {
 
 window.addEventListener("DOMContentLoaded", () => {
   loadProfilePhoto();
-  floatingWhatsapp.href = whatsappUrl("Hola Antony, quiero evaluar mi caso para comprar o invertir en RD.");
+  const mainWhatsappMessage = "Hola Antony, quiero evaluar mi caso para comprar o invertir en RD.";
+  floatingWhatsapp.href = whatsappUrl(mainWhatsappMessage);
+  if (heroWhatsapp) heroWhatsapp.href = whatsappUrl(mainWhatsappMessage);
   updateCalculator();
   render();
   const hashId = location.hash.slice(1);
