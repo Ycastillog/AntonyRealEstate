@@ -2286,11 +2286,13 @@ textarea {
 
   .hero-copy {
     padding: 22px;
+    min-width: 0;
   }
 
   .hero h1 {
-    font-size: 2.08rem;
-    line-height: 1.02;
+    font-size: 1.86rem;
+    line-height: 1.06;
+    overflow-wrap: anywhere;
   }
 
   .hero-subtitle {
@@ -2299,6 +2301,18 @@ textarea {
 
   .profile-card {
     margin: 0 14px 14px;
+    min-width: 0;
+  }
+
+  .hero-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .hero-actions a,
+  .hero-actions button {
+    justify-content: center;
+    width: 100%;
   }
 
   .profile-stats,
@@ -2323,11 +2337,16 @@ textarea {
   }
 
   .hero-checks {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
   }
 
   .hero-checks span {
-    flex: 1 1 150px;
+    min-width: 0;
+    justify-content: center;
+    text-align: center;
+    font-size: 0.84rem;
   }
 
   .case-photo,
