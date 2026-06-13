@@ -329,7 +329,7 @@ evidenceForm.addEventListener("submit", async (event) => {
 window.addEventListener("DOMContentLoaded", () => {
   storageMode.textContent = remoteReady
     ? "Contenido permanente activo"
-    : "Modo prueba. Para publicarlo permanente falta conectar la nube.";
+    : "Almacenamiento temporal de prueba activo.";
   applyAuthState();
   if (window.lucide) lucide.createIcons();
 });
