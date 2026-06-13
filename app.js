@@ -83,6 +83,11 @@ const profileFallback = document.querySelector("#profileFallback");
 const profilePhotoInput = document.querySelector("#profilePhotoInput");
 const leadForm = document.querySelector("#leadForm");
 const floatingWhatsapp = document.querySelector("#floatingWhatsapp");
+const calcPrice = document.querySelector("#calcPrice");
+const calcPriceLabel = document.querySelector("#calcPriceLabel");
+const calcReserve = document.querySelector("#calcReserve");
+const calcSeparation = document.querySelector("#calcSeparation");
+const calcPayment = document.querySelector("#calcPayment");
 
 function loadListings() {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -106,6 +111,14 @@ function money(value) {
     currency: "USD",
     maximumFractionDigits: 0
   }).format(value);
+}
+
+function moneyCompact(value) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0
+  }).format(Math.round(value));
 }
 
 function number(value) {
@@ -246,6 +259,23 @@ function showToast(message) {
   toast.classList.add("show");
   clearTimeout(showToast.timer);
   showToast.timer = setTimeout(() => toast.classList.remove("show"), 2400);
+}
+
+function updateCalculator() {
+  if (!calcPrice) return;
+
+  const price = Number(calcPrice.value);
+  const reserve = price <= 180000 ? 500 : 1000;
+  const separation = price * 0.05;
+  const financedAmount = price * 0.75;
+  const monthlyRate = 0.085 / 12;
+  const months = 20 * 12;
+  const payment = financedAmount * (monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1);
+
+  calcPriceLabel.textContent = moneyCompact(price);
+  calcReserve.textContent = moneyCompact(reserve);
+  calcSeparation.textContent = moneyCompact(separation);
+  calcPayment.textContent = moneyCompact(payment);
 }
 
 function openDetail(id) {
@@ -391,6 +421,14 @@ grid.addEventListener("click", (event) => {
 
 searchInput.addEventListener("input", render);
 priceRange.addEventListener("input", render);
+if (calcPrice) calcPrice.addEventListener("input", updateCalculator);
+
+document.querySelectorAll("[data-chat]").forEach((link) => {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    openWhatsapp(`Hola Antony, ${link.dataset.chat}`);
+  });
+});
 
 listingForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -425,6 +463,7 @@ listingForm.addEventListener("submit", async (event) => {
 window.addEventListener("DOMContentLoaded", () => {
   loadProfilePhoto();
   floatingWhatsapp.href = whatsappUrl("Hola Antony, quiero evaluar mi caso para comprar o invertir en RD.");
+  updateCalculator();
   render();
   const hashId = location.hash.slice(1);
   if (hashId) openDetail(hashId);
