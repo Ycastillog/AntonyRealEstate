@@ -2367,6 +2367,42 @@ textarea {
   margin-top: 20px;
 }
 
+.admin-dashboard {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.admin-dashboard article {
+  display: grid;
+  gap: 4px;
+  min-height: 120px;
+  align-content: center;
+  padding: 18px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.admin-dashboard span {
+  color: var(--gold-strong);
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.admin-dashboard strong {
+  color: var(--ink);
+  text-transform: uppercase;
+  font-size: 0.82rem;
+}
+
+.new-evidence-button {
+  width: max-content;
+  margin: 16px 0 0;
+}
+
 .admin-card {
   display: grid;
   gap: 16px;
@@ -2499,6 +2535,7 @@ textarea {
   .proof-gallery,
   .live-evidence-grid,
   .admin-hero,
+  .admin-dashboard,
   .admin-evidence-grid,
   .testimonial-grid,
   .ready-grid,
@@ -2630,6 +2667,14 @@ textarea {
   .admin-hero,
   .admin-card {
     padding: 18px;
+  }
+
+  .admin-dashboard {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .new-evidence-button {
+    width: 100%;
   }
 
   .live-evidence-grid {

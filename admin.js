@@ -15,6 +15,11 @@ const emptyState = document.querySelector("#adminEmptyState");
 const storageMode = document.querySelector("#storageMode");
 const logoutButton = document.querySelector("#logoutButton");
 const refreshButton = document.querySelector("#refreshEvidence");
+const toggleEvidenceForm = document.querySelector("#toggleEvidenceForm");
+const publishedCount = document.querySelector("#publishedCount");
+const videoCount = document.querySelector("#videoCount");
+const photoCount = document.querySelector("#photoCount");
+const testimonialCount = document.querySelector("#testimonialCount");
 const toast = document.querySelector("#adminToast");
 
 function showToast(message) {
@@ -204,6 +209,11 @@ function renderMedia(item) {
 
 async function loadAndRender() {
   const items = await loadItems();
+  const publishedItems = items.filter((item) => item.isPublished);
+  publishedCount.textContent = publishedItems.length;
+  videoCount.textContent = publishedItems.filter((item) => item.mediaType === "video").length;
+  photoCount.textContent = publishedItems.filter((item) => item.mediaType === "image").length;
+  testimonialCount.textContent = publishedItems.filter((item) => item.category === "Testimonio").length;
   emptyState.hidden = items.length !== 0;
   evidenceGrid.innerHTML = items
     .map((item) => `
@@ -227,9 +237,11 @@ async function loadAndRender() {
 
 loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const password = new FormData(loginForm).get("password").toString();
-  if (password !== config.adminPassword) {
-    showToast("Clave incorrecta");
+  const formData = new FormData(loginForm);
+  const username = formData.get("username").toString().trim();
+  const password = formData.get("password").toString();
+  if (username !== config.adminUser || password !== config.adminPassword) {
+    showToast("Usuario o contraseña incorrectos");
     return;
   }
   setAuthed(true);
@@ -242,6 +254,11 @@ logoutButton.addEventListener("click", () => {
 });
 
 refreshButton.addEventListener("click", loadAndRender);
+
+toggleEvidenceForm.addEventListener("click", () => {
+  evidenceForm.hidden = !evidenceForm.hidden;
+  toggleEvidenceForm.querySelector("span").textContent = evidenceForm.hidden ? "Nueva evidencia" : "Cerrar formulario";
+});
 
 evidenceGrid.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-delete]");
@@ -265,11 +282,11 @@ evidenceForm.addEventListener("submit", async (event) => {
       id: slug(),
       title: formData.get("title").toString().trim(),
       category: formData.get("category").toString(),
-      city: formData.get("city").toString().trim(),
-      eventDate: formData.get("eventDate").toString(),
+      city: "",
+      eventDate: "",
       description: formData.get("description").toString().trim(),
       mediaType,
-      isFeatured: formData.get("isFeatured") === "on",
+      isFeatured: false,
       isPublished: formData.get("isPublished") === "on",
       createdAt: new Date().toISOString()
     };
@@ -297,6 +314,8 @@ evidenceForm.addEventListener("submit", async (event) => {
     }
 
     evidenceForm.reset();
+    evidenceForm.hidden = true;
+    toggleEvidenceForm.querySelector("span").textContent = "Nueva evidencia";
     showToast("Evidencia guardada");
     await loadAndRender();
   } catch (error) {
@@ -309,8 +328,8 @@ evidenceForm.addEventListener("submit", async (event) => {
 
 window.addEventListener("DOMContentLoaded", () => {
   storageMode.textContent = remoteReady
-    ? "Nube activa: Cloudinary + Supabase"
-    : "Modo local de prueba: configura Cloudinary + Supabase para hacerlo permanente";
+    ? "Contenido permanente activo"
+    : "Modo prueba. Para publicarlo permanente falta conectar la nube.";
   applyAuthState();
   if (window.lucide) lucide.createIcons();
 });
