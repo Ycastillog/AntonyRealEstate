@@ -331,6 +331,22 @@ main {
   font-weight: 900;
 }
 
+.profile-specialty {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: 100%;
+  margin: -6px 0 0;
+  padding: 8px 10px;
+  background: #fff7e8;
+  color: var(--gold-strong);
+  border: 1px solid #f1d8a7;
+  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 950;
+}
+
 .profile-card h2 {
   margin: 0;
   font-size: 1.35rem;
@@ -567,6 +583,45 @@ main {
 .authority-strip span {
   color: var(--muted);
   line-height: 1.45;
+}
+
+.why-antony-section {
+  margin-top: 22px;
+  padding: 22px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.why-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.why-grid article {
+  display: grid;
+  gap: 10px;
+  min-height: 190px;
+  align-content: start;
+  padding: 18px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.why-grid svg {
+  color: var(--gold-strong);
+}
+
+.why-grid strong {
+  font-size: 1.12rem;
+}
+
+.why-grid p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .professional-profile {
@@ -1247,6 +1302,108 @@ main {
   background: white;
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.recent-deliveries-section {
+  margin-top: 22px;
+  padding: 22px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.delivery-timeline {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.delivery-timeline article {
+  display: grid;
+  gap: 10px;
+  min-height: 175px;
+  align-content: start;
+  padding: 18px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.delivery-timeline span {
+  width: max-content;
+  padding: 7px 9px;
+  background: var(--ink);
+  color: #f2c66d;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 950;
+}
+
+.delivery-timeline strong {
+  font-size: 1.08rem;
+  line-height: 1.18;
+}
+
+.delivery-timeline p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.trajectory-section {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 22px;
+  margin-top: 22px;
+  padding: 24px;
+  background: var(--ink);
+  color: white;
+  border-radius: 8px;
+}
+
+.trajectory-copy {
+  align-self: center;
+}
+
+.trajectory-copy .eyebrow {
+  color: #f2c66d;
+}
+
+.trajectory-copy h2 {
+  margin: 0;
+  font-size: clamp(1.65rem, 3vw, 3rem);
+  line-height: 1;
+}
+
+.trajectory-copy p {
+  color: #d8e1ec;
+  line-height: 1.55;
+}
+
+.trajectory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.trajectory-grid article {
+  display: grid;
+  gap: 10px;
+  min-height: 140px;
+  align-content: center;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+}
+
+.trajectory-grid svg {
+  color: #f2c66d;
+}
+
+.trajectory-grid span {
+  font-weight: 900;
+  line-height: 1.25;
 }
 
 .story-grid {
@@ -2059,6 +2216,7 @@ textarea {
   .map-section,
   .calculator-section,
   .quick-chat-section,
+  .trajectory-section,
   .exterior-section,
   .lead-section,
   .authority-strip,
@@ -2071,6 +2229,8 @@ textarea {
   .resource-grid,
   .quick-chat-grid,
   .story-grid,
+  .why-grid,
+  .delivery-timeline,
   .case-grid,
   .delivered-grid {
     grid-template-columns: 1fr;
@@ -2151,6 +2311,9 @@ textarea {
   .resource-grid,
   .quick-chat-grid,
   .story-grid,
+  .why-grid,
+  .delivery-timeline,
+  .trajectory-grid,
   .ready-grid,
   .faq-grid,
   .authority-strip,
@@ -2243,7 +2406,11 @@ textarea {
   .floating-whatsapp {
     left: 14px;
     right: 14px;
+    bottom: 10px;
+    min-height: 42px;
+    padding: 0 12px;
     justify-content: center;
+    font-size: 0.92rem;
   }
 
   .closing-cta {
@@ -2275,11 +2442,14 @@ textarea {
   .resource-section,
   .quick-chat-section,
   .success-stories-section,
+  .recent-deliveries-section,
+  .trajectory-section,
   .exterior-section,
   .trust-strip,
   .video-section,
   .proof-gallery-section,
   .delivered-section,
+  .why-antony-section,
   .zones-section,
   .testimonials-section,
   .client-ready-section,
