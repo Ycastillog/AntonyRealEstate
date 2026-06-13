@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Panel Antony Real Estate</title>
+    <link rel="stylesheet" href="styles.css?v=admin-media-1" />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+    <script src="media-config.js?v=admin-media-1" defer></script>
+    <script src="admin.js?v=admin-media-1" defer></script>
+  </head>
+  <body class="admin-page">
+    <header class="topbar">
+      <a class="brand" href="index.html" aria-label="Volver a la pagina">
+        <img class="brand-logo" src="assets/antony-fulgencio-logo-transparent.png" alt="Antony Fulgencio Real Estate" />
+        <span>
+          <strong>Panel de evidencias</strong>
+          <small>Fotos, videos, entregas y testimonios</small>
+        </span>
+      </a>
+      <nav class="nav-actions" aria-label="Acciones del panel">
+        <a class="ghost-button" href="index.html">
+          <i data-lucide="external-link"></i>
+          <span>Ver pagina</span>
+        </a>
+        <button class="icon-button" id="logoutButton" type="button" title="Salir" hidden>
+          <i data-lucide="log-out"></i>
+        </button>
+      </nav>
+    </header>
+
+    <main class="admin-shell">
+      <section class="admin-hero">
+        <div>
+          <p class="eyebrow">Acceso privado</p>
+          <h1>Subir evidencia real para que la pagina venda confianza</h1>
+          <p>Publica videos, fotos de llaves, firmas, entregas y testimonios. En modo local puedes probar hoy; con Cloudinary y Supabase queda permanente para todos los visitantes.</p>
+        </div>
+        <aside class="admin-status" id="adminStatus">
+          <strong>Modo de almacenamiento</strong>
+          <span id="storageMode">Revisando configuracion...</span>
+        </aside>
+      </section>
+
+      <section class="admin-login" id="loginPanel">
+        <form class="admin-card" id="loginForm">
+          <p class="eyebrow">Entrar</p>
+          <h2>Panel de Antony</h2>
+          <label>
+            Clave de acceso
+            <input name="password" type="password" autocomplete="current-password" placeholder="Clave del panel" required />
+          </label>
+          <button class="primary-button" type="submit">
+            <i data-lucide="lock-keyhole"></i>
+            <span>Entrar al panel</span>
+          </button>
+        </form>
+      </section>
+
+      <section class="admin-workspace" id="adminWorkspace" hidden>
+        <form class="admin-card evidence-form" id="evidenceForm">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Nuevo contenido</p>
+              <h2>Publicar entrega, cliente, firma o testimonio</h2>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Titulo
+              <input name="title" placeholder="Entrega de llaves en Santo Domingo" required />
+            </label>
+            <label>
+              Categoria
+              <select name="category" required>
+                <option value="Entrega">Entrega</option>
+                <option value="Llaves">Llaves</option>
+                <option value="Cliente">Cliente</option>
+                <option value="Firma">Firma</option>
+                <option value="Recorrido">Recorrido</option>
+                <option value="Testimonio">Testimonio</option>
+              </select>
+            </label>
+            <label>
+              Ciudad o zona
+              <input name="city" placeholder="Punta Cana, Santo Domingo..." />
+            </label>
+            <label>
+              Fecha
+              <input name="eventDate" type="date" />
+            </label>
+          </div>
+
+          <label>
+            Descripcion
+            <textarea name="description" rows="3" placeholder="Cliente acompanado desde la evaluacion hasta la entrega..."></textarea>
+          </label>
+
+          <label class="upload-drop">
+            <input name="media" type="file" accept="image/*,video/*" required />
+            <i data-lucide="upload-cloud"></i>
+            <strong>Subir foto o video</strong>
+            <span>JPG, PNG, MP4 o MOV. Para produccion se recomienda Cloudinary.</span>
+          </label>
+
+          <div class="admin-switches">
+            <label><input name="isFeatured" type="checkbox" /> Destacar arriba</label>
+            <label><input name="isPublished" type="checkbox" checked /> Publicado</label>
+          </div>
+
+          <button class="primary-button" type="submit">
+            <i data-lucide="save"></i>
+            <span>Guardar evidencia</span>
+          </button>
+        </form>
+
+        <section class="admin-card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Biblioteca</p>
+              <h2>Contenido cargado</h2>
+            </div>
+            <button class="ghost-button" id="refreshEvidence" type="button">
+              <i data-lucide="refresh-cw"></i>
+              <span>Actualizar</span>
+            </button>
+          </div>
+          <div class="admin-evidence-grid" id="adminEvidenceGrid"></div>
+          <p class="empty-state" id="adminEmptyState">Todavia no hay evidencias cargadas.</p>
+        </section>
+      </section>
+    </main>
+
+    <div class="toast" id="adminToast" role="status" aria-live="polite"></div>
+  </body>
+</html>

@@ -1,6 +1,11 @@
 const STORAGE_KEY = "antony-real-estate-listings";
 const PROFILE_PHOTO_KEY = "antony-real-estate-profile-photo";
+const EVIDENCE_META_KEY = "antony-evidence-items";
+const EVIDENCE_DB_NAME = "antony-media-store";
+const EVIDENCE_DB_STORE = "files";
 const WHATSAPP_NUMBER = "";
+const mediaConfig = window.ANTONY_MEDIA_CONFIG || {};
+const remoteEvidenceReady = Boolean(mediaConfig.supabaseUrl && mediaConfig.supabaseAnonKey);
 
 const seedListings = [
   {
@@ -168,6 +173,107 @@ function renderMedia(media, className = "") {
   }
 
   return `<img class="${className}" src="${media.src}" alt="" />`;
+}
+
+function normalizeEvidenceItem(item) {
+  return {
+    id: item.id,
+    title: item.title,
+    category: item.category,
+    city: item.city,
+    eventDate: item.eventDate || item.event_date,
+    description: item.description,
+    mediaType: item.mediaType || item.media_type,
+    mediaUrl: item.mediaUrl || item.media_url,
+    localKey: item.localKey,
+    isFeatured: Boolean(item.isFeatured ?? item.is_featured),
+    isPublished: Boolean(item.isPublished ?? item.is_published)
+  };
+}
+
+function openEvidenceDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(EVIDENCE_DB_NAME, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(EVIDENCE_DB_STORE);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function getEvidenceBlob(key) {
+  const db = await openEvidenceDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(EVIDENCE_DB_STORE, "readonly");
+    const request = tx.objectStore(EVIDENCE_DB_STORE).get(key);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function localEvidenceItems() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(EVIDENCE_META_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function loadEvidenceItems() {
+  if (remoteEvidenceReady) {
+    const table = mediaConfig.supabaseTable || "evidence_items";
+    const url = `${mediaConfig.supabaseUrl}/rest/v1/${table}?select=*&is_published=eq.true&order=is_featured.desc,created_at.desc&limit=6`;
+    const response = await fetch(url, {
+      headers: {
+        apikey: mediaConfig.supabaseAnonKey,
+        Authorization: `Bearer ${mediaConfig.supabaseAnonKey}`
+      }
+    });
+    if (!response.ok) return [];
+    const items = await response.json();
+    return items.map(normalizeEvidenceItem);
+  }
+
+  const items = localEvidenceItems()
+    .filter((item) => item.isPublished)
+    .slice(0, 6);
+
+  return Promise.all(items.map(async (item) => {
+    const normalized = normalizeEvidenceItem(item);
+    if (!normalized.localKey) return normalized;
+    const blob = await getEvidenceBlob(normalized.localKey);
+    return blob ? { ...normalized, mediaUrl: URL.createObjectURL(blob) } : normalized;
+  }));
+}
+
+function evidenceMediaMarkup(item) {
+  if (item.mediaType === "video") {
+    return `<video src="${item.mediaUrl}" muted loop playsinline preload="metadata"></video>`;
+  }
+  return `<img src="${item.mediaUrl}" alt="${escapeHtml(item.title)}" />`;
+}
+
+async function renderLiveEvidence() {
+  const section = document.querySelector("#liveEvidence");
+  const gridElement = document.querySelector("#liveEvidenceGrid");
+  if (!section || !gridElement) return;
+
+  const items = (await loadEvidenceItems()).filter((item) => item.mediaUrl);
+  section.hidden = items.length === 0;
+  gridElement.innerHTML = items.map((item) => `
+    <article class="live-evidence-card">
+      <div class="live-evidence-media">
+        ${evidenceMediaMarkup(item)}
+        <span class="media-chip"><i data-lucide="${item.mediaType === "video" ? "play" : "image"}"></i> ${escapeHtml(item.category || "Evidencia")}</span>
+      </div>
+      <div>
+        <strong>${escapeHtml(item.title)}</strong>
+        <p>${escapeHtml([item.city, item.eventDate].filter(Boolean).join(" · "))}</p>
+        <p>${escapeHtml(item.description || "")}</p>
+      </div>
+    </article>
+  `).join("");
+  if (window.lucide) lucide.createIcons();
 }
 
 function loadProfilePhoto() {
@@ -468,6 +574,7 @@ window.addEventListener("DOMContentLoaded", () => {
   if (heroWhatsapp) heroWhatsapp.href = whatsappUrl(mainWhatsappMessage);
   updateCalculator();
   render();
+  renderLiveEvidence();
   const hashId = location.hash.slice(1);
   if (hashId) openDetail(hashId);
 });
