@@ -248,7 +248,7 @@ async function loadEvidenceItems() {
 
 function evidenceMediaMarkup(item) {
   if (item.mediaType === "video") {
-    return `<video src="${item.mediaUrl}" muted loop playsinline preload="metadata"></video>`;
+    return `<video src="${item.mediaUrl}" controls playsinline preload="metadata"></video>`;
   }
   return `<img src="${item.mediaUrl}" alt="${escapeHtml(item.title)}" />`;
 }
@@ -316,7 +316,7 @@ function render() {
 function renderCard(listing) {
   const media = listingMedia(listing)[0] || mediaFromSrc(fallbackPhoto(listing.title));
   const mediaMarkup = media.type === "video"
-    ? `<video src="${media.src}" muted playsinline preload="metadata"></video>`
+    ? `<video src="${media.src}" controls playsinline preload="metadata"></video>`
     : "";
   const imageStyle = media.type === "image" ? `style="background-image: url('${media.src}')"` : "";
 
