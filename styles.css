@@ -775,9 +775,10 @@ main {
 }
 
 .about-antony-media {
+  position: relative;
   overflow: hidden;
   min-height: 360px;
-  background: #eef2f7;
+  background: #071a33;
   border-radius: 8px;
 }
 
@@ -785,6 +786,27 @@ main {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.video-slot .video-thumbnail-button {
+  height: 100%;
+  min-height: 360px;
+}
+
+.video-slot .video-thumbnail-button img {
+  height: 100%;
+  min-height: 360px;
+  opacity: 0.84;
+  object-fit: cover;
+}
+
+.presentation-video-button {
+  cursor: default;
+}
+
+.presentation-video-button:disabled {
+  color: inherit;
+  opacity: 1;
 }
 
 .about-antony-copy {
