@@ -18,10 +18,10 @@
     <meta property="og:url" content="https://antonyrealestate.com/" />
     <meta property="og:type" content="website" />
     <link rel="preconnect" href="https://images.unsplash.com" />
-    <link rel="stylesheet" href="styles.css?v=property-real-1" />
+    <link rel="stylesheet" href="styles.css?v=commercial-v2" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
-    <script src="media-config.js?v=property-real-1" defer></script>
-    <script src="app.js?v=property-real-1" defer></script>
+    <script src="media-config.js?v=commercial-v2" defer></script>
+    <script src="app.js?v=commercial-v2" defer></script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -44,13 +44,28 @@
           <small>Asesoria - Inversion - Resultados</small>
         </span>
       </a>
+      <nav class="main-nav" aria-label="Navegacion principal">
+        <a href="#">Inicio</a>
+        <a href="#quien-soy">Quien soy</a>
+        <a href="#unidades">Casos reales</a>
+        <a href="#propiedades">Propiedades</a>
+        <a href="#comprar-usa">Comprar desde USA</a>
+        <a href="#leadForm">Contacto</a>
+      </nav>
       <nav class="nav-actions" aria-label="Acciones">
-        <a class="icon-button" href="https://www.instagram.com/antony.tucasard" target="_blank" rel="noreferrer" title="Instagram">
-          <i data-lucide="instagram"></i>
-        </a>
-        <button class="icon-button" id="shareCatalog" type="button" title="Copiar enlace">
-          <i data-lucide="link"></i>
-        </button>
+        <details class="mobile-menu">
+          <summary class="mobile-menu-button" aria-label="Abrir menu">
+            Menu
+          </summary>
+          <div>
+            <a href="#">Inicio</a>
+            <a href="#quien-soy">Quien soy</a>
+            <a href="#unidades">Casos reales</a>
+            <a href="#propiedades">Propiedades</a>
+            <a href="#comprar-usa">Comprar desde USA</a>
+            <a href="#leadForm">Contacto</a>
+          </div>
+        </details>
         <button class="primary-button admin-only" id="newListingButton" type="button">
           <i data-lucide="plus"></i>
           <span>Nuevo</span>
@@ -124,7 +139,10 @@
           </a>
         </div>
         <div class="hero-video-card">
-          <video src="assets/videos/entrega-principal.mp4?v=audio-final-2" poster="assets/posters/entrega-principal.jpg" controls playsinline preload="metadata"></video>
+          <button class="video-thumbnail-button" id="openVideoModal" type="button" aria-label="Reproducir video principal">
+            <img src="assets/posters/entrega-principal.jpg" alt="Antony explicando el proceso inmobiliario" />
+            <span class="video-play-circle"><i data-lucide="play"></i></span>
+          </button>
           <span class="video-play-badge"><i data-lucide="play"></i> Video destacado</span>
           <div class="video-caption-stack" aria-label="Mensajes principales del video">
             <strong>Conoce como comprar desde USA o RD</strong>
@@ -132,6 +150,25 @@
             <small>Asesoria personalizada</small>
             <small>Entrega documentada</small>
           </div>
+        </div>
+      </section>
+      <section class="about-antony-section" id="quien-soy" aria-label="Quien es Antony">
+        <div class="about-antony-media">
+          <img src="assets/antony-instagram-profile.jpg" alt="Antony Fulgencio" />
+        </div>
+        <div class="about-antony-copy">
+          <p class="eyebrow">Quien es Antony</p>
+          <h2>Antony Fulgencio</h2>
+          <p>Especialista en inversion inmobiliaria en Republica Dominicana, enfocado en orientar a familias, compradores desde el exterior e inversionistas con un proceso claro de principio a fin.</p>
+          <div class="about-antony-proof">
+            <span><strong>300+</strong> familias acompanadas</span>
+            <span><strong>21K+</strong> seguidores</span>
+            <span><strong>USA + RD</strong> compra local y desde el exterior</span>
+          </div>
+          <a class="primary-button" href="#leadForm">
+            <i data-lucide="message-circle"></i>
+            <span>Solicitar asesoria</span>
+          </a>
         </div>
       </section>
 <section class="why-antony-section" aria-label="Por que elegir a Antony">
@@ -233,10 +270,10 @@
             <p class="eyebrow">Inventario premium</p>
             <h2>Propiedades destacadas para evaluar con direccion</h2>
           </div>
-          <a class="primary-button" href="#leadForm">
-            <i data-lucide="message-circle"></i>
-            <span>Solicitar opciones</span>
-          </a>
+            <a class="primary-button" href="propiedades/">
+              <i data-lucide="message-circle"></i>
+              <span>Ver mas opciones</span>
+            </a>
         </div>
         <div class="featured-properties-grid">
           <article class="featured-property-card">
@@ -294,7 +331,7 @@
         </div>
       </section>
 
-            <section class="exterior-section" aria-label="Comprar desde el exterior">
+      <section class="exterior-section" id="comprar-usa" aria-label="Comprar desde el exterior">
         <div class="exterior-media">
           <span>Desde el exterior</span>
         </div>
@@ -450,13 +487,44 @@
       </section>
     </main>
 
-    <footer class="site-footer" aria-label="Creditos">
-      <div>
+    <footer class="site-footer full-footer" aria-label="Footer">
+      <div class="footer-brand">
         <img src="assets/antony-fulgencio-logo-transparent.png" alt="Antony Fulgencio Real Estate" />
-        <span>Antony Fulgencio Real Estate</span>
+        <div>
+          <span>Antony Fulgencio Real Estate</span>
+          <p>Asesoria inmobiliaria, inversion y acompanamiento hasta entrega.</p>
+        </div>
       </div>
-      <p>Diseno y desarrollo por <strong>YC Systems</strong></p>
+      <nav aria-label="Enlaces principales">
+        <strong>Pagina</strong>
+        <a href="#">Inicio</a>
+        <a href="#quien-soy">Quien soy</a>
+        <a href="#unidades">Casos reales</a>
+        <a href="#propiedades">Propiedades</a>
+        <a href="#comprar-usa">Comprar desde USA</a>
+      </nav>
+      <nav aria-label="Contacto">
+        <strong>Contacto</strong>
+        <a href="#" id="footerWhatsapp">WhatsApp</a>
+        <a href="https://www.instagram.com/antony.tucasard" target="_blank" rel="noreferrer">Instagram</a>
+        <a href="#leadForm">Formulario</a>
+      </nav>
+      <nav aria-label="Legal">
+        <strong>Legal</strong>
+        <a href="#">Politica de privacidad</a>
+        <a href="#">Terminos</a>
+        <small>Desarrollo por YC Systems</small>
+      </nav>
     </footer>
+
+    <dialog class="video-modal" id="videoModal" aria-label="Video principal">
+      <div class="video-modal-body">
+        <button class="icon-button video-modal-close" id="closeVideoModal" type="button" title="Cerrar video">
+          <i data-lucide="x"></i>
+        </button>
+        <video id="mainVideoPlayer" src="assets/videos/entrega-principal.mp4?v=audio-final-2" poster="assets/posters/entrega-principal.jpg" controls playsinline preload="metadata"></video>
+      </div>
+    </dialog>
 
     <dialog class="modal" id="listingModal">
       <form class="modal-body" id="listingForm" method="dialog">

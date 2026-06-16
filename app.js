@@ -89,6 +89,11 @@ const profilePhotoInput = document.querySelector("#profilePhotoInput");
 const leadForm = document.querySelector("#leadForm");
 const floatingWhatsapp = document.querySelector("#floatingWhatsapp");
 const heroWhatsapp = document.querySelector("#heroWhatsapp");
+const footerWhatsapp = document.querySelector("#footerWhatsapp");
+const openVideoModalButton = document.querySelector("#openVideoModal");
+const videoModal = document.querySelector("#videoModal");
+const closeVideoModalButton = document.querySelector("#closeVideoModal");
+const mainVideoPlayer = document.querySelector("#mainVideoPlayer");
 const calcPrice = document.querySelector("#calcPrice");
 const calcPriceLabel = document.querySelector("#calcPriceLabel");
 const calcReserve = document.querySelector("#calcReserve");
@@ -459,9 +464,12 @@ document.querySelector("#closeModal").addEventListener("click", () => listingMod
 document.querySelector("#cancelForm").addEventListener("click", () => listingModal.close());
 document.querySelector("#closeDetail").addEventListener("click", closeDetail);
 
-document.querySelector("#shareCatalog").addEventListener("click", () => {
-  copyText(location.href.split("#")[0], "Link del catálogo copiado");
-});
+const shareCatalogButton = document.querySelector("#shareCatalog");
+if (shareCatalogButton) {
+  shareCatalogButton.addEventListener("click", () => {
+    copyText(location.href.split("#")[0], "Link del catalogo copiado");
+  });
+}
 
 document.querySelector("#copyListingLink").addEventListener("click", () => {
   const url = `${location.href.split("#")[0]}#${activeDetailId}`;
@@ -572,6 +580,27 @@ window.addEventListener("DOMContentLoaded", () => {
   const mainWhatsappMessage = "Hola Antony, quiero evaluar mi caso para comprar o invertir en RD.";
   floatingWhatsapp.href = whatsappUrl(mainWhatsappMessage);
   if (heroWhatsapp) heroWhatsapp.href = whatsappUrl(mainWhatsappMessage);
+  if (footerWhatsapp) footerWhatsapp.href = whatsappUrl(mainWhatsappMessage);
+  if (openVideoModalButton && videoModal && mainVideoPlayer) {
+    openVideoModalButton.addEventListener("click", () => {
+      videoModal.showModal();
+      mainVideoPlayer.currentTime = 0;
+      mainVideoPlayer.play().catch(() => {});
+    });
+  }
+  if (closeVideoModalButton && videoModal && mainVideoPlayer) {
+    closeVideoModalButton.addEventListener("click", () => {
+      mainVideoPlayer.pause();
+      videoModal.close();
+    });
+    videoModal.addEventListener("close", () => mainVideoPlayer.pause());
+    videoModal.addEventListener("click", (event) => {
+      if (event.target === videoModal) {
+        mainVideoPlayer.pause();
+        videoModal.close();
+      }
+    });
+  }
   updateCalculator();
   render();
   renderLiveEvidence();

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Propiedades destacadas | Antony Fulgencio Real Estate</title>
+    <meta
+      name="description"
+      content="Propiedades destacadas para comprar o invertir en Republica Dominicana con asesoria de Antony Fulgencio."
+    />
+    <link rel="canonical" href="https://antonyrealestate.com/propiedades/" />
+    <link rel="stylesheet" href="../styles.css?v=commercial-v2" />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+    <script>
+      window.addEventListener("DOMContentLoaded", () => {
+        if (window.lucide) window.lucide.createIcons();
+        document.querySelectorAll("[data-property-filter]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const filter = button.dataset.propertyFilter;
+            document.querySelectorAll("[data-property-filter]").forEach((item) => item.classList.toggle("active", item === button));
+            document.querySelectorAll("[data-property-card]").forEach((card) => {
+              const tags = card.dataset.propertyCard.split(" ");
+              card.hidden = filter !== "todo" && !tags.includes(filter);
+            });
+          });
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="../" aria-label="Antony Fulgencio Real Estate">
+        <img class="brand-logo" src="../assets/antony-fulgencio-logo-transparent.png" alt="Antony Fulgencio Real Estate" />
+        <span>
+          <strong>Antony Fulgencio</strong>
+          <small>Asesoria - Inversion - Resultados</small>
+        </span>
+      </a>
+      <nav class="main-nav" aria-label="Navegacion principal">
+        <a href="../">Inicio</a>
+        <a href="../#quien-soy">Quien soy</a>
+        <a href="../#unidades">Casos reales</a>
+        <a href="./">Propiedades</a>
+        <a href="../#comprar-usa">Comprar desde USA</a>
+        <a href="../#leadForm">Contacto</a>
+      </nav>
+      <nav class="nav-actions" aria-label="Acciones">
+        <a class="icon-button" href="../" title="Volver al inicio"><i data-lucide="arrow-left"></i></a>
+      </nav>
+    </header>
+
+    <main class="property-detail-main">
+      <section class="featured-properties-section">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Propiedades destacadas</p>
+            <h1>Opciones reales para evaluar con Antony</h1>
+            <p class="content-note">La disponibilidad se confirma directamente antes de separar. Estas fichas sirven para orientar la conversacion y compartir opciones claras por WhatsApp.</p>
+          </div>
+        </div>
+        <div class="property-filter-row" aria-label="Filtros de propiedades">
+          <button class="active" data-property-filter="todo" type="button">Todo</button>
+          <button data-property-filter="santo-domingo" type="button">Santo Domingo</button>
+          <button data-property-filter="apartamento" type="button">Apartamentos</button>
+          <button data-property-filter="familiar" type="button">Familiar</button>
+          <button data-property-filter="inversion" type="button">Inversion</button>
+        </div>
+        <div class="featured-properties-grid">
+          <article class="featured-property-card" data-property-card="santo-domingo apartamento familiar inversion">
+            <a class="featured-property-media" href="colinas-de-los-rios/" aria-label="Ver Colinas de los Rios">
+              <img src="../assets/properties/colinas-de-los-rios/foto-01.jpg" alt="Apartamento en Colinas de los Rios" />
+              <span>Disponible para evaluar</span>
+            </a>
+            <div class="featured-property-copy">
+              <p class="eyebrow">Colinas de los Rios</p>
+              <h3>Apartamento en torre moderna</h3>
+              <strong>RD$9.5 MM</strong>
+              <ul>
+                <li>2 habitaciones y 2 parqueos lineales</li>
+                <li>Torre 2022 con gimnasio, jacuzzi y area social</li>
+                <li>Zona tranquila y familiar</li>
+              </ul>
+              <div class="property-actions">
+                <a class="primary-button" href="colinas-de-los-rios/"><i data-lucide="building-2"></i><span>Ver detalles</span></a>
+              </div>
+            </div>
+          </article>
+          <article class="featured-property-card" data-property-card="santo-domingo apartamento familiar inversion">
+            <a class="featured-property-media" href="mirador-sur/" aria-label="Ver Mirador Sur">
+              <img src="../assets/properties/mirador-sur/foto-01.jpg" alt="Apartamento en Mirador Sur" />
+              <span>Vista premium</span>
+            </a>
+            <div class="featured-property-copy">
+              <p class="eyebrow">Mirador Sur</p>
+              <h3>Modern Family Apartment</h3>
+              <strong>US$185,000</strong>
+              <ul>
+                <li>132 m2 netos y 2 habitaciones</li>
+                <li>Balcon, cuarto de servicio y 2 parqueos</li>
+                <li>Gimnasio, picuzzi, BBQ y seguridad 24/7</li>
+              </ul>
+              <div class="property-actions">
+                <a class="primary-button" href="mirador-sur/"><i data-lucide="building-2"></i><span>Ver detalles</span></a>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

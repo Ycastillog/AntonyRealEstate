@@ -99,6 +99,75 @@ button {
   gap: 10px;
 }
 
+.main-nav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-left: auto;
+}
+
+.main-nav a,
+.mobile-menu a,
+.site-footer a {
+  color: var(--ink);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.main-nav a {
+  font-size: 0.92rem;
+}
+
+.mobile-menu {
+  display: none;
+  position: relative;
+}
+
+.mobile-menu summary {
+  list-style: none;
+}
+
+.mobile-menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 13px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.mobile-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.mobile-menu div {
+  position: absolute;
+  right: 0;
+  top: 50px;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  width: min(250px, calc(100vw - 24px));
+  padding: 10px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.mobile-menu a {
+  padding: 11px 12px;
+  border-radius: 8px;
+}
+
+.mobile-menu a:hover {
+  background: #f8fafc;
+}
+
 .icon-button,
 .primary-button,
 .ghost-button {
@@ -187,6 +256,37 @@ main {
 
 .site-footer p {
   margin: 0;
+}
+
+.full-footer {
+  grid-template-columns: minmax(260px, 1.2fr) repeat(3, minmax(150px, 0.8fr));
+  align-items: start;
+  gap: 24px;
+}
+
+.full-footer,
+.full-footer nav {
+  display: grid;
+}
+
+.full-footer nav {
+  gap: 8px;
+}
+
+.footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.footer-brand div {
+  display: block;
+}
+
+.full-footer small {
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .hero {
@@ -559,6 +659,83 @@ main {
   font-weight: 950;
 }
 
+.hero-video-card::before {
+  content: none;
+}
+
+.video-thumbnail-button {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: #071a33;
+}
+
+.video-thumbnail-button img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+}
+
+.video-play-circle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 78px;
+  height: 78px;
+  padding-left: 4px;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  border-radius: 999px;
+  box-shadow: 0 18px 44px rgba(7, 26, 51, 0.26);
+}
+
+.video-play-circle svg {
+  width: 30px;
+  height: 30px;
+}
+
+.video-modal {
+  width: min(980px, calc(100vw - 28px));
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.video-modal::backdrop {
+  background: rgba(7, 26, 51, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.video-modal-body {
+  position: relative;
+  overflow: hidden;
+  background: #071a33;
+  border-radius: 8px;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+}
+
+.video-modal-close {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 4;
+}
+
+.video-modal video {
+  display: block;
+  width: 100%;
+  max-height: min(82vh, 760px);
+  background: #071a33;
+  object-fit: contain;
+}
+
 .video-caption-stack {
   position: absolute;
   z-index: 3;
@@ -584,6 +761,73 @@ main {
   color: #e8eef7;
   font-weight: 800;
   line-height: 1.35;
+}
+
+.about-antony-section {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 22px;
+  margin-top: 22px;
+  padding: 24px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.about-antony-media {
+  overflow: hidden;
+  min-height: 360px;
+  background: #eef2f7;
+  border-radius: 8px;
+}
+
+.about-antony-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.about-antony-copy {
+  display: grid;
+  align-content: center;
+  gap: 14px;
+}
+
+.about-antony-copy h2 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  line-height: 1;
+}
+
+.about-antony-copy p {
+  margin: 0;
+  max-width: 760px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.about-antony-proof {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.about-antony-proof span {
+  display: grid;
+  gap: 5px;
+  min-height: 92px;
+  align-content: center;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.about-antony-proof strong {
+  color: var(--ink);
+  font-size: 1.2rem;
 }
 
 .whatsapp-hero {
@@ -1304,6 +1548,29 @@ main {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 6px;
+}
+
+.property-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 18px 0;
+}
+
+.property-filter-row button {
+  min-height: 40px;
+  padding: 0 13px;
+  background: #eef2f7;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-weight: 850;
+}
+
+.property-filter-row button.active {
+  background: var(--ink);
+  color: white;
+  border-color: var(--ink);
 }
 
 .property-detail-main {
@@ -2753,6 +3020,7 @@ textarea {
   .trajectory-section,
   .exterior-section,
   .lead-section,
+  .about-antony-section,
   .authority-strip,
   .method-timeline,
   .video-grid,
@@ -2806,6 +3074,18 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .main-nav {
+    display: none;
+  }
+
+  .mobile-menu {
+    display: block;
+  }
+
+  .full-footer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .property-gallery img:first-child {
     grid-row: span 1;
   }
@@ -2825,13 +3105,20 @@ textarea {
   }
 
   .topbar {
-    align-items: flex-start;
+    position: sticky;
+    align-items: center;
     gap: 10px;
     padding-inline: 12px;
-    overflow: hidden;
+    padding-right: 66px;
+    overflow: visible;
   }
 
   .brand {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .brand span {
     min-width: 0;
   }
 
@@ -2842,6 +3129,11 @@ textarea {
   }
 
   .nav-actions {
+    position: fixed;
+    right: 12px;
+    top: 10px;
+    z-index: 30;
+    margin-left: auto;
     flex-shrink: 0;
   }
 
@@ -2903,6 +3195,7 @@ textarea {
   }
 
   .profile-stats,
+  .about-antony-proof,
   .professional-grid,
   .number-one-grid,
   .results-section,
@@ -2927,6 +3220,7 @@ textarea {
 
   .property-detail-hero,
   .featured-properties-section,
+  .about-antony-section,
   .property-info-card,
   .property-cta-band {
     padding: 18px;
@@ -3069,6 +3363,14 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .about-antony-media {
+    min-height: 280px;
+  }
+
+  .full-footer {
+    grid-template-columns: 1fr;
+  }
+
   .property-actions a,
   .property-cta-band a {
     justify-content: center;
@@ -3157,5 +3459,24 @@ textarea {
 
   .detail-gallery {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .nav-actions {
+    position: fixed !important;
+    top: 10px !important;
+    right: auto !important;
+    left: min(312px, calc(100vw - 74px)) !important;
+    z-index: 60 !important;
+    display: flex !important;
+  }
+
+  .mobile-menu {
+    display: block !important;
+  }
+
+  .mobile-menu-button {
+    display: inline-flex !important;
   }
 }
