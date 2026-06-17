@@ -1,4 +1,4 @@
-window.ANTONY_WHATSAPP_NUMBER = "";
+window.ANTONY_WHATSAPP_NUMBER = "18299104940";
 
 window.antonyWhatsappUrl = function antonyWhatsappUrl(message) {
   const encoded = encodeURIComponent(message);

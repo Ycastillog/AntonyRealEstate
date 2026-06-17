@@ -38,13 +38,13 @@ El portal permite preparar contenido, pero la publicacion permanente de fotos, v
 
 ## WhatsApp
 
-El numero se configura una sola vez en `contact.js`, en formato internacional, por ejemplo:
+El numero se configura una sola vez en `contact.js`, en formato internacional:
 
 ```js
-window.ANTONY_WHATSAPP_NUMBER = "18090000000";
+window.ANTONY_WHATSAPP_NUMBER = "18299104940";
 ```
 
-Mientras esta vacio, los botones abren WhatsApp con el mensaje preparado para que el usuario elija a quien enviarlo.
+Todos los botones de WhatsApp usan ese numero y preparan el mensaje segun el contexto.
 
 ## Siguiente fase
 
