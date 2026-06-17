@@ -28,6 +28,7 @@ supabase-evidence-setup.sql
 Ese SQL crea:
 
 - Tabla `evidence_items`
+- Permisos `GRANT` para que la API publica pueda leer/insertar segun las politicas
 - Politicas de lectura/escritura
 - Bucket publico `evidencias`
 - Politicas para subir, leer y eliminar archivos

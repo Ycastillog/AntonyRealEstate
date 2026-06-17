@@ -15,6 +15,9 @@ create table if not exists evidence_items (
 
 alter table evidence_items enable row level security;
 
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on table public.evidence_items to anon, authenticated;
+
 drop policy if exists "Public can read published evidence" on evidence_items;
 drop policy if exists "Anon can read evidence for portal" on evidence_items;
 drop policy if exists "Anon can insert evidence from admin panel" on evidence_items;
@@ -39,6 +42,9 @@ using (true);
 insert into storage.buckets (id, name, public)
 values ('evidencias', 'evidencias', true)
 on conflict (id) do update set public = true;
+
+grant usage on schema storage to anon, authenticated;
+grant select, insert, update, delete on table storage.objects to anon, authenticated;
 
 drop policy if exists "Public can read evidence files" on storage.objects;
 drop policy if exists "Anon can upload evidence files" on storage.objects;
