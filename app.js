@@ -3,7 +3,6 @@ const PROFILE_PHOTO_KEY = "antony-real-estate-profile-photo";
 const EVIDENCE_META_KEY = "antony-evidence-items";
 const EVIDENCE_DB_NAME = "antony-media-store";
 const EVIDENCE_DB_STORE = "files";
-const WHATSAPP_NUMBER = "";
 const mediaConfig = window.ANTONY_MEDIA_CONFIG || {};
 const remoteEvidenceReady = Boolean(mediaConfig.supabaseUrl && mediaConfig.supabaseAnonKey);
 
@@ -141,8 +140,7 @@ function statusLabel(status) {
 }
 
 function whatsappUrl(message) {
-  const encoded = encodeURIComponent(message);
-  return WHATSAPP_NUMBER ? `https://wa.me/${WHATSAPP_NUMBER}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+  return window.antonyWhatsappUrl ? window.antonyWhatsappUrl(message) : `https://wa.me/?text=${encodeURIComponent(message)}`;
 }
 
 function openWhatsapp(message) {
@@ -539,9 +537,11 @@ priceRange.addEventListener("input", render);
 if (calcPrice) calcPrice.addEventListener("input", updateCalculator);
 
 document.querySelectorAll("[data-chat]").forEach((link) => {
+  link.href = whatsappUrl(`Hola Antony, ${link.dataset.chat}`);
+  link.target = "_blank";
+  link.rel = "noreferrer";
   link.addEventListener("click", (event) => {
-    event.preventDefault();
-    openWhatsapp(`Hola Antony, ${link.dataset.chat}`);
+    link.href = whatsappUrl(`Hola Antony, ${link.dataset.chat}`);
   });
 });
 

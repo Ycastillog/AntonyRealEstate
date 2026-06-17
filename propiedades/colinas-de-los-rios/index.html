@@ -16,12 +16,11 @@
     <meta property="og:type" content="website" />
     <link rel="stylesheet" href="../../styles.css?v=production-v1" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+    <script src="../../contact.js?v=production-v1" defer></script>
     <script>
-      const WHATSAPP_NUMBER = "";
       const propertyMessage = "Hola Antony, vi la propiedad Colinas de los Rios y quiero informacion.";
       function whatsappUrl(message) {
-        const encoded = encodeURIComponent(message);
-        return WHATSAPP_NUMBER ? `https://wa.me/${WHATSAPP_NUMBER}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+        return window.antonyWhatsappUrl ? window.antonyWhatsappUrl(message) : `https://wa.me/?text=${encodeURIComponent(message)}`;
       }
       window.addEventListener("DOMContentLoaded", () => {
         if (window.lucide) window.lucide.createIcons();
@@ -166,7 +165,7 @@
     </main>
     <dialog class="image-zoom-modal" id="imageZoomModal">
       <button class="icon-button image-zoom-close" id="closeImageZoom" type="button" aria-label="Cerrar imagen"><i data-lucide="x"></i></button>
-      <img id="zoomImage" alt="Imagen ampliada de la propiedad" />
+      <img id="zoomImage" src="../../assets/properties/colinas-de-los-rios/foto-01.jpg" alt="Imagen ampliada de la propiedad" />
     </dialog>
     <div class="toast" id="propertyToast" role="status" aria-live="polite"></div>
   </body>

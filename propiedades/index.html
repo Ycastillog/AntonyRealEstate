@@ -16,6 +16,7 @@
     <meta property="og:type" content="website" />
     <link rel="stylesheet" href="../styles.css?v=production-v1" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+    <script src="../contact.js?v=production-v1" defer></script>
     <script src="propiedades.js?v=production-v1" defer></script>
   </head>
   <body>
@@ -56,7 +57,7 @@
           <div>
             <p class="eyebrow">Propiedades</p>
             <h1>Opciones reales para evaluar con Antony</h1>
-            <p class="content-note">Filtra por zona, tipo, estado y presupuesto. La disponibilidad se confirma directamente antes de separar.</p>
+            <p class="content-note">Explora propiedades y proyectos de referencia. La disponibilidad, precios y condiciones se confirman directamente con Antony antes de avanzar.</p>
           </div>
           <a class="primary-button" href="../#leadForm">
             <i data-lucide="message-circle"></i>
@@ -74,9 +75,17 @@
             <select id="propertyType">
               <option value="">Todos</option>
               <option value="apartamento">Apartamento</option>
-              <option value="penthouse">Penthouse</option>
-              <option value="villa">Villa</option>
               <option value="proyecto">Proyecto</option>
+              <option value="inversion">Inversion</option>
+              <option value="familiar">Familiar</option>
+            </select>
+          </label>
+          <label>
+            Categoria
+            <select id="propertyCategory">
+              <option value="">Todas</option>
+              <option value="santo-domingo">Santo Domingo</option>
+              <option value="turisticas">Turisticas</option>
             </select>
           </label>
           <label>
@@ -108,8 +117,12 @@
             </select>
           </label>
           <label>
-            Hasta US$
-            <input id="propertyMaxPrice" type="number" min="0" step="5000" placeholder="Sin limite" />
+            Precio
+            <select id="propertyPriceMode">
+              <option value="">Todos</option>
+              <option value="consultar">Precio a consultar</option>
+              <option value="con-precio">Con precio publicado</option>
+            </select>
           </label>
           <label>
             Habitaciones
@@ -136,6 +149,17 @@
           </button>
         </div>
 
+        <div class="quick-filter-row" aria-label="Filtros rapidos">
+          <button type="button" data-quick-filter="category:">Todas</button>
+          <button type="button" data-quick-filter="category:santo-domingo">Santo Domingo</button>
+          <button type="button" data-quick-filter="category:turisticas">Turisticas</button>
+          <button type="button" data-quick-filter="type:apartamento">Apartamento</button>
+          <button type="button" data-quick-filter="type:inversion">Inversion</button>
+          <button type="button" data-quick-filter="type:familiar">Familiar</button>
+          <button type="button" data-quick-filter="priceMode:consultar">Precio a consultar</button>
+          <button type="button" data-quick-filter="status:disponible">Disponible</button>
+        </div>
+
         <div class="property-results-bar">
           <strong id="propertyResultsCount">Mostrando 0 propiedades</strong>
           <button class="ghost-button" id="copyPropertiesLink" type="button">
@@ -145,7 +169,7 @@
         </div>
 
         <div class="featured-properties-grid property-results-grid" id="propertyResults"></div>
-        <p class="empty-state" id="propertyEmpty" hidden>No encontramos propiedades con esos criterios.</p>
+        <p class="empty-state" id="propertyEmpty" hidden>No encontramos opciones con esos criterios. Escribenos y te ayudamos a buscar una alternativa.</p>
       </section>
     </main>
 

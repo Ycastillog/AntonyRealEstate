@@ -21,7 +21,7 @@ La pagina actual es estatica y publica en GitHub Pages. Para que funcione como h
    - Enviar notificacion por email o WhatsApp Business.
 
 5. WhatsApp Business
-   - Colocar numero real en `WHATSAPP_NUMBER`.
+   - Colocar numero real en `window.ANTONY_WHATSAPP_NUMBER` dentro de `contact.js`.
    - Para mensajes automatizados se necesita API oficial o proveedor.
 
 6. Dominio
@@ -34,7 +34,7 @@ La pagina actual es estatica y publica en GitHub Pages. Para que funcione como h
 
 ## Datos reales que faltan
 
-- Numero oficial de WhatsApp.
+- Numero oficial de WhatsApp en formato internacional.
 - Fotos reales de entregas.
 - Videos reales o reels descargados/autorizados.
 - Testimonios reales con nombre o captura.
