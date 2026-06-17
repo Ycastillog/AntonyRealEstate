@@ -1431,6 +1431,83 @@ main {
   padding-bottom: 14px;
 }
 
+.real-evidence-strip {
+  display: grid;
+  grid-template-columns: 0.82fr 1.18fr;
+  gap: 18px;
+  margin-top: 18px;
+  padding: 18px;
+  background: #071a33;
+  border-radius: 8px;
+  color: white;
+}
+
+.real-evidence-head {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+}
+
+.real-evidence-head .eyebrow {
+  color: var(--gold);
+}
+
+.real-evidence-head h3 {
+  margin: 0;
+  font-size: clamp(1.45rem, 2.5vw, 2.4rem);
+  line-height: 1;
+}
+
+.real-evidence-head p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.76);
+  line-height: 1.55;
+}
+
+.real-evidence-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 10px;
+}
+
+.real-evidence-card {
+  position: relative;
+  min-height: 170px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+}
+
+.real-evidence-card.large {
+  grid-row: span 2;
+  min-height: 350px;
+}
+
+.real-evidence-card img {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  object-fit: cover;
+}
+
+.real-evidence-card::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(180deg, transparent 35%, rgba(7, 26, 51, 0.78));
+}
+
+.real-evidence-card span {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1;
+  font-size: 0.88rem;
+  font-weight: 950;
+}
+
 .live-evidence {
   margin-top: 26px;
   padding-top: 24px;
@@ -1497,6 +1574,93 @@ main {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.project-division {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.project-route-card {
+  display: grid;
+  grid-template-columns: minmax(0, 0.96fr) minmax(220px, 0.9fr);
+  gap: 14px;
+  min-height: 320px;
+  padding: 16px;
+  overflow: hidden;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.project-route-copy {
+  display: grid;
+  align-content: center;
+  gap: 11px;
+}
+
+.project-route-copy > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  padding: 8px 10px;
+  background: white;
+  color: var(--gold-strong);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.project-route-copy h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1.4rem, 2.2vw, 2.05rem);
+  line-height: 1.04;
+}
+
+.project-route-copy p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.route-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.route-tags small {
+  padding: 7px 9px;
+  background: #edf2f7;
+  color: var(--ink);
+  border-radius: 999px;
+  font-weight: 850;
+}
+
+.project-route-media {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 8px;
+  min-height: 288px;
+}
+
+.project-route-media img {
+  width: 100%;
+  height: 100%;
+  min-height: 140px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.project-route-media img:first-child {
+  grid-row: span 2;
 }
 
 .featured-property-card {
@@ -3047,6 +3211,9 @@ textarea {
   .method-timeline,
   .video-grid,
   .proof-gallery,
+  .real-evidence-strip,
+  .project-division,
+  .project-route-card,
   .live-evidence-grid,
   .admin-hero,
   .admin-dashboard,
@@ -3089,6 +3256,10 @@ textarea {
   }
 
   .proof-side-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .real-evidence-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3243,6 +3414,8 @@ textarea {
   .property-detail-hero,
   .featured-properties-section,
   .about-antony-section,
+  .real-evidence-strip,
+  .project-route-card,
   .property-info-card,
   .property-cta-band {
     padding: 18px;
@@ -3294,6 +3467,32 @@ textarea {
 
   .live-evidence-grid {
     grid-template-columns: 1fr;
+  }
+
+  .real-evidence-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-route-media {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: 1fr;
+    min-height: 132px;
+  }
+
+  .real-evidence-card,
+  .real-evidence-card.large {
+    grid-row: span 1;
+    min-height: 170px;
+  }
+
+  .project-route-media img,
+  .project-route-media img:first-child {
+    grid-row: span 1;
+    min-height: 132px;
+  }
+
+  .project-route-card {
+    min-height: auto;
   }
 
   .hero-checks {
