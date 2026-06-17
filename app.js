@@ -271,7 +271,7 @@ async function renderLiveEvidence() {
       </div>
       <div>
         <strong>${escapeHtml(item.title)}</strong>
-        <p>${escapeHtml([item.city, item.eventDate].filter(Boolean).join(" · "))}</p>
+        <p>${escapeHtml([item.city, item.eventDate].filter(Boolean).join(" - "))}</p>
         <p>${escapeHtml(item.description || "")}</p>
       </div>
     </article>

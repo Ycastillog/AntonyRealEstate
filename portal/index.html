@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow,noarchive" />
     <title>Centro de evidencias | Antony Real Estate</title>
-    <link rel="stylesheet" href="../styles.css?v=commercial-v3" />
+    <link rel="stylesheet" href="../styles.css?v=sticky-header-v2" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
-    <script src="../media-config.js?v=commercial-v3" defer></script>
-    <script src="../admin.js?v=commercial-v3" defer></script>
+    <script src="../media-config.js?v=evidence-db-v1" defer></script>
+    <script src="../admin.js?v=evidence-db-v1" defer></script>
   </head>
   <body class="admin-page">
     <header class="topbar">
@@ -35,7 +35,8 @@
         <div>
           <p class="eyebrow">Privado</p>
           <h1>Evidencias reales para alimentar la confianza de la pagina</h1>
-          <p>Sube fotos y videos de entregas, clientes, llaves, firmas y testimonios. La pagina publica solo mostrara lo que este marcado como publicado.</p>
+          <p>Sube fotos y videos de entregas, clientes, llaves, firmas, ferias, recorridos y testimonios. La pagina publica solo mostrara lo que este marcado como publicado.</p>
+          <p class="content-note">Las propiedades o proyectos disponibles se gestionan aparte; este centro es solo para evidencia real y casos documentados.</p>
         </div>
         <aside class="admin-status" id="adminStatus">
           <strong>Estado del contenido</strong>
@@ -100,9 +101,11 @@
               Tipo
               <select name="category" required>
                 <option value="Entrega">Entrega</option>
+                <option value="Cierre">Cierre</option>
+                <option value="Feria">Feria</option>
+                <option value="Recorrido">Recorrido</option>
                 <option value="Testimonio">Testimonio</option>
                 <option value="Cliente">Cliente</option>
-                <option value="Video">Video</option>
                 <option value="Llaves">Llaves</option>
                 <option value="Firma">Firma</option>
               </select>
@@ -110,6 +113,17 @@
             <label>
               Titulo corto
               <input name="title" placeholder="Entrega en Santo Domingo" required />
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Ciudad o zona
+              <input name="city" placeholder="Santo Domingo, Punta Cana, Santiago..." />
+            </label>
+            <label>
+              Fecha del evento
+              <input name="eventDate" type="date" />
             </label>
           </div>
 
@@ -126,6 +140,7 @@
           </label>
 
           <div class="admin-switches">
+            <label><input name="isFeatured" type="checkbox" /> Destacar arriba</label>
             <label><input name="isPublished" type="checkbox" checked /> Publicado</label>
           </div>
 

@@ -5,6 +5,18 @@ El panel funciona en dos modos:
 - **Modo local de prueba:** guarda fotos/videos en el navegador usando IndexedDB. Sirve para probar el flujo, pero no lo ven otros visitantes.
 - **Modo permanente:** sube archivos a Cloudinary y guarda los datos en Supabase. Esto hace que la pagina publica muestre las evidencias a todos.
 
+Flujo de publicacion:
+
+```text
+Portal de Antony
+-> sube foto/video
+-> elige tipo: Entrega, Cierre, Feria, Recorrido, Testimonio, Cliente, Llaves o Firma
+-> marca Publicado
+-> aparece en Evidencia real / Casos reales
+```
+
+Las propiedades o proyectos disponibles no van en esta tabla. Eso pertenece al modulo de propiedades.
+
 ## 1. Cloudinary
 
 Crear un unsigned upload preset para imagenes y videos.
@@ -24,7 +36,7 @@ Crear una tabla llamada `evidence_items` con este SQL:
 create table evidence_items (
   id text primary key,
   title text not null,
-  category text not null,
+  category text not null check (category in ('Entrega', 'Cierre', 'Feria', 'Recorrido', 'Testimonio', 'Cliente', 'Llaves', 'Firma')),
   city text,
   event_date date,
   description text,
@@ -41,6 +53,13 @@ alter table evidence_items enable row level security;
 create policy "Public can read published evidence"
 on evidence_items for select
 using (is_published = true);
+
+-- Para el portal sencillo de esta fase, el anon key tambien puede listar evidencias.
+-- Si quieres ocultar evidencias no publicadas incluso en lectura anonima,
+-- la siguiente fase debe usar Supabase Auth o un backend privado.
+create policy "Anon can read evidence for portal"
+on evidence_items for select
+using (true);
 
 create policy "Anon can insert evidence from admin panel"
 on evidence_items for insert

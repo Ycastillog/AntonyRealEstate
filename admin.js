@@ -137,7 +137,7 @@ async function itemWithPreview(item) {
 
 async function loadItems() {
   if (remoteReady) {
-    const url = `${config.supabaseUrl}/rest/v1/${config.supabaseTable}?select=*&is_published=eq.true&order=is_featured.desc,created_at.desc`;
+    const url = `${config.supabaseUrl}/rest/v1/${config.supabaseTable}?select=*&order=is_featured.desc,created_at.desc`;
     const response = await fetch(url, {
       headers: {
         apikey: config.supabaseAnonKey,
@@ -222,7 +222,7 @@ async function loadAndRender() {
         <div>
           <span>${escapeHtml(item.category || "Evidencia")}</span>
           <strong>${escapeHtml(item.title)}</strong>
-          <p>${escapeHtml(item.city || "")}${item.eventDate ? ` · ${escapeHtml(item.eventDate)}` : ""}</p>
+          <p>${escapeHtml([item.city, item.eventDate].filter(Boolean).join(" - "))}</p>
           <p>${escapeHtml(item.description || "")}</p>
         </div>
         <button class="ghost-button" type="button" data-delete="${escapeHtml(item.id)}" data-local-key="${escapeHtml(item.localKey || "")}">
@@ -282,11 +282,11 @@ evidenceForm.addEventListener("submit", async (event) => {
       id: slug(),
       title: formData.get("title").toString().trim(),
       category: formData.get("category").toString(),
-      city: "",
-      eventDate: "",
+      city: formData.get("city").toString().trim(),
+      eventDate: formData.get("eventDate").toString(),
       description: formData.get("description").toString().trim(),
       mediaType,
-      isFeatured: false,
+      isFeatured: formData.get("isFeatured") === "on",
       isPublished: formData.get("isPublished") === "on",
       createdAt: new Date().toISOString()
     };
