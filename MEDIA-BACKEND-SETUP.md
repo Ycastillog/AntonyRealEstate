@@ -17,7 +17,22 @@ Portal de Antony
 
 Las propiedades o proyectos disponibles no van en esta tabla. Eso pertenece al modulo de propiedades.
 
-## 1. Recomendado: Supabase Storage
+## 1. Configuracion rapida
+
+En Supabase, abre **SQL Editor** y ejecuta el archivo:
+
+```text
+supabase-evidence-setup.sql
+```
+
+Ese SQL crea:
+
+- Tabla `evidence_items`
+- Politicas de lectura/escritura
+- Bucket publico `evidencias`
+- Politicas para subir, leer y eliminar archivos
+
+## 2. Recomendado: Supabase Storage
 
 Para manejar todo dentro de la cuenta/base de Antony, crea un bucket publico en Supabase Storage:
 
@@ -57,7 +72,7 @@ Datos que se colocan en `media-config.js`:
 supabaseStorageBucket: "evidencias"
 ```
 
-## 2. Base de datos Supabase
+## 3. Base de datos Supabase
 
 Crear una tabla llamada `evidence_items` con este SQL:
 
@@ -107,7 +122,7 @@ supabaseAnonKey: "TU_ANON_KEY",
 supabaseStorageBucket: "evidencias"
 ```
 
-## 3. Opcional: Cloudinary
+## 4. Opcional: Cloudinary
 
 Si mas adelante los videos pesan mucho o se necesita optimizacion avanzada, tambien se puede usar Cloudinary.
 
@@ -122,6 +137,6 @@ cloudinaryUploadPreset: "TU_UNSIGNED_UPLOAD_PRESET"
 
 Si Cloudinary esta configurado, el portal lo usa para archivos. Si no, usa Supabase Storage.
 
-## 4. Seguridad
+## 5. Seguridad
 
 La clave `adminPassword` en `media-config.js` es una barrera sencilla para esta fase. Para una version comercial completa, lo ideal es mover el panel a Supabase Auth o a un backend propio para que la autenticacion sea real del lado servidor.
