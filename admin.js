@@ -4,7 +4,10 @@ const DB_NAME = "antony-media-store";
 const DB_STORE = "files";
 
 const config = window.ANTONY_MEDIA_CONFIG || {};
-const remoteReady = Boolean(config.cloudinaryCloudName && config.cloudinaryUploadPreset && config.supabaseUrl && config.supabaseAnonKey);
+const hasSupabase = Boolean(config.supabaseUrl && config.supabaseAnonKey);
+const hasCloudinary = Boolean(config.cloudinaryCloudName && config.cloudinaryUploadPreset);
+const hasSupabaseStorage = Boolean(config.supabaseStorageBucket);
+const remoteReady = hasSupabase && (hasCloudinary || hasSupabaseStorage);
 
 const loginPanel = document.querySelector("#loginPanel");
 const adminWorkspace = document.querySelector("#adminWorkspace");
@@ -167,6 +170,45 @@ async function uploadToCloudinary(file) {
   return response.json();
 }
 
+function cleanFileName(name) {
+  return String(name || "archivo")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+async function uploadToSupabaseStorage(file, itemId) {
+  const bucket = config.supabaseStorageBucket || "evidencias";
+  const extension = cleanFileName(file.name).split(".").pop() || (file.type.startsWith("video/") ? "mp4" : "jpg");
+  const filePath = `${itemId}/${Date.now()}.${extension}`;
+  const uploadUrl = `${config.supabaseUrl}/storage/v1/object/${bucket}/${filePath}`;
+
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      apikey: config.supabaseAnonKey,
+      Authorization: `Bearer ${config.supabaseAnonKey}`,
+      "Content-Type": file.type || "application/octet-stream",
+      "x-upsert": "true"
+    },
+    body: file
+  });
+
+  if (!response.ok) throw new Error("Supabase Storage no acepto el archivo.");
+
+  return {
+    secure_url: `${config.supabaseUrl}/storage/v1/object/public/${bucket}/${filePath}`,
+    storage_path: filePath
+  };
+}
+
+async function uploadPermanentFile(file, itemId) {
+  if (hasCloudinary) return uploadToCloudinary(file);
+  return uploadToSupabaseStorage(file, itemId);
+}
+
 async function saveRemoteItem(item) {
   const response = await fetch(`${config.supabaseUrl}/rest/v1/${config.supabaseTable}`, {
     method: "POST",
@@ -292,7 +334,7 @@ evidenceForm.addEventListener("submit", async (event) => {
     };
 
     if (remoteReady) {
-      const upload = await uploadToCloudinary(file);
+      const upload = await uploadPermanentFile(file, baseItem.id);
       await saveRemoteItem({
         id: baseItem.id,
         title: baseItem.title,

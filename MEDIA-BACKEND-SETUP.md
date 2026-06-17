@@ -3,7 +3,7 @@
 El panel funciona en dos modos:
 
 - **Modo local de prueba:** guarda fotos/videos en el navegador usando IndexedDB. Sirve para probar el flujo, pero no lo ven otros visitantes.
-- **Modo permanente:** sube archivos a Cloudinary y guarda los datos en Supabase. Esto hace que la pagina publica muestre las evidencias a todos.
+- **Modo permanente:** sube archivos a Supabase Storage o Cloudinary, y guarda los datos en Supabase. Esto hace que la pagina publica muestre las evidencias a todos.
 
 Flujo de publicacion:
 
@@ -17,18 +17,47 @@ Portal de Antony
 
 Las propiedades o proyectos disponibles no van en esta tabla. Eso pertenece al modulo de propiedades.
 
-## 1. Cloudinary
+## 1. Recomendado: Supabase Storage
 
-Crear un unsigned upload preset para imagenes y videos.
+Para manejar todo dentro de la cuenta/base de Antony, crea un bucket publico en Supabase Storage:
+
+```text
+Bucket name: evidencias
+Public bucket: activado
+```
+
+Luego usa estas politicas para permitir que el portal suba y elimine archivos del bucket:
+
+```sql
+insert into storage.buckets (id, name, public)
+values ('evidencias', 'evidencias', true)
+on conflict (id) do update set public = true;
+
+create policy "Public can read evidence files"
+on storage.objects for select
+using (bucket_id = 'evidencias');
+
+create policy "Anon can upload evidence files"
+on storage.objects for insert
+with check (bucket_id = 'evidencias');
+
+create policy "Anon can update evidence files"
+on storage.objects for update
+using (bucket_id = 'evidencias')
+with check (bucket_id = 'evidencias');
+
+create policy "Anon can delete evidence files"
+on storage.objects for delete
+using (bucket_id = 'evidencias');
+```
 
 Datos que se colocan en `media-config.js`:
 
 ```js
-cloudinaryCloudName: "TU_CLOUD_NAME",
-cloudinaryUploadPreset: "TU_UNSIGNED_UPLOAD_PRESET"
+supabaseStorageBucket: "evidencias"
 ```
 
-## 2. Supabase
+## 2. Base de datos Supabase
 
 Crear una tabla llamada `evidence_items` con este SQL:
 
@@ -74,9 +103,25 @@ Datos que se colocan en `media-config.js`:
 
 ```js
 supabaseUrl: "https://TU-PROYECTO.supabase.co",
-supabaseAnonKey: "TU_ANON_KEY"
+supabaseAnonKey: "TU_ANON_KEY",
+supabaseStorageBucket: "evidencias"
 ```
 
-## 3. Seguridad
+## 3. Opcional: Cloudinary
+
+Si mas adelante los videos pesan mucho o se necesita optimizacion avanzada, tambien se puede usar Cloudinary.
+
+Crear un unsigned upload preset para imagenes y videos.
+
+Datos que se colocan en `media-config.js`:
+
+```js
+cloudinaryCloudName: "TU_CLOUD_NAME",
+cloudinaryUploadPreset: "TU_UNSIGNED_UPLOAD_PRESET"
+```
+
+Si Cloudinary esta configurado, el portal lo usa para archivos. Si no, usa Supabase Storage.
+
+## 4. Seguridad
 
 La clave `adminPassword` en `media-config.js` es una barrera sencilla para esta fase. Para una version comercial completa, lo ideal es mover el panel a Supabase Auth o a un backend propio para que la autenticacion sea real del lado servidor.
