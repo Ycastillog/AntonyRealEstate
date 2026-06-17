@@ -1,5 +1,6 @@
 :root {
   color-scheme: light;
+  --topbar-height: 76px;
   --ink: #071a33;
   --muted: #667085;
   --line: #d8dee8;
@@ -28,6 +29,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  padding-top: var(--topbar-height);
   overflow-x: hidden;
   background: var(--soft);
   color: var(--ink);
@@ -46,17 +48,25 @@ button {
 }
 
 .topbar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  min-height: var(--topbar-height);
+  width: 100%;
   padding: 8px clamp(16px, 4vw, 44px);
   background: rgba(255, 255, 255, 0.9);
   border-bottom: 1px solid var(--line);
+  box-shadow: 0 12px 28px rgba(7, 26, 51, 0.08);
   backdrop-filter: blur(16px);
+}
+
+section[id],
+form[id] {
+  scroll-margin-top: calc(var(--topbar-height) + 18px);
 }
 
 .brand {
@@ -3536,12 +3546,16 @@ textarea {
 }
 
 @media (max-width: 620px) {
+  :root {
+    --topbar-height: 78px;
+  }
+
   main {
     padding-inline: 12px;
   }
 
   .topbar {
-    position: sticky;
+    position: fixed;
     align-items: center;
     gap: 10px;
     padding-inline: 12px;
@@ -3944,7 +3958,7 @@ textarea {
     top: 10px !important;
     right: auto !important;
     left: min(312px, calc(100vw - 74px)) !important;
-    z-index: 60 !important;
+    z-index: 1100 !important;
     display: flex !important;
   }
 
