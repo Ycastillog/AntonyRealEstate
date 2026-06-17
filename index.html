@@ -18,10 +18,10 @@
     <meta property="og:url" content="https://antonyrealestate.com/" />
     <meta property="og:type" content="website" />
     <link rel="preconnect" href="https://images.unsplash.com" />
-    <link rel="stylesheet" href="styles.css?v=real-content-v1" />
+    <link rel="stylesheet" href="styles.css?v=production-v1" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
-    <script src="media-config.js?v=commercial-v3" defer></script>
-    <script src="app.js?v=commercial-v3" defer></script>
+    <script src="media-config.js?v=production-v1" defer></script>
+    <script src="app.js?v=production-v1" defer></script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -47,10 +47,10 @@
       </a>
       <nav class="main-nav" aria-label="Navegacion principal">
         <a href="#">Inicio</a>
-        <a href="#quien-soy">Mensaje</a>
-        <a href="#unidades">Casos reales</a>
+        <a href="quien-soy/">Quien soy</a>
+        <a href="casos-reales/">Casos reales</a>
         <a href="#propiedades">Propiedades</a>
-        <a href="#comprar-usa">Comprar desde USA</a>
+        <a href="comprar-desde-usa/">Comprar desde USA</a>
         <a href="#leadForm">Contacto</a>
       </nav>
       <nav class="nav-actions" aria-label="Acciones">
@@ -60,10 +60,10 @@
           </summary>
           <div>
             <a href="#">Inicio</a>
-            <a href="#quien-soy">Mensaje</a>
-            <a href="#unidades">Casos reales</a>
+            <a href="quien-soy/">Quien soy</a>
+            <a href="casos-reales/">Casos reales</a>
             <a href="#propiedades">Propiedades</a>
-            <a href="#comprar-usa">Comprar desde USA</a>
+            <a href="comprar-desde-usa/">Comprar desde USA</a>
             <a href="#leadForm">Contacto</a>
           </div>
         </details>
@@ -83,15 +83,15 @@
           <div class="hero-actions">
             <a class="primary-button" href="#leadForm">
               <i data-lucide="clipboard-check"></i>
-              <span>Evaluar mi caso</span>
+              <span>Solicitar asesoria</span>
             </a>
             <a class="primary-button whatsapp-hero" id="heroWhatsapp" href="#">
               <i data-lucide="message-circle"></i>
-              <span>Evaluar por WhatsApp</span>
+              <span>Solicitar asesoria</span>
             </a>
-            <a class="ghost-button ghost-on-dark" href="#unidades">
-              <i data-lucide="key-round"></i>
-              <span>Ver casos reales</span>
+            <a class="ghost-button ghost-on-dark" href="propiedades/">
+              <i data-lucide="building-2"></i>
+              <span>Ver propiedades</span>
             </a>
           </div>
           <div class="hero-checks" aria-label="Servicios principales">
@@ -144,7 +144,7 @@
             <img src="assets/posters/entrega-principal.jpg" alt="Antony explicando el proceso inmobiliario" />
             <span class="video-play-circle"><i data-lucide="play"></i></span>
           </button>
-          <span class="video-play-badge"><i data-lucide="play"></i> Video destacado</span>
+          <span class="video-play-badge"><i data-lucide="video"></i> Video destacado</span>
           <div class="video-caption-stack" aria-label="Mensajes principales del video">
             <strong>Conoce como comprar desde USA o RD</strong>
             <small>300+ familias orientadas</small>
@@ -153,7 +153,7 @@
           </div>
         </div>
       </section>
-      <section class="about-antony-section" id="quien-soy" aria-label="Mensaje de Antony">
+      <section class="about-antony-section" id="quien-soy" aria-label="Quien es Antony">
         <div class="about-antony-media video-slot">
           <button class="video-thumbnail-button presentation-video-button" type="button" disabled aria-label="Video de presentacion de Antony">
             <img src="assets/posters/entrega-principal.jpg" alt="Video de presentacion de Antony" />
@@ -162,9 +162,9 @@
           <span class="media-chip"><i data-lucide="video"></i> Video de presentacion</span>
         </div>
         <div class="about-antony-copy">
-          <p class="eyebrow">Mensaje de Antony</p>
-          <h2>Conoce la vision detras del proceso</h2>
-          <p>Este espacio esta preparado para el video donde Antony explicara como acompana a familias e inversionistas a comprar con direccion, claridad y seguimiento hasta la entrega.</p>
+          <p class="eyebrow">Quien soy</p>
+          <h2>Antony Fulgencio</h2>
+          <p>Asesor inmobiliario enfocado en orientar a familias e inversionistas que quieren comprar en Republica Dominicana con direccion, claridad y seguimiento hasta la entrega.</p>
           <div class="about-antony-proof">
             <span><strong>300+</strong> familias acompanadas</span>
             <span><strong>21K+</strong> seguidores</span>
@@ -172,7 +172,7 @@
           </div>
           <a class="primary-button" href="#leadForm">
             <i data-lucide="message-circle"></i>
-            <span>Solicitar asesoria</span>
+              <span>Solicitar asesoria</span>
           </a>
         </div>
       </section>
@@ -363,9 +363,9 @@
                   <i data-lucide="building-2"></i>
                   <span>Ver detalles</span>
                 </a>
-                <a class="ghost-button" href="https://wa.me/?text=Hola%20Antony%2C%20quiero%20informacion%20sobre%20Colinas%20de%20los%20Rios">
+                <a class="ghost-button" href="#" data-chat="vi la propiedad Colinas de los Rios y quiero informacion.">
                   <i data-lucide="message-circle"></i>
-                  <span>WhatsApp</span>
+                  <span>Solicitar informacion</span>
                 </a>
               </div>
             </div>
@@ -389,9 +389,9 @@
                   <i data-lucide="building-2"></i>
                   <span>Ver detalles</span>
                 </a>
-                <a class="ghost-button" href="https://wa.me/?text=Hola%20Antony%2C%20quiero%20informacion%20sobre%20Mirador%20Sur">
+                <a class="ghost-button" href="#" data-chat="vi la propiedad Mirador Sur y quiero informacion.">
                   <i data-lucide="message-circle"></i>
-                  <span>WhatsApp</span>
+                  <span>Solicitar informacion</span>
                 </a>
               </div>
             </div>
@@ -566,10 +566,10 @@
       <nav aria-label="Enlaces principales">
         <strong>Pagina</strong>
         <a href="#">Inicio</a>
-        <a href="#quien-soy">Mensaje</a>
-        <a href="#unidades">Casos reales</a>
+        <a href="quien-soy/">Quien soy</a>
+        <a href="casos-reales/">Casos reales</a>
         <a href="#propiedades">Propiedades</a>
-        <a href="#comprar-usa">Comprar desde USA</a>
+        <a href="comprar-desde-usa/">Comprar desde USA</a>
       </nav>
       <nav aria-label="Contacto">
         <strong>Contacto</strong>

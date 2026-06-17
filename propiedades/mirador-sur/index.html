@@ -14,11 +14,43 @@
     <meta property="og:image" content="https://antonyrealestate.com/assets/properties/mirador-sur/foto-01.jpg" />
     <meta property="og:url" content="https://antonyrealestate.com/propiedades/mirador-sur/" />
     <meta property="og:type" content="website" />
-    <link rel="stylesheet" href="../../styles.css?v=commercial-v3" />
+    <link rel="stylesheet" href="../../styles.css?v=production-v1" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
     <script>
+      const WHATSAPP_NUMBER = "";
+      const propertyMessage = "Hola Antony, vi la propiedad Mirador Sur y quiero informacion.";
+      function whatsappUrl(message) {
+        const encoded = encodeURIComponent(message);
+        return WHATSAPP_NUMBER ? `https://wa.me/${WHATSAPP_NUMBER}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+      }
       window.addEventListener("DOMContentLoaded", () => {
         if (window.lucide) window.lucide.createIcons();
+        document.querySelectorAll("[data-whatsapp-property]").forEach((link) => {
+          link.href = whatsappUrl(propertyMessage);
+        });
+        document.querySelector("#copyPropertyLink")?.addEventListener("click", async () => {
+          await navigator.clipboard.writeText(window.location.href);
+          document.querySelector("#propertyToast").textContent = "Link copiado";
+          document.querySelector("#propertyToast").classList.add("show");
+          window.setTimeout(() => document.querySelector("#propertyToast").classList.remove("show"), 2200);
+        });
+        document.querySelector("#shareProperty")?.addEventListener("click", async () => {
+          if (navigator.share) {
+            await navigator.share({ title: document.title, url: window.location.href });
+          } else {
+            await navigator.clipboard.writeText(window.location.href);
+            document.querySelector("#propertyToast").textContent = "Link copiado";
+            document.querySelector("#propertyToast").classList.add("show");
+            window.setTimeout(() => document.querySelector("#propertyToast").classList.remove("show"), 2200);
+          }
+        });
+        document.querySelectorAll(".property-gallery button").forEach((button) => {
+          button.addEventListener("click", () => {
+            document.querySelector("#zoomImage").src = button.querySelector("img").src;
+            document.querySelector("#imageZoomModal").showModal();
+          });
+        });
+        document.querySelector("#closeImageZoom")?.addEventListener("click", () => document.querySelector("#imageZoomModal").close());
       });
     </script>
   </head>
@@ -33,9 +65,6 @@
       </a>
       <nav class="nav-actions" aria-label="Acciones">
         <a class="icon-button" href="../../" title="Volver al inicio"><i data-lucide="arrow-left"></i></a>
-        <a class="icon-button" href="https://www.instagram.com/antony.tucasard" target="_blank" rel="noreferrer" title="Instagram">
-          <i data-lucide="instagram"></i>
-        </a>
       </nav>
     </header>
 
@@ -45,6 +74,7 @@
           <p class="eyebrow">Av. Cayetano Germosen, Mirador Sur 9</p>
           <h1>Modern Family Apartment</h1>
           <span class="property-price">US$185,000</span>
+          <span class="property-detail-status disponible">Disponible</span>
           <p>Apartamento familiar con buena distribucion, amenidades completas y una terraza social con picuzzi y vista abierta.</p>
           <div class="property-meta-grid">
             <span><small>Metros</small>132 m2</span>
@@ -52,20 +82,28 @@
             <span><small>Mantenimiento</small>RD$6,720</span>
           </div>
           <div class="property-actions">
-            <a class="primary-button" href="https://wa.me/?text=Hola%20Antony%2C%20quiero%20informacion%20sobre%20Mirador%20Sur">
+            <a class="primary-button" href="#" data-whatsapp-property>
               <i data-lucide="message-circle"></i>
-              <span>Solicitar por WhatsApp</span>
+              <span>Solicitar informacion</span>
             </a>
-            <a class="ghost-button" href="../../#propiedades">
+            <button class="ghost-button" id="shareProperty" type="button">
+              <i data-lucide="share-2"></i>
+              <span>Compartir</span>
+            </button>
+            <button class="ghost-button" id="copyPropertyLink" type="button">
+              <i data-lucide="copy"></i>
+              <span>Copiar enlace</span>
+            </button>
+            <a class="ghost-button" href="../">
               <i data-lucide="building-2"></i>
-              <span>Ver mas opciones</span>
+              <span>Volver a propiedades</span>
             </a>
           </div>
         </div>
         <div class="property-gallery">
-          <img src="../../assets/properties/mirador-sur/foto-01.jpg" alt="Picuzzi y terraza en Mirador Sur" />
-          <img src="../../assets/properties/mirador-sur/foto-02.jpg" alt="Area social del apartamento" />
-          <img src="../../assets/properties/mirador-sur/foto-03.jpg" alt="Interior del apartamento en Mirador Sur" />
+          <button type="button"><img src="../../assets/properties/mirador-sur/foto-01.jpg" alt="Picuzzi y terraza en Mirador Sur" /></button>
+          <button type="button"><img src="../../assets/properties/mirador-sur/foto-02.jpg" alt="Area social del apartamento" /></button>
+          <button type="button"><img src="../../assets/properties/mirador-sur/foto-03.jpg" alt="Interior del apartamento en Mirador Sur" /></button>
         </div>
       </section>
 
@@ -100,11 +138,37 @@
           <h2>Quieres recibir informacion de esta unidad?</h2>
           <p>Antony puede confirmar disponibilidad, condiciones y coordinar la visita.</p>
         </div>
-        <a class="primary-button whatsapp-hero" href="https://wa.me/?text=Hola%20Antony%2C%20quiero%20evaluar%20Mirador%20Sur">
+        <a class="primary-button whatsapp-hero" href="#" data-whatsapp-property>
           <i data-lucide="message-circle"></i>
-          <span>Evaluar mi caso</span>
+          <span>Solicitar asesoria</span>
         </a>
       </section>
+
+      <section class="related-properties-section">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Tambien puedes evaluar</p>
+            <h2>Propiedades relacionadas</h2>
+          </div>
+        </div>
+        <article class="featured-property-card related-property-card">
+          <a class="featured-property-media" href="../colinas-de-los-rios/">
+            <img src="../../assets/properties/colinas-de-los-rios/foto-01.jpg" alt="Colinas de los Rios" loading="lazy" />
+            <span>Disponible</span>
+          </a>
+          <div class="featured-property-copy">
+            <p class="eyebrow">Colinas de los Rios</p>
+            <h3>Apartamento en torre moderna</h3>
+            <strong>RD$9.5 MM</strong>
+            <a class="primary-button" href="../colinas-de-los-rios/"><i data-lucide="building-2"></i><span>Ver detalles</span></a>
+          </div>
+        </article>
+      </section>
     </main>
+    <dialog class="image-zoom-modal" id="imageZoomModal">
+      <button class="icon-button image-zoom-close" id="closeImageZoom" type="button" aria-label="Cerrar imagen"><i data-lucide="x"></i></button>
+      <img id="zoomImage" alt="Imagen ampliada de la propiedad" />
+    </dialog>
+    <div class="toast" id="propertyToast" role="status" aria-live="polite"></div>
   </body>
 </html>

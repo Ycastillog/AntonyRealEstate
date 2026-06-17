@@ -3,29 +3,20 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Propiedades destacadas | Antony Fulgencio Real Estate</title>
+    <title>Propiedades en Republica Dominicana | Antony Fulgencio Real Estate</title>
     <meta
       name="description"
-      content="Propiedades destacadas para comprar o invertir en Republica Dominicana con asesoria de Antony Fulgencio."
+      content="Filtra propiedades destacadas en Santo Domingo y zonas premium de Republica Dominicana. Solicita asesoria inmobiliaria directa con Antony Fulgencio."
     />
     <link rel="canonical" href="https://antonyrealestate.com/propiedades/" />
-    <link rel="stylesheet" href="../styles.css?v=commercial-v3" />
+    <meta property="og:title" content="Propiedades destacadas | Antony Fulgencio Real Estate" />
+    <meta property="og:description" content="Propiedades reales para evaluar con asesoria, estado visible, filtros y enlaces directos de informacion." />
+    <meta property="og:image" content="https://antonyrealestate.com/assets/properties/mirador-sur/foto-01.jpg" />
+    <meta property="og:url" content="https://antonyrealestate.com/propiedades/" />
+    <meta property="og:type" content="website" />
+    <link rel="stylesheet" href="../styles.css?v=production-v1" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
-    <script>
-      window.addEventListener("DOMContentLoaded", () => {
-        if (window.lucide) window.lucide.createIcons();
-        document.querySelectorAll("[data-property-filter]").forEach((button) => {
-          button.addEventListener("click", () => {
-            const filter = button.dataset.propertyFilter;
-            document.querySelectorAll("[data-property-filter]").forEach((item) => item.classList.toggle("active", item === button));
-            document.querySelectorAll("[data-property-card]").forEach((card) => {
-              const tags = card.dataset.propertyCard.split(" ");
-              card.hidden = filter !== "todo" && !tags.includes(filter);
-            });
-          });
-        });
-      });
-    </script>
+    <script src="propiedades.js?v=production-v1" defer></script>
   </head>
   <body>
     <header class="topbar">
@@ -45,67 +36,111 @@
         <a href="../#leadForm">Contacto</a>
       </nav>
       <nav class="nav-actions" aria-label="Acciones">
-        <a class="icon-button" href="../" title="Volver al inicio"><i data-lucide="arrow-left"></i></a>
+        <details class="mobile-menu">
+          <summary class="mobile-menu-button" aria-label="Abrir menu">Menu</summary>
+          <div>
+            <a href="../">Inicio</a>
+            <a href="../#quien-soy">Quien soy</a>
+            <a href="../#unidades">Casos reales</a>
+            <a href="./">Propiedades</a>
+            <a href="../#comprar-usa">Comprar desde USA</a>
+            <a href="../#leadForm">Contacto</a>
+          </div>
+        </details>
       </nav>
     </header>
 
     <main class="property-detail-main">
-      <section class="featured-properties-section">
+      <section class="property-search-shell">
         <div class="section-head">
           <div>
-            <p class="eyebrow">Propiedades destacadas</p>
+            <p class="eyebrow">Propiedades</p>
             <h1>Opciones reales para evaluar con Antony</h1>
-            <p class="content-note">La disponibilidad se confirma directamente antes de separar. Estas fichas sirven para orientar la conversacion y compartir opciones claras por WhatsApp.</p>
+            <p class="content-note">Filtra por zona, tipo, estado y presupuesto. La disponibilidad se confirma directamente antes de separar.</p>
           </div>
+          <a class="primary-button" href="../#leadForm">
+            <i data-lucide="message-circle"></i>
+            <span>Solicitar asesoria</span>
+          </a>
         </div>
-        <div class="property-filter-row" aria-label="Filtros de propiedades">
-          <button class="active" data-property-filter="todo" type="button">Todo</button>
-          <button data-property-filter="santo-domingo" type="button">Santo Domingo</button>
-          <button data-property-filter="apartamento" type="button">Apartamentos</button>
-          <button data-property-filter="familiar" type="button">Familiar</button>
-          <button data-property-filter="inversion" type="button">Inversion</button>
+
+        <div class="property-filter-panel" aria-label="Filtros de propiedades">
+          <label>
+            Buscar
+            <input id="propertySearch" type="search" placeholder="Sector, proyecto, amenidad..." autocomplete="off" />
+          </label>
+          <label>
+            Tipo
+            <select id="propertyType">
+              <option value="">Todos</option>
+              <option value="apartamento">Apartamento</option>
+              <option value="penthouse">Penthouse</option>
+              <option value="villa">Villa</option>
+              <option value="proyecto">Proyecto</option>
+            </select>
+          </label>
+          <label>
+            Ciudad
+            <select id="propertyCity">
+              <option value="">Todas</option>
+              <option value="santo-domingo">Santo Domingo</option>
+              <option value="punta-cana">Punta Cana</option>
+              <option value="santiago">Santiago</option>
+            </select>
+          </label>
+          <label>
+            Zona
+            <select id="propertyZone">
+              <option value="">Todas</option>
+              <option value="colinas-de-los-rios">Colinas de los Rios</option>
+              <option value="mirador-sur">Mirador Sur</option>
+              <option value="naco">Naco</option>
+              <option value="bella-vista">Bella Vista</option>
+              <option value="punta-cana">Punta Cana</option>
+            </select>
+          </label>
+          <label>
+            Hasta US$
+            <input id="propertyMaxPrice" type="number" min="0" step="5000" placeholder="Sin limite" />
+          </label>
+          <label>
+            Habitaciones
+            <select id="propertyBeds">
+              <option value="">Todas</option>
+              <option value="1">1+</option>
+              <option value="2">2+</option>
+              <option value="3">3+</option>
+              <option value="4">4+</option>
+            </select>
+          </label>
+          <label>
+            Estado
+            <select id="propertyStatus">
+              <option value="">Todos</option>
+              <option value="disponible">Disponible</option>
+              <option value="reservada">Reservada</option>
+              <option value="vendida">Vendida</option>
+            </select>
+          </label>
+          <button class="ghost-button clear-filters-button" id="clearPropertyFilters" type="button">
+            <i data-lucide="rotate-ccw"></i>
+            <span>Limpiar filtros</span>
+          </button>
         </div>
-        <div class="featured-properties-grid">
-          <article class="featured-property-card" data-property-card="santo-domingo apartamento familiar inversion">
-            <a class="featured-property-media" href="colinas-de-los-rios/" aria-label="Ver Colinas de los Rios">
-              <img src="../assets/properties/colinas-de-los-rios/foto-01.jpg" alt="Apartamento en Colinas de los Rios" />
-              <span>Disponible para evaluar</span>
-            </a>
-            <div class="featured-property-copy">
-              <p class="eyebrow">Colinas de los Rios</p>
-              <h3>Apartamento en torre moderna</h3>
-              <strong>RD$9.5 MM</strong>
-              <ul>
-                <li>2 habitaciones y 2 parqueos lineales</li>
-                <li>Torre 2022 con gimnasio, jacuzzi y area social</li>
-                <li>Zona tranquila y familiar</li>
-              </ul>
-              <div class="property-actions">
-                <a class="primary-button" href="colinas-de-los-rios/"><i data-lucide="building-2"></i><span>Ver detalles</span></a>
-              </div>
-            </div>
-          </article>
-          <article class="featured-property-card" data-property-card="santo-domingo apartamento familiar inversion">
-            <a class="featured-property-media" href="mirador-sur/" aria-label="Ver Mirador Sur">
-              <img src="../assets/properties/mirador-sur/foto-01.jpg" alt="Apartamento en Mirador Sur" />
-              <span>Vista premium</span>
-            </a>
-            <div class="featured-property-copy">
-              <p class="eyebrow">Mirador Sur</p>
-              <h3>Modern Family Apartment</h3>
-              <strong>US$185,000</strong>
-              <ul>
-                <li>132 m2 netos y 2 habitaciones</li>
-                <li>Balcon, cuarto de servicio y 2 parqueos</li>
-                <li>Gimnasio, picuzzi, BBQ y seguridad 24/7</li>
-              </ul>
-              <div class="property-actions">
-                <a class="primary-button" href="mirador-sur/"><i data-lucide="building-2"></i><span>Ver detalles</span></a>
-              </div>
-            </div>
-          </article>
+
+        <div class="property-results-bar">
+          <strong id="propertyResultsCount">Mostrando 0 propiedades</strong>
+          <button class="ghost-button" id="copyPropertiesLink" type="button">
+            <i data-lucide="copy"></i>
+            <span>Copiar busqueda</span>
+          </button>
         </div>
+
+        <div class="featured-properties-grid property-results-grid" id="propertyResults"></div>
+        <p class="empty-state" id="propertyEmpty" hidden>No encontramos propiedades con esos criterios.</p>
       </section>
     </main>
+
+    <div class="toast" id="propertyToast" role="status" aria-live="polite"></div>
   </body>
 </html>

@@ -577,7 +577,7 @@ listingForm.addEventListener("submit", async (event) => {
 
 window.addEventListener("DOMContentLoaded", () => {
   loadProfilePhoto();
-  const mainWhatsappMessage = "Hola Antony, quiero evaluar mi caso para comprar o invertir en RD.";
+  const mainWhatsappMessage = "Hola Antony, quiero solicitar asesoria inmobiliaria.";
   floatingWhatsapp.href = whatsappUrl(mainWhatsappMessage);
   if (heroWhatsapp) heroWhatsapp.href = whatsappUrl(mainWhatsappMessage);
   if (footerWhatsapp) footerWhatsapp.href = whatsappUrl(mainWhatsappMessage);
