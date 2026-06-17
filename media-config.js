@@ -5,7 +5,7 @@ window.ANTONY_MEDIA_CONFIG = {
   cloudinaryUploadPreset: "",
   cloudinaryFolder: "antony-real-estate",
   supabaseUrl: "https://gqcvtvsxzicpgjhgzrhl.supabase.co",
-  supabaseAnonKey: "",
+  supabaseAnonKey: "sb_publishable_OqSmd-f-zKqPbf7vp-L-Tg__Hj0BW0g",
   supabaseStorageBucket: "evidencias",
   supabaseTable: "evidence_items"
 };

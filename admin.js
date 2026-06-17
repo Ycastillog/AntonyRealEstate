@@ -250,7 +250,23 @@ function renderMedia(item) {
 }
 
 async function loadAndRender() {
-  const items = await loadItems();
+  let items = [];
+  try {
+    items = await loadItems();
+  } catch (error) {
+    publishedCount.textContent = "0";
+    videoCount.textContent = "0";
+    photoCount.textContent = "0";
+    testimonialCount.textContent = "0";
+    evidenceGrid.innerHTML = "";
+    emptyState.hidden = false;
+    emptyState.textContent = remoteReady
+      ? "Supabase esta conectado, pero falta ejecutar la configuracion inicial de tabla y storage."
+      : "Todavia no hay evidencias cargadas.";
+    if (remoteReady) storageMode.textContent = "Supabase conectado - falta configurar tabla y storage.";
+    showToast(error.message || "Falta completar la configuracion.");
+    return;
+  }
   const publishedItems = items.filter((item) => item.isPublished);
   publishedCount.textContent = publishedItems.length;
   videoCount.textContent = publishedItems.filter((item) => item.mediaType === "video").length;
