@@ -94,6 +94,9 @@ const videoModal = document.querySelector("#videoModal");
 const closeVideoModalButton = document.querySelector("#closeVideoModal");
 const mainVideoPlayer = document.querySelector("#mainVideoPlayer");
 const calcPrice = document.querySelector("#calcPrice");
+const calcDownPayment = document.querySelector("#calcDownPayment");
+const calcRate = document.querySelector("#calcRate");
+const calcYears = document.querySelector("#calcYears");
 const calcPriceLabel = document.querySelector("#calcPriceLabel");
 const calcReserve = document.querySelector("#calcReserve");
 const calcSeparation = document.querySelector("#calcSeparation");
@@ -374,17 +377,21 @@ function showToast(message) {
 function updateCalculator() {
   if (!calcPrice) return;
 
-  const price = Number(calcPrice.value);
-  const reserve = price <= 180000 ? 500 : 1000;
-  const separation = price * 0.05;
-  const financedAmount = price * 0.75;
-  const monthlyRate = 0.085 / 12;
-  const months = 20 * 12;
-  const payment = financedAmount * (monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1);
+  const price = Number(calcPrice.value || 0);
+  const downPaymentPercent = Number(calcDownPayment?.value || 25) / 100;
+  const annualRate = Number(calcRate?.value || 13.5) / 100;
+  const years = Number(calcYears?.value || 20);
+  const initial = price * downPaymentPercent;
+  const financedAmount = Math.max(price - initial, 0);
+  const monthlyRate = annualRate / 12;
+  const months = years * 12;
+  const payment = monthlyRate
+    ? financedAmount * (monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1)
+    : financedAmount / months;
 
   calcPriceLabel.textContent = moneyCompact(price);
-  calcReserve.textContent = moneyCompact(reserve);
-  calcSeparation.textContent = moneyCompact(separation);
+  calcReserve.textContent = moneyCompact(initial);
+  calcSeparation.textContent = moneyCompact(financedAmount);
   calcPayment.textContent = moneyCompact(payment);
 }
 
@@ -535,6 +542,9 @@ grid.addEventListener("click", (event) => {
 searchInput.addEventListener("input", render);
 priceRange.addEventListener("input", render);
 if (calcPrice) calcPrice.addEventListener("input", updateCalculator);
+if (calcDownPayment) calcDownPayment.addEventListener("change", updateCalculator);
+if (calcRate) calcRate.addEventListener("input", updateCalculator);
+if (calcYears) calcYears.addEventListener("change", updateCalculator);
 
 document.querySelectorAll("[data-chat]").forEach((link) => {
   link.href = whatsappUrl(`Hola Antony, ${link.dataset.chat}`);

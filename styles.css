@@ -2304,6 +2304,32 @@ main {
   border-radius: 8px;
 }
 
+.calculator-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.calculator-fields label {
+  display: grid;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.calculator-fields input,
+.calculator-fields select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 11px;
+  background: #f8fafc;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+}
+
 .calculator-results {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -2329,6 +2355,13 @@ main {
 
 .calculator-results strong {
   font-size: 1.12rem;
+}
+
+.calculator-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 .resource-section {
@@ -2855,6 +2888,38 @@ main {
   max-width: 520px;
   color: #d8e1ec;
   line-height: 1.55;
+}
+
+.client-file-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  max-width: 560px;
+  margin-top: 18px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+}
+
+.client-file-card > svg {
+  color: #f2c66d;
+}
+
+.client-file-card strong,
+.client-file-card span {
+  display: block;
+}
+
+.client-file-card span {
+  color: #d8e1ec;
+  line-height: 1.45;
+}
+
+.client-file-card a {
+  grid-column: 1 / -1;
+  justify-content: center;
 }
 
 .lead-form {
@@ -3652,6 +3717,7 @@ textarea {
   .portfolio-metrics,
   .proof-side-grid,
   .live-evidence-grid,
+  .calculator-fields,
   .calculator-results,
   .resource-grid,
   .quick-chat-grid,

@@ -18,11 +18,11 @@
     <meta property="og:url" content="https://antonyrealestate.com/" />
     <meta property="og:type" content="website" />
     <link rel="preconnect" href="https://images.unsplash.com" />
-    <link rel="stylesheet" href="styles.css?v=sticky-header-v2" />
+    <link rel="stylesheet" href="styles.css?v=mortgage-tools-v1" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
     <script src="media-config.js?v=supabase-live-v1" defer></script>
     <script src="contact.js?v=sticky-header-v2" defer></script>
-    <script src="app.js?v=evidence-db-v1" defer></script>
+    <script src="app.js?v=mortgage-tools-v1" defer></script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -428,6 +428,69 @@
         </div>
       </section>
 
+      <section class="calculator-section" aria-label="Calculadora de prestamos hipotecarios">
+        <div class="calculator-copy">
+          <p class="eyebrow">Calculadora hipotecaria</p>
+          <h2>Estima tu cuota antes de avanzar</h2>
+          <p>Calcula una referencia rapida de inicial, monto financiado y cuota mensual. Antony valida condiciones reales con el banco antes de reservar.</p>
+          <a class="ghost-button ghost-on-dark" href="#leadForm">
+            <i data-lucide="message-circle"></i>
+            <span>Evaluar mi caso</span>
+          </a>
+        </div>
+        <div class="calculator-card">
+          <div class="calculator-fields">
+            <label>
+              Precio de la propiedad
+              <input id="calcPrice" type="number" min="50000" step="5000" value="185000" />
+            </label>
+            <label>
+              Inicial
+              <select id="calcDownPayment">
+                <option value="20">20%</option>
+                <option value="25" selected>25%</option>
+                <option value="30">30%</option>
+                <option value="35">35%</option>
+                <option value="40">40%</option>
+              </select>
+            </label>
+            <label>
+              Tasa anual
+              <input id="calcRate" type="number" min="1" max="25" step="0.1" value="13.5" />
+            </label>
+            <label>
+              Plazo
+              <select id="calcYears">
+                <option value="10">10 anos</option>
+                <option value="15">15 anos</option>
+                <option value="20" selected>20 anos</option>
+                <option value="25">25 anos</option>
+                <option value="30">30 anos</option>
+              </select>
+            </label>
+          </div>
+          <div class="calculator-results">
+            <article>
+              <span>Precio</span>
+              <strong id="calcPriceLabel">US$185,000</strong>
+            </article>
+            <article>
+              <span>Inicial estimado</span>
+              <strong id="calcReserve">US$46,250</strong>
+            </article>
+            <article>
+              <span>Monto financiado</span>
+              <strong id="calcSeparation">US$138,750</strong>
+            </article>
+            <article>
+              <span>Cuota mensual</span>
+              <strong id="calcPayment">US$1,647</strong>
+            </article>
+          </div>
+          <p class="calculator-note">Referencia aproximada. No incluye seguros, gastos legales, tasacion, impuestos ni condiciones especificas del banco.</p>
+        </div>
+      </section>
+
       
 
       <section class="method-section" aria-label="Metodo de asesoria">
@@ -484,6 +547,17 @@
           <p class="eyebrow">Compra con direccion</p>
           <h2>Solicita informacion y evalua tu caso</h2>
           <p>Completa tus datos para recibir orientacion segun tu presupuesto, zona de interes y objetivo de compra.</p>
+          <div class="client-file-card">
+            <i data-lucide="file-down"></i>
+            <div>
+              <strong>Ficha del cliente</strong>
+              <span>Descarga el PDF editable para completar tus datos y enviarlo a Antony.</span>
+            </div>
+            <a class="ghost-button ghost-on-dark" href="assets/docs/ficha-cliente-antony.pdf" download>
+              <i data-lucide="download"></i>
+              <span>Descargar ficha</span>
+            </a>
+          </div>
         </div>
         <form class="lead-form" id="leadForm">
           <label>
