@@ -30,7 +30,7 @@ const seedListings = [
     beds: 3,
     meters: 115,
     status: "ready",
-    hook: "Jacobo Majluta | 3 habitaciones | 2 banos",
+    hook: "Jacobo Majluta | 3 habitaciones | 2 baños",
     notes: "Apartamento familiar con buena distribucion, sala amplia, balcon y ubicacion practica para vivir.",
     photos: [
       "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1000&q=85",
@@ -45,8 +45,8 @@ const seedListings = [
     beds: 3,
     meters: 135,
     status: "ready",
-    hook: "Las Praderas | 3 habitaciones | 3 banos | 2 parqueos",
-    notes: "Unidad lista en Las Praderas con 3 habitaciones, 3 banos, 2 parqueos y terminaciones modernas.",
+    hook: "Las Praderas | 3 habitaciones | 3 baños | 2 parqueos",
+    notes: "Unidad lista en Las Praderas con 3 habitaciones, 3 baños, 2 parqueos y terminaciones modernas.",
     photos: [
       "https://images.unsplash.com/photo-1600607688969-a5bfcd646154?auto=format&fit=crop&w=1000&q=85",
       "https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1000&q=85"
