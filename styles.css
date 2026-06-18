@@ -2306,7 +2306,7 @@ main {
 
 .calculator-fields {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: 0.8fr repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 

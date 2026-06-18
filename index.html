@@ -18,11 +18,11 @@
     <meta property="og:url" content="https://antonyrealestate.com/" />
     <meta property="og:type" content="website" />
     <link rel="preconnect" href="https://images.unsplash.com" />
-    <link rel="stylesheet" href="styles.css?v=mortgage-tools-v1" />
+    <link rel="stylesheet" href="styles.css?v=mortgage-currency-v1" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
     <script src="media-config.js?v=supabase-live-v1" defer></script>
     <script src="contact.js?v=sticky-header-v2" defer></script>
-    <script src="app.js?v=mortgage-tools-v1" defer></script>
+    <script src="app.js?v=mortgage-currency-v1" defer></script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -441,18 +441,19 @@
         <div class="calculator-card">
           <div class="calculator-fields">
             <label>
+              Moneda
+              <select id="calcCurrency">
+                <option value="USD" selected>US$ Dolares</option>
+                <option value="DOP">RD$ Pesos</option>
+              </select>
+            </label>
+            <label>
               Precio de la propiedad
               <input id="calcPrice" type="number" min="50000" step="5000" value="185000" />
             </label>
             <label>
               Inicial
-              <select id="calcDownPayment">
-                <option value="20">20%</option>
-                <option value="25" selected>25%</option>
-                <option value="30">30%</option>
-                <option value="35">35%</option>
-                <option value="40">40%</option>
-              </select>
+              <input id="calcInitialAmount" type="number" min="0" step="1000" value="37000" />
             </label>
             <label>
               Tasa anual
@@ -475,8 +476,8 @@
               <strong id="calcPriceLabel">US$185,000</strong>
             </article>
             <article>
-              <span>Inicial estimado</span>
-              <strong id="calcReserve">US$46,250</strong>
+              <span>Inicial</span>
+              <strong id="calcReserve">US$37,000</strong>
             </article>
             <article>
               <span>Monto financiado</span>
@@ -487,7 +488,7 @@
               <strong id="calcPayment">US$1,647</strong>
             </article>
           </div>
-          <p class="calculator-note">Referencia aproximada. No incluye seguros, gastos legales, tasacion, impuestos ni condiciones especificas del banco.</p>
+          <p class="calculator-note">Referencia aproximada. Coloca precio e inicial en la moneda seleccionada. No incluye seguros, gastos legales, tasacion, impuestos ni condiciones especificas del banco.</p>
         </div>
       </section>
 

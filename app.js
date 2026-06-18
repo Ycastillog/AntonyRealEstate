@@ -93,8 +93,9 @@ const openVideoModalButton = document.querySelector("#openVideoModal");
 const videoModal = document.querySelector("#videoModal");
 const closeVideoModalButton = document.querySelector("#closeVideoModal");
 const mainVideoPlayer = document.querySelector("#mainVideoPlayer");
+const calcCurrency = document.querySelector("#calcCurrency");
 const calcPrice = document.querySelector("#calcPrice");
-const calcDownPayment = document.querySelector("#calcDownPayment");
+const calcInitialAmount = document.querySelector("#calcInitialAmount");
 const calcRate = document.querySelector("#calcRate");
 const calcYears = document.querySelector("#calcYears");
 const calcPriceLabel = document.querySelector("#calcPriceLabel");
@@ -126,12 +127,12 @@ function money(value) {
   }).format(value);
 }
 
-function moneyCompact(value) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
+function moneyCompact(value, currency = "USD") {
+  const prefix = currency === "DOP" ? "RD$" : "US$";
+  const amount = new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 0
   }).format(Math.round(value));
+  return `${prefix}${amount}`;
 }
 
 function number(value) {
@@ -377,11 +378,11 @@ function showToast(message) {
 function updateCalculator() {
   if (!calcPrice) return;
 
+  const currency = calcCurrency?.value || "USD";
   const price = Number(calcPrice.value || 0);
-  const downPaymentPercent = Number(calcDownPayment?.value || 25) / 100;
+  const initial = Number(calcInitialAmount?.value || 0);
   const annualRate = Number(calcRate?.value || 13.5) / 100;
   const years = Number(calcYears?.value || 20);
-  const initial = price * downPaymentPercent;
   const financedAmount = Math.max(price - initial, 0);
   const monthlyRate = annualRate / 12;
   const months = years * 12;
@@ -389,10 +390,10 @@ function updateCalculator() {
     ? financedAmount * (monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1)
     : financedAmount / months;
 
-  calcPriceLabel.textContent = moneyCompact(price);
-  calcReserve.textContent = moneyCompact(initial);
-  calcSeparation.textContent = moneyCompact(financedAmount);
-  calcPayment.textContent = moneyCompact(payment);
+  calcPriceLabel.textContent = moneyCompact(price, currency);
+  calcReserve.textContent = moneyCompact(initial, currency);
+  calcSeparation.textContent = moneyCompact(financedAmount, currency);
+  calcPayment.textContent = moneyCompact(payment, currency);
 }
 
 function openDetail(id) {
@@ -541,8 +542,9 @@ grid.addEventListener("click", (event) => {
 
 searchInput.addEventListener("input", render);
 priceRange.addEventListener("input", render);
+if (calcCurrency) calcCurrency.addEventListener("change", updateCalculator);
 if (calcPrice) calcPrice.addEventListener("input", updateCalculator);
-if (calcDownPayment) calcDownPayment.addEventListener("change", updateCalculator);
+if (calcInitialAmount) calcInitialAmount.addEventListener("input", updateCalculator);
 if (calcRate) calcRate.addEventListener("input", updateCalculator);
 if (calcYears) calcYears.addEventListener("change", updateCalculator);
 
