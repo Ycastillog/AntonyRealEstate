@@ -6,7 +6,12 @@ const caseViewerModal = document.querySelector("#caseViewerModal");
 const caseViewerImage = document.querySelector("#caseViewerImage");
 const caseViewerTitle = document.querySelector("#caseViewerTitle");
 const caseViewerText = document.querySelector("#caseViewerText");
+const caseViewerCount = document.querySelector("#caseViewerCount");
 const closeCaseViewer = document.querySelector("#closeCaseViewer");
+const previousCase = document.querySelector("#previousCase");
+const nextCase = document.querySelector("#nextCase");
+const staticCaseButtons = Array.from(document.querySelectorAll("[data-case-src]"));
+let activeCaseIndex = 0;
 
 function escapeHtml(value) {
   return String(value || "")
@@ -74,19 +79,39 @@ async function loadCasesEvidence() {
   window.lucide?.createIcons();
 }
 
+function renderCase(index) {
+  if (!staticCaseButtons.length) return;
+  activeCaseIndex = (index + staticCaseButtons.length) % staticCaseButtons.length;
+  const button = staticCaseButtons[activeCaseIndex];
+  caseViewerImage.src = button.dataset.caseSrc;
+  caseViewerImage.alt = button.dataset.caseTitle;
+  caseViewerTitle.textContent = button.dataset.caseTitle;
+  caseViewerText.textContent = button.dataset.caseText;
+  caseViewerCount.textContent = `${activeCaseIndex + 1} de ${staticCaseButtons.length}`;
+}
+
+function openCase(index) {
+  renderCase(index);
+  caseViewerModal.showModal();
+}
+
 window.addEventListener("DOMContentLoaded", loadCasesEvidence);
 
-document.querySelectorAll("[data-case-src]").forEach((button) => {
-  button.addEventListener("click", () => {
-    caseViewerImage.src = button.dataset.caseSrc;
-    caseViewerImage.alt = button.dataset.caseTitle;
-    caseViewerTitle.textContent = button.dataset.caseTitle;
-    caseViewerText.textContent = button.dataset.caseText;
-    caseViewerModal.showModal();
-  });
+staticCaseButtons.forEach((button, index) => {
+  button.addEventListener("click", () => openCase(index));
 });
+
+previousCase?.addEventListener("click", () => renderCase(activeCaseIndex - 1));
+nextCase?.addEventListener("click", () => renderCase(activeCaseIndex + 1));
 
 closeCaseViewer?.addEventListener("click", () => caseViewerModal.close());
 caseViewerModal?.addEventListener("click", (event) => {
   if (event.target === caseViewerModal) caseViewerModal.close();
+});
+
+window.addEventListener("keydown", (event) => {
+  if (!caseViewerModal?.open) return;
+  if (event.key === "ArrowLeft") renderCase(activeCaseIndex - 1);
+  if (event.key === "ArrowRight") renderCase(activeCaseIndex + 1);
+  if (event.key === "Escape") caseViewerModal.close();
 });

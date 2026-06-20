@@ -11,11 +11,11 @@
     <meta property="og:image" content="https://antonyrealestate.com/assets/real/evidencia/cierre-feria-01.jpg" />
     <meta property="og:url" content="https://antonyrealestate.com/casos-reales/" />
     <meta property="og:type" content="website" />
-    <link rel="stylesheet" href="../styles.css?v=case-viewer-v1" />
+    <link rel="stylesheet" href="../styles.css?v=case-carousel-v1" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
     <script src="../media-config.js?v=property-portal-v1" defer></script>
     <script src="../contact.js?v=sticky-header-v2" defer></script>
-    <script src="casos-reales.js?v=case-viewer-v1" defer></script>
+    <script src="casos-reales.js?v=case-carousel-v1" defer></script>
     <script>
       window.addEventListener("DOMContentLoaded", () => {
         document.querySelectorAll("[data-chat]").forEach((link) => {
@@ -83,11 +83,18 @@
         <button class="video-modal-close" id="closeCaseViewer" type="button" aria-label="Cerrar caso">
           <i data-lucide="x"></i>
         </button>
+        <button class="case-viewer-nav prev" id="previousCase" type="button" aria-label="Caso anterior">
+          <i data-lucide="chevron-left"></i>
+        </button>
         <img id="caseViewerImage" src="../assets/real/evidencia/cierre-feria-01.jpg" alt="Caso real ampliado" />
+        <button class="case-viewer-nav next" id="nextCase" type="button" aria-label="Siguiente caso">
+          <i data-lucide="chevron-right"></i>
+        </button>
         <div class="case-viewer-copy">
           <p class="eyebrow">Caso real</p>
           <h2 id="caseViewerTitle">Cierre en feria</h2>
           <p id="caseViewerText">Evidencia real del proceso.</p>
+          <span class="case-viewer-count" id="caseViewerCount">1 de 5</span>
           <a class="primary-button" href="#" data-chat="vi un caso real y quiero orientacion.">
             <i data-lucide="message-circle"></i>
             <span>Solicitar asesoria</span>
