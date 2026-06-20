@@ -1,4 +1,7 @@
-const properties = [
+const config = window.ANTONY_MEDIA_CONFIG || {};
+const hasRemoteProperties = Boolean(config.supabaseUrl && config.supabaseAnonKey && config.supabasePropertiesTable);
+
+const staticProperties = [
   {
     id: "colinas-de-los-rios",
     title: "Colinas de los Rios",
@@ -103,6 +106,8 @@ const properties = [
   }))
 ];
 
+let properties = [...staticProperties];
+
 const controls = {
   search: document.querySelector("#propertySearch"),
   type: document.querySelector("#propertyType"),
@@ -121,6 +126,64 @@ const toast = document.querySelector("#propertyToast");
 
 function whatsappUrl(message) {
   return window.antonyWhatsappUrl ? window.antonyWhatsappUrl(message) : `https://wa.me/?text=${encodeURIComponent(message)}`;
+}
+
+function plainSlug(value) {
+  return String(value || "opcion")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "") || "opcion";
+}
+
+function normalizeRemoteProperty(item) {
+  const tags = Array.isArray(item.tags)
+    ? item.tags
+    : String(item.tags || "")
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+  const mediaUrls = Array.isArray(item.media_urls) ? item.media_urls : [item.image_url].filter(Boolean);
+  const title = item.title || "Propiedad para evaluar";
+  const priceLabel = item.price_label || "Precio a consultar";
+
+  return {
+    id: item.id,
+    title,
+    subtitle: item.subtitle || title,
+    priceLabel,
+    priceUsd: item.price_usd ?? null,
+    type: item.type || "apartamento",
+    city: item.city || plainSlug(item.city_label),
+    category: item.category || "santo-domingo",
+    cityLabel: item.city_label || "",
+    zone: item.zone || plainSlug(item.zone_label),
+    zoneLabel: item.zone_label || "",
+    beds: item.beds ?? null,
+    meters: item.meters ?? null,
+    status: item.status || "disponible",
+    statusLabel: item.status_label || "Disponible",
+    detailUrl: "",
+    image: item.image_url || mediaUrls[0] || "../assets/properties/mirador-sur/foto-01.jpg",
+    tags: tags.length ? tags : [item.type || "Propiedad"],
+    notes: item.notes || "Propiedad cargada por Antony. Disponibilidad, precio y condiciones se confirman antes de avanzar.",
+    message: `Hola Antony, vi la propiedad ${title} (${priceLabel}) en tu pagina y quiero mas informacion.`
+  };
+}
+
+async function loadRemoteProperties() {
+  if (!hasRemoteProperties) return [];
+  const url = `${config.supabaseUrl}/rest/v1/${config.supabasePropertiesTable}?select=*&is_published=eq.true&order=is_featured.desc,created_at.desc`;
+  const response = await fetch(url, {
+    headers: {
+      apikey: config.supabaseAnonKey,
+      Authorization: `Bearer ${config.supabaseAnonKey}`
+    }
+  });
+  if (!response.ok) return [];
+  const items = await response.json();
+  return items.map(normalizeRemoteProperty);
 }
 
 function showToast(message) {
@@ -274,5 +337,15 @@ document.querySelector("#copyPropertiesLink").addEventListener("click", async ()
   showToast("Busqueda copiada");
 });
 
-setFiltersFromUrl();
-render();
+async function initProperties() {
+  setFiltersFromUrl();
+  const remoteProperties = await loadRemoteProperties();
+  const existingIds = new Set(staticProperties.map((property) => property.id));
+  properties = [
+    ...remoteProperties.filter((property) => !existingIds.has(property.id)),
+    ...staticProperties
+  ];
+  render();
+}
+
+initProperties();

@@ -1,5 +1,6 @@
 const SESSION_KEY = "antony-admin-session";
 const LOCAL_META_KEY = "antony-evidence-items";
+const LOCAL_PROPERTY_KEY = "antony-property-items";
 const DB_NAME = "antony-media-store";
 const DB_STORE = "files";
 
@@ -8,21 +9,28 @@ const hasSupabase = Boolean(config.supabaseUrl && config.supabaseAnonKey);
 const hasCloudinary = Boolean(config.cloudinaryCloudName && config.cloudinaryUploadPreset);
 const hasSupabaseStorage = Boolean(config.supabaseStorageBucket);
 const remoteReady = hasSupabase && (hasCloudinary || hasSupabaseStorage);
+let propertyRemoteAvailable = true;
 
 const loginPanel = document.querySelector("#loginPanel");
 const adminWorkspace = document.querySelector("#adminWorkspace");
 const loginForm = document.querySelector("#loginForm");
 const evidenceForm = document.querySelector("#evidenceForm");
+const propertyForm = document.querySelector("#propertyForm");
 const evidenceGrid = document.querySelector("#adminEvidenceGrid");
+const propertyGrid = document.querySelector("#adminPropertyGrid");
 const emptyState = document.querySelector("#adminEmptyState");
+const propertyEmptyState = document.querySelector("#adminPropertyEmptyState");
 const storageMode = document.querySelector("#storageMode");
 const logoutButton = document.querySelector("#logoutButton");
 const refreshButton = document.querySelector("#refreshEvidence");
+const refreshPropertiesButton = document.querySelector("#refreshProperties");
 const toggleEvidenceForm = document.querySelector("#toggleEvidenceForm");
+const togglePropertyForm = document.querySelector("#togglePropertyForm");
 const publishedCount = document.querySelector("#publishedCount");
 const videoCount = document.querySelector("#videoCount");
 const photoCount = document.querySelector("#photoCount");
 const testimonialCount = document.querySelector("#testimonialCount");
+const propertyCount = document.querySelector("#propertyCount");
 const toast = document.querySelector("#adminToast");
 
 function showToast(message) {
@@ -114,6 +122,19 @@ function saveLocalItems(items) {
   localStorage.setItem(LOCAL_META_KEY, JSON.stringify(items));
 }
 
+function localProperties() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LOCAL_PROPERTY_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalProperties(items) {
+  localStorage.setItem(LOCAL_PROPERTY_KEY, JSON.stringify(items));
+}
+
 function normalizeItem(item) {
   return {
     id: item.id,
@@ -125,6 +146,62 @@ function normalizeItem(item) {
     mediaType: item.mediaType || item.media_type,
     mediaUrl: item.mediaUrl || item.media_url,
     localKey: item.localKey,
+    isFeatured: Boolean(item.isFeatured ?? item.is_featured),
+    isPublished: Boolean(item.isPublished ?? item.is_published)
+  };
+}
+
+function plainSlug(value) {
+  return String(value || "opcion")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "") || "opcion";
+}
+
+function statusLabel(status) {
+  return {
+    disponible: "Disponible",
+    reservada: "Reservada",
+    vendida: "Vendida"
+  }[status] || "Disponible";
+}
+
+function normalizeProperty(item) {
+  const tags = Array.isArray(item.tags)
+    ? item.tags
+    : String(item.tags || "")
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+
+  const mediaUrls = Array.isArray(item.mediaUrls)
+    ? item.mediaUrls
+    : Array.isArray(item.media_urls)
+      ? item.media_urls
+      : [item.imageUrl || item.image_url].filter(Boolean);
+
+  return {
+    id: item.id,
+    title: item.title,
+    subtitle: item.subtitle,
+    priceLabel: item.priceLabel || item.price_label || "Precio a consultar",
+    priceUsd: item.priceUsd ?? item.price_usd ?? null,
+    type: item.type || "apartamento",
+    category: item.category || "santo-domingo",
+    city: item.city || plainSlug(item.cityLabel || item.city_label),
+    cityLabel: item.cityLabel || item.city_label || "",
+    zone: item.zone || plainSlug(item.zoneLabel || item.zone_label),
+    zoneLabel: item.zoneLabel || item.zone_label || "",
+    beds: item.beds ?? null,
+    meters: item.meters ?? null,
+    status: item.status || "disponible",
+    statusLabel: item.statusLabel || item.status_label || statusLabel(item.status),
+    notes: item.notes || "",
+    tags,
+    imageUrl: item.imageUrl || item.image_url || mediaUrls[0] || "",
+    mediaUrls,
     isFeatured: Boolean(item.isFeatured ?? item.is_featured),
     isPublished: Boolean(item.isPublished ?? item.is_published)
   };
@@ -154,6 +231,24 @@ async function loadItems() {
 
   const items = localItems().filter((item) => item.isPublished).map(normalizeItem);
   return Promise.all(items.map(itemWithPreview));
+}
+
+async function loadProperties() {
+  if (remoteReady) {
+    const table = config.supabasePropertiesTable || "property_items";
+    const url = `${config.supabaseUrl}/rest/v1/${table}?select=*&order=is_featured.desc,created_at.desc`;
+    const response = await fetch(url, {
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`
+      }
+    });
+    if (!response.ok) throw new Error("No se pudieron cargar las propiedades remotas.");
+    const items = await response.json();
+    return items.map(normalizeProperty);
+  }
+
+  return localProperties().map(normalizeProperty);
 }
 
 async function uploadToCloudinary(file) {
@@ -204,6 +299,14 @@ async function uploadToSupabaseStorage(file, itemId) {
   };
 }
 
+async function uploadMultipleFiles(files, itemId) {
+  const uploads = [];
+  for (const file of files) {
+    uploads.push(await uploadPermanentFile(file, itemId));
+  }
+  return uploads;
+}
+
 async function uploadPermanentFile(file, itemId) {
   if (hasCloudinary) return uploadToCloudinary(file);
   return uploadToSupabaseStorage(file, itemId);
@@ -225,6 +328,23 @@ async function saveRemoteItem(item) {
   return saved;
 }
 
+async function saveRemoteProperty(item) {
+  const table = config.supabasePropertiesTable || "property_items";
+  const response = await fetch(`${config.supabaseUrl}/rest/v1/${table}`, {
+    method: "POST",
+    headers: {
+      apikey: config.supabaseAnonKey,
+      Authorization: `Bearer ${config.supabaseAnonKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify(item)
+  });
+  if (!response.ok) throw new Error("Supabase no pudo guardar la propiedad.");
+  const [saved] = await response.json();
+  return saved;
+}
+
 async function deleteItem(id, localKey) {
   if (remoteReady) {
     const response = await fetch(`${config.supabaseUrl}/rest/v1/${config.supabaseTable}?id=eq.${encodeURIComponent(id)}`, {
@@ -240,6 +360,23 @@ async function deleteItem(id, localKey) {
 
   saveLocalItems(localItems().filter((item) => item.id !== id));
   if (localKey) await deleteBlob(localKey);
+}
+
+async function deleteProperty(id) {
+  if (remoteReady) {
+    const table = config.supabasePropertiesTable || "property_items";
+    const response = await fetch(`${config.supabaseUrl}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`
+      }
+    });
+    if (!response.ok) throw new Error("No se pudo eliminar la propiedad en Supabase.");
+    return;
+  }
+
+  saveLocalProperties(localProperties().filter((item) => item.id !== id));
 }
 
 function renderMedia(item) {
@@ -291,6 +428,48 @@ async function loadAndRender() {
     `)
     .join("");
   if (window.lucide) lucide.createIcons();
+  await loadAndRenderProperties();
+}
+
+async function loadAndRenderProperties() {
+  let items = [];
+  try {
+    items = await loadProperties();
+  } catch (error) {
+    propertyRemoteAvailable = false;
+    propertyCount.textContent = "0";
+    propertyGrid.innerHTML = "";
+    propertyEmptyState.hidden = false;
+    propertyEmptyState.textContent = remoteReady
+      ? "Supabase esta conectado, pero falta ejecutar la tabla de propiedades."
+      : "Todavia no hay propiedades cargadas.";
+    showToast(error.message || "Falta completar propiedades.");
+    return;
+  }
+
+  propertyRemoteAvailable = true;
+  propertyCount.textContent = items.filter((item) => item.isPublished).length;
+  propertyEmptyState.hidden = items.length !== 0;
+  propertyGrid.innerHTML = items
+    .map((item) => `
+      <article class="admin-evidence-card">
+        <div class="admin-media-preview">
+          <img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.title)}" />
+        </div>
+        <div>
+          <span>${escapeHtml(item.statusLabel)} · ${escapeHtml(item.zoneLabel)}</span>
+          <strong>${escapeHtml(item.title)}</strong>
+          <p>${escapeHtml(item.priceLabel)} · ${escapeHtml([item.cityLabel, item.beds ? `${item.beds} hab.` : ""].filter(Boolean).join(" - "))}</p>
+          <p>${escapeHtml(item.notes || "")}</p>
+        </div>
+        <button class="ghost-button" type="button" data-delete-property="${escapeHtml(item.id)}">
+          <i data-lucide="trash-2"></i>
+          <span>Eliminar</span>
+        </button>
+      </article>
+    `)
+    .join("");
+  if (window.lucide) lucide.createIcons();
 }
 
 loginForm.addEventListener("submit", (event) => {
@@ -312,10 +491,24 @@ logoutButton.addEventListener("click", () => {
 });
 
 refreshButton.addEventListener("click", loadAndRender);
+refreshPropertiesButton.addEventListener("click", loadAndRenderProperties);
 
 toggleEvidenceForm.addEventListener("click", () => {
   evidenceForm.hidden = !evidenceForm.hidden;
   toggleEvidenceForm.querySelector("span").textContent = evidenceForm.hidden ? "Nueva evidencia" : "Cerrar formulario";
+  if (!evidenceForm.hidden) {
+    propertyForm.hidden = true;
+    togglePropertyForm.querySelector("span").textContent = "Nueva propiedad";
+  }
+});
+
+togglePropertyForm.addEventListener("click", () => {
+  propertyForm.hidden = !propertyForm.hidden;
+  togglePropertyForm.querySelector("span").textContent = propertyForm.hidden ? "Nueva propiedad" : "Cerrar formulario";
+  if (!propertyForm.hidden) {
+    evidenceForm.hidden = true;
+    toggleEvidenceForm.querySelector("span").textContent = "Nueva evidencia";
+  }
 });
 
 evidenceGrid.addEventListener("click", async (event) => {
@@ -324,6 +517,14 @@ evidenceGrid.addEventListener("click", async (event) => {
   await deleteItem(button.dataset.delete, button.dataset.localKey);
   showToast("Evidencia eliminada");
   loadAndRender();
+});
+
+propertyGrid.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-delete-property]");
+  if (!button) return;
+  await deleteProperty(button.dataset.deleteProperty);
+  showToast("Propiedad eliminada");
+  loadAndRenderProperties();
 });
 
 evidenceForm.addEventListener("submit", async (event) => {
@@ -381,6 +582,102 @@ evidenceForm.addEventListener("submit", async (event) => {
   } finally {
     submitButton.disabled = false;
     submitButton.querySelector("span").textContent = "Guardar evidencia";
+  }
+});
+
+propertyForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const submitButton = propertyForm.querySelector("button[type='submit']");
+  submitButton.disabled = true;
+  submitButton.querySelector("span").textContent = "Guardando...";
+
+  try {
+    const formData = new FormData(propertyForm);
+    const files = formData.getAll("media").filter((file) => file && file.size);
+    if (!files.length) throw new Error("Sube al menos una foto.");
+    if (remoteReady && !propertyRemoteAvailable) {
+      throw new Error("Primero ejecuta el SQL de propiedades en Supabase.");
+    }
+
+    const title = formData.get("title").toString().trim();
+    const cityLabel = formData.get("cityLabel").toString().trim();
+    const zoneLabel = formData.get("zoneLabel").toString().trim();
+    const id = `${plainSlug(title)}-${Date.now()}`;
+    const uploads = remoteReady
+      ? await uploadMultipleFiles(files, id)
+      : [];
+    const mediaUrls = uploads.map((item) => item.secure_url);
+    const tags = formData.get("tags").toString().split(",").map((tag) => tag.trim()).filter(Boolean);
+    const property = {
+      id,
+      title,
+      subtitle: formData.get("subtitle").toString().trim(),
+      priceLabel: formData.get("priceLabel").toString().trim(),
+      priceUsd: formData.get("priceUsd") ? Number(formData.get("priceUsd")) : null,
+      type: formData.get("type").toString(),
+      category: formData.get("category").toString(),
+      city: plainSlug(cityLabel),
+      cityLabel,
+      zone: plainSlug(zoneLabel),
+      zoneLabel,
+      beds: formData.get("beds") ? Number(formData.get("beds")) : null,
+      meters: formData.get("meters") ? Number(formData.get("meters")) : null,
+      status: formData.get("status").toString(),
+      statusLabel: statusLabel(formData.get("status").toString()),
+      notes: formData.get("notes").toString().trim(),
+      tags,
+      imageUrl: mediaUrls[0] || "",
+      mediaUrls,
+      isFeatured: formData.get("isFeatured") === "on",
+      isPublished: formData.get("isPublished") === "on",
+      createdAt: new Date().toISOString()
+    };
+
+    if (remoteReady) {
+      await saveRemoteProperty({
+        id: property.id,
+        title: property.title,
+        subtitle: property.subtitle,
+        price_label: property.priceLabel,
+        price_usd: property.priceUsd,
+        type: property.type,
+        category: property.category,
+        city: property.city,
+        city_label: property.cityLabel,
+        zone: property.zone,
+        zone_label: property.zoneLabel,
+        beds: property.beds,
+        meters: property.meters,
+        status: property.status,
+        status_label: property.statusLabel,
+        notes: property.notes,
+        tags: property.tags,
+        image_url: property.imageUrl,
+        media_urls: property.mediaUrls,
+        is_featured: property.isFeatured,
+        is_published: property.isPublished,
+        created_at: property.createdAt
+      });
+    } else {
+      const localUrls = await Promise.all(files.map((file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      })));
+      saveLocalProperties([{ ...property, imageUrl: localUrls[0], mediaUrls: localUrls }, ...localProperties()]);
+    }
+
+    propertyForm.reset();
+    propertyForm.hidden = true;
+    togglePropertyForm.querySelector("span").textContent = "Nueva propiedad";
+    showToast("Propiedad guardada");
+    await loadAndRenderProperties();
+  } catch (error) {
+    showToast(error.message || "No se pudo guardar");
+  } finally {
+    submitButton.disabled = false;
+    submitButton.querySelector("span").textContent = "Guardar propiedad";
   }
 });
 

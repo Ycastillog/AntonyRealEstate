@@ -7,5 +7,6 @@ window.ANTONY_MEDIA_CONFIG = {
   supabaseUrl: "https://gqcvtvsxzicpgjhgzrhl.supabase.co",
   supabaseAnonKey: "sb_publishable_OqSmd-f-zKqPbf7vp-L-Tg__Hj0BW0g",
   supabaseStorageBucket: "evidencias",
-  supabaseTable: "evidence_items"
+  supabaseTable: "evidence_items",
+  supabasePropertiesTable: "property_items"
 };

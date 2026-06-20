@@ -3359,7 +3359,7 @@ textarea {
 
 .admin-dashboard {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
 }
 
@@ -3391,6 +3391,12 @@ textarea {
 .new-evidence-button {
   width: max-content;
   margin: 16px 0 0;
+}
+
+.admin-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .admin-card {

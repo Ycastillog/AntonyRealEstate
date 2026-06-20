@@ -4,19 +4,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow,noarchive" />
-    <title>Centro de evidencias | Antony Real Estate</title>
-    <link rel="stylesheet" href="../styles.css?v=mortgage-tools-v1" />
+    <title>Centro de contenido | Antony Real Estate</title>
+    <link rel="stylesheet" href="../styles.css?v=property-portal-v1" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
-    <script src="../media-config.js?v=supabase-live-v1" defer></script>
-    <script src="../admin.js?v=evidence-db-v1" defer></script>
+    <script src="../media-config.js?v=property-portal-v1" defer></script>
+    <script src="../admin.js?v=property-portal-v1" defer></script>
   </head>
   <body class="admin-page">
     <header class="topbar">
       <a class="brand" href="../index.html" aria-label="Volver a la pagina">
         <img class="brand-logo" src="../assets/antony-fulgencio-logo-transparent.png" alt="Antony Fulgencio Real Estate" />
         <span>
-          <strong>Centro de evidencias</strong>
-          <small>Entregas, clientes, videos y testimonios</small>
+          <strong>Centro de contenido</strong>
+          <small>Evidencias, propiedades, videos y testimonios</small>
         </span>
       </a>
       <nav class="nav-actions" aria-label="Acciones del portal">
@@ -34,9 +34,9 @@
       <section class="admin-hero">
         <div>
           <p class="eyebrow">Privado</p>
-          <h1>Evidencias reales para alimentar la confianza de la pagina</h1>
-          <p>Sube fotos y videos de entregas, clientes, llaves, firmas, ferias, recorridos y testimonios. La pagina publica solo mostrara lo que este marcado como publicado.</p>
-          <p class="content-note">Las propiedades o proyectos disponibles se gestionan aparte; este centro es solo para evidencia real y casos documentados.</p>
+          <h1>Contenido real para mantener viva la pagina</h1>
+          <p>Sube evidencias, testimonios y propiedades desde un solo lugar. La pagina publica solo mostrara lo que este marcado como publicado.</p>
+          <p class="content-note">Evidencia alimenta casos reales. Propiedades alimenta la seccion de opciones disponibles o para evaluar.</p>
         </div>
         <aside class="admin-status" id="adminStatus">
           <strong>Estado del contenido</strong>
@@ -47,7 +47,7 @@
       <section class="admin-login" id="loginPanel">
         <form class="admin-card" id="loginForm">
           <p class="eyebrow">Entrar</p>
-          <h2>Centro de evidencias</h2>
+          <h2>Centro de contenido</h2>
           <label>
             Usuario
             <input name="username" autocomplete="username" placeholder="Usuario" required />
@@ -81,12 +81,22 @@
             <span id="testimonialCount">0</span>
             <strong>testimonios</strong>
           </article>
+          <article>
+            <span id="propertyCount">0</span>
+            <strong>propiedades</strong>
+          </article>
         </section>
 
-        <button class="primary-button new-evidence-button" id="toggleEvidenceForm" type="button">
-          <i data-lucide="plus"></i>
-          <span>Nueva evidencia</span>
-        </button>
+        <div class="admin-action-row">
+          <button class="primary-button new-evidence-button" id="toggleEvidenceForm" type="button">
+            <i data-lucide="plus"></i>
+            <span>Nueva evidencia</span>
+          </button>
+          <button class="ghost-button new-evidence-button" id="togglePropertyForm" type="button">
+            <i data-lucide="building-2"></i>
+            <span>Nueva propiedad</span>
+          </button>
+        </div>
 
         <form class="admin-card evidence-form" id="evidenceForm" hidden>
           <div class="section-head">
@@ -150,6 +160,116 @@
           </button>
         </form>
 
+        <form class="admin-card evidence-form" id="propertyForm" hidden>
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Nueva propiedad</p>
+              <h2>Subir propiedad o proyecto</h2>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Nombre
+              <input name="title" placeholder="Apartamento en Naco" required />
+            </label>
+            <label>
+              Frase corta
+              <input name="subtitle" placeholder="Torre moderna para inversion" required />
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Precio visible
+              <input name="priceLabel" placeholder="US$185,000 o Precio a consultar" required />
+            </label>
+            <label>
+              Precio en US$ para filtros
+              <input name="priceUsd" type="number" min="0" step="1000" placeholder="Opcional" />
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Tipo
+              <select name="type" required>
+                <option value="apartamento">Apartamento</option>
+                <option value="proyecto">Proyecto</option>
+                <option value="villa">Villa</option>
+                <option value="penthouse">Penthouse</option>
+                <option value="inversion">Inversion</option>
+              </select>
+            </label>
+            <label>
+              Categoria
+              <select name="category" required>
+                <option value="santo-domingo">Santo Domingo</option>
+                <option value="turisticas">Turisticas</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Ciudad
+              <input name="cityLabel" placeholder="Santo Domingo, Punta Cana..." required />
+            </label>
+            <label>
+              Zona
+              <input name="zoneLabel" placeholder="Naco, Bavaro, Cap Cana..." required />
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Habitaciones
+              <input name="beds" type="number" min="0" step="1" placeholder="Opcional" />
+            </label>
+            <label>
+              Metros
+              <input name="meters" type="number" min="0" step="1" placeholder="Opcional" />
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Estado
+              <select name="status" required>
+                <option value="disponible">Disponible</option>
+                <option value="reservada">Reservada</option>
+                <option value="vendida">Vendida</option>
+              </select>
+            </label>
+            <label>
+              Etiquetas
+              <input name="tags" placeholder="Familiar, Inversion, Desde USA" />
+            </label>
+          </div>
+
+          <label>
+            Descripcion
+            <textarea name="notes" rows="3" placeholder="Describe amenidades, ubicacion y condiciones importantes."></textarea>
+          </label>
+
+          <label class="upload-drop">
+            <input name="media" type="file" accept="image/*" multiple required />
+            <i data-lucide="images"></i>
+            <strong>Subir fotos de la propiedad</strong>
+            <span>Puedes elegir varias fotos. La primera sera la imagen principal.</span>
+          </label>
+
+          <div class="admin-switches">
+            <label><input name="isFeatured" type="checkbox" /> Destacar</label>
+            <label><input name="isPublished" type="checkbox" checked /> Publicado</label>
+          </div>
+
+          <button class="primary-button" type="submit">
+            <i data-lucide="save"></i>
+            <span>Guardar propiedad</span>
+          </button>
+        </form>
+
         <section class="admin-card">
           <div class="section-head">
             <div>
@@ -163,6 +283,21 @@
           </div>
           <div class="admin-evidence-grid" id="adminEvidenceGrid"></div>
           <p class="empty-state" id="adminEmptyState">Todavia no hay evidencias cargadas.</p>
+        </section>
+
+        <section class="admin-card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Inventario</p>
+              <h2>Propiedades cargadas</h2>
+            </div>
+            <button class="ghost-button" id="refreshProperties" type="button">
+              <i data-lucide="refresh-cw"></i>
+              <span>Actualizar</span>
+            </button>
+          </div>
+          <div class="admin-evidence-grid" id="adminPropertyGrid"></div>
+          <p class="empty-state" id="adminPropertyEmptyState">Todavia no hay propiedades cargadas.</p>
         </section>
       </section>
     </main>
