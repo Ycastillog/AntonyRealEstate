@@ -1507,6 +1507,7 @@ main {
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
   color: white;
+  text-decoration: none;
 }
 
 .real-evidence-card.large {
@@ -1538,11 +1539,13 @@ main {
   font-weight: 950;
 }
 
+.real-evidence-card[href],
 .real-evidence-card[data-case-src] {
   cursor: pointer;
   text-align: left;
 }
 
+.real-evidence-card[href] span,
 .real-evidence-card[data-case-src] span {
   bottom: 30px;
 }
@@ -1557,6 +1560,8 @@ main {
   font-weight: 900;
 }
 
+.real-evidence-card[href]:hover img,
+.real-evidence-card[href]:focus-visible img,
 .real-evidence-card[data-case-src]:hover img,
 .real-evidence-card[data-case-src]:focus-visible img {
   transform: scale(1.04);
