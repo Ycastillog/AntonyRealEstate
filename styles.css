@@ -1478,6 +1478,18 @@ main {
   line-height: 1.55;
 }
 
+.evidence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.evidence-actions .primary-button,
+.evidence-actions .ghost-button {
+  min-height: 46px;
+}
+
 .real-evidence-grid {
   display: grid;
   grid-template-columns: 1.2fr 1fr 1fr;

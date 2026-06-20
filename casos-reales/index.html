@@ -11,9 +11,19 @@
     <meta property="og:image" content="https://antonyrealestate.com/assets/real/evidencia/cierre-feria-01.jpg" />
     <meta property="og:url" content="https://antonyrealestate.com/casos-reales/" />
     <meta property="og:type" content="website" />
-    <link rel="stylesheet" href="../styles.css?v=official-logo-v1" />
+    <link rel="stylesheet" href="../styles.css?v=evidence-actions-v1" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
-    <script>window.addEventListener("DOMContentLoaded", () => window.lucide?.createIcons());</script>
+    <script src="../contact.js?v=sticky-header-v2" defer></script>
+    <script>
+      window.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll("[data-chat]").forEach((link) => {
+          link.href = window.antonyWhatsappUrl ? window.antonyWhatsappUrl(`Hola Antony, ${link.dataset.chat}`) : "#";
+          link.target = "_blank";
+          link.rel = "noreferrer";
+        });
+        window.lucide?.createIcons();
+      });
+    </script>
   </head>
   <body>
     <header class="topbar">
@@ -27,7 +37,15 @@
           <a class="primary-button" href="../#leadForm"><i data-lucide="message-circle"></i><span>Solicitar asesoria</span></a>
         </div>
         <div class="real-evidence-strip">
-          <div class="real-evidence-head"><p class="eyebrow">Evidencia real</p><h2>Momentos reales del proceso</h2><p>Fotos de clientes, cierres y eventos compartidas por el equipo de Antony.</p></div>
+          <div class="real-evidence-head">
+            <p class="eyebrow">Evidencia real</p>
+            <h2>Momentos reales del proceso</h2>
+            <p>Fotos de clientes, cierres y eventos compartidas por el equipo de Antony.</p>
+            <div class="evidence-actions">
+              <a class="primary-button" href="../propiedades/"><i data-lucide="building-2"></i><span>Ver propiedades</span></a>
+              <a class="ghost-button ghost-on-dark" href="#" data-chat="vi tus casos reales y quiero orientacion."><i data-lucide="message-circle"></i><span>Solicitar asesoria</span></a>
+            </div>
+          </div>
           <div class="real-evidence-grid">
             <article class="real-evidence-card large"><img src="../assets/real/evidencia/cierre-feria-01.jpg" alt="Cierre en feria" /><span>Cierre en feria</span></article>
             <article class="real-evidence-card"><img src="../assets/real/evidencia/asesoria-feria-01.jpg" alt="Asesoria en evento" /><span>Asesoria en evento</span></article>
