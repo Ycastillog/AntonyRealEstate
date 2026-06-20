@@ -79,9 +79,13 @@ form[id] {
 
 .brand-logo {
   display: block;
-  width: 76px;
-  height: 58px;
+  width: 170px;
+  height: 62px;
   object-fit: contain;
+}
+
+.brand > span {
+  display: none;
 }
 
 .brand strong,
@@ -3663,8 +3667,8 @@ textarea {
   }
 
   .brand-logo {
-    width: 58px;
-    height: 46px;
+    width: 122px;
+    height: 48px;
   }
 
   .hero {
