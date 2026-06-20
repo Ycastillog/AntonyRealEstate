@@ -2,6 +2,11 @@ const casesConfig = window.ANTONY_MEDIA_CONFIG || {};
 const casesReady = Boolean(casesConfig.supabaseUrl && casesConfig.supabaseAnonKey);
 const casesSection = document.querySelector("#casesLiveEvidence");
 const casesGrid = document.querySelector("#casesLiveEvidenceGrid");
+const caseViewerModal = document.querySelector("#caseViewerModal");
+const caseViewerImage = document.querySelector("#caseViewerImage");
+const caseViewerTitle = document.querySelector("#caseViewerTitle");
+const caseViewerText = document.querySelector("#caseViewerText");
+const closeCaseViewer = document.querySelector("#closeCaseViewer");
 
 function escapeHtml(value) {
   return String(value || "")
@@ -70,3 +75,18 @@ async function loadCasesEvidence() {
 }
 
 window.addEventListener("DOMContentLoaded", loadCasesEvidence);
+
+document.querySelectorAll("[data-case-src]").forEach((button) => {
+  button.addEventListener("click", () => {
+    caseViewerImage.src = button.dataset.caseSrc;
+    caseViewerImage.alt = button.dataset.caseTitle;
+    caseViewerTitle.textContent = button.dataset.caseTitle;
+    caseViewerText.textContent = button.dataset.caseText;
+    caseViewerModal.showModal();
+  });
+});
+
+closeCaseViewer?.addEventListener("click", () => caseViewerModal.close());
+caseViewerModal?.addEventListener("click", (event) => {
+  if (event.target === caseViewerModal) caseViewerModal.close();
+});

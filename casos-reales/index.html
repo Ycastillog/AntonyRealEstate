@@ -11,11 +11,11 @@
     <meta property="og:image" content="https://antonyrealestate.com/assets/real/evidencia/cierre-feria-01.jpg" />
     <meta property="og:url" content="https://antonyrealestate.com/casos-reales/" />
     <meta property="og:type" content="website" />
-    <link rel="stylesheet" href="../styles.css?v=cases-dynamic-v1" />
+    <link rel="stylesheet" href="../styles.css?v=case-viewer-v1" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
     <script src="../media-config.js?v=property-portal-v1" defer></script>
     <script src="../contact.js?v=sticky-header-v2" defer></script>
-    <script src="casos-reales.js?v=cases-dynamic-v1" defer></script>
+    <script src="casos-reales.js?v=case-viewer-v1" defer></script>
     <script>
       window.addEventListener("DOMContentLoaded", () => {
         document.querySelectorAll("[data-chat]").forEach((link) => {
@@ -49,10 +49,21 @@
             </div>
           </div>
           <div class="real-evidence-grid">
-            <article class="real-evidence-card large"><img src="../assets/real/evidencia/cierre-feria-01.jpg" alt="Cierre en feria" /><span>Cierre en feria</span></article>
-            <article class="real-evidence-card"><img src="../assets/real/evidencia/asesoria-feria-01.jpg" alt="Asesoria en evento" /><span>Asesoria en evento</span></article>
-            <article class="real-evidence-card"><img src="../assets/real/evidencia/cliente-feria-01.jpg" alt="Clientes orientados" /><span>Clientes orientados</span></article>
-            <article class="real-evidence-card"><img src="../assets/real/evidencia/entrega-cliente-01.jpg" alt="Entrega documentada" /><span>Entrega documentada</span></article>
+            <button class="real-evidence-card large" type="button" data-case-title="Cierre en feria" data-case-src="../assets/real/evidencia/cierre-feria-01.jpg" data-case-text="Acompanamiento presencial en feria inmobiliaria, orientando clientes y documentando momentos reales del proceso.">
+              <img src="../assets/real/evidencia/cierre-feria-01.jpg" alt="Cierre en feria" /><span>Cierre en feria</span><small>Ver caso</small>
+            </button>
+            <button class="real-evidence-card" type="button" data-case-title="Asesoria en evento" data-case-src="../assets/real/evidencia/asesoria-feria-01.jpg" data-case-text="Orientacion directa durante evento inmobiliario para evaluar opciones, presupuesto y siguiente paso.">
+              <img src="../assets/real/evidencia/asesoria-feria-01.jpg" alt="Asesoria en evento" /><span>Asesoria en evento</span><small>Ver caso</small>
+            </button>
+            <button class="real-evidence-card" type="button" data-case-title="Clientes orientados" data-case-src="../assets/real/evidencia/cliente-feria-01.jpg" data-case-text="Clientes que recibieron acompanamiento para entender proyectos, condiciones y alternativas reales.">
+              <img src="../assets/real/evidencia/cliente-feria-01.jpg" alt="Clientes orientados" /><span>Clientes orientados</span><small>Ver caso</small>
+            </button>
+            <button class="real-evidence-card" type="button" data-case-title="Entrega documentada" data-case-src="../assets/real/evidencia/entrega-cliente-01.jpg" data-case-text="Momento de entrega con clientes, parte clave para mostrar resultado y confianza en el proceso.">
+              <img src="../assets/real/evidencia/entrega-cliente-01.jpg" alt="Entrega documentada" /><span>Entrega documentada</span><small>Ver caso</small>
+            </button>
+            <button class="real-evidence-card" type="button" data-case-title="Firma de contrato" data-case-src="../assets/real/evidencia/cierre-feria-02.jpg" data-case-text="Evidencia del paso formal donde el cliente avanza con acompanamiento y claridad antes del cierre.">
+              <img src="../assets/real/evidencia/cierre-feria-02.jpg" alt="Firma de contrato" /><span>Firma de contrato</span><small>Ver caso</small>
+            </button>
           </div>
         </div>
         <div class="live-evidence cases-live-evidence" id="casesLiveEvidence" hidden>
@@ -67,5 +78,22 @@
         </div>
       </section>
     </main>
+    <dialog class="case-viewer-modal" id="caseViewerModal">
+      <div class="case-viewer-body">
+        <button class="video-modal-close" id="closeCaseViewer" type="button" aria-label="Cerrar caso">
+          <i data-lucide="x"></i>
+        </button>
+        <img id="caseViewerImage" src="../assets/real/evidencia/cierre-feria-01.jpg" alt="Caso real ampliado" />
+        <div class="case-viewer-copy">
+          <p class="eyebrow">Caso real</p>
+          <h2 id="caseViewerTitle">Cierre en feria</h2>
+          <p id="caseViewerText">Evidencia real del proceso.</p>
+          <a class="primary-button" href="#" data-chat="vi un caso real y quiero orientacion.">
+            <i data-lucide="message-circle"></i>
+            <span>Solicitar asesoria</span>
+          </a>
+        </div>
+      </div>
+    </dialog>
   </body>
 </html>
