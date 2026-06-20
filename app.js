@@ -105,13 +105,16 @@ const calcPayment = document.querySelector("#calcPayment");
 const homeCaseButtons = Array.from(document.querySelectorAll("[data-home-case-src]"));
 const homeCaseViewerModal = document.querySelector("#homeCaseViewerModal");
 const homeCaseViewerImage = document.querySelector("#homeCaseViewerImage");
+const homeCaseViewerVideo = document.querySelector("#homeCaseViewerVideo");
 const homeCaseViewerTitle = document.querySelector("#homeCaseViewerTitle");
 const homeCaseViewerText = document.querySelector("#homeCaseViewerText");
 const homeCaseViewerCount = document.querySelector("#homeCaseViewerCount");
 const closeHomeCaseViewer = document.querySelector("#closeHomeCaseViewer");
 const previousHomeCase = document.querySelector("#previousHomeCase");
 const nextHomeCase = document.querySelector("#nextHomeCase");
-let activeHomeCaseIndex = 0;
+const homeCaseAlbums = new Map();
+let activeHomeCaseKey = "";
+let activeHomeCasePhotoIndex = 0;
 
 function loadListings() {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -236,10 +239,10 @@ function localEvidenceItems() {
   }
 }
 
-async function loadEvidenceItems() {
+async function loadEvidenceItems(limit = 6) {
   if (remoteEvidenceReady) {
     const table = mediaConfig.supabaseTable || "evidence_items";
-    const url = `${mediaConfig.supabaseUrl}/rest/v1/${table}?select=*&is_published=eq.true&order=is_featured.desc,created_at.desc&limit=6`;
+    const url = `${mediaConfig.supabaseUrl}/rest/v1/${table}?select=*&is_published=eq.true&order=is_featured.desc,created_at.desc&limit=${limit}`;
     const response = await fetch(url, {
       headers: {
         apikey: mediaConfig.supabaseAnonKey,
@@ -253,7 +256,7 @@ async function loadEvidenceItems() {
 
   const items = localEvidenceItems()
     .filter((item) => item.isPublished)
-    .slice(0, 6);
+    .slice(0, limit);
 
   return Promise.all(items.map(async (item) => {
     const normalized = normalizeEvidenceItem(item);
@@ -406,19 +409,65 @@ function updateCalculator() {
   calcPayment.textContent = moneyCompact(payment, currency);
 }
 
-function renderHomeCase(index) {
+function initializeHomeCaseAlbums() {
   if (!homeCaseButtons.length || !homeCaseViewerModal) return;
-  activeHomeCaseIndex = (index + homeCaseButtons.length) % homeCaseButtons.length;
-  const button = homeCaseButtons[activeHomeCaseIndex];
-  homeCaseViewerImage.src = button.dataset.homeCaseSrc;
-  homeCaseViewerImage.alt = button.dataset.homeCaseTitle;
-  homeCaseViewerTitle.textContent = button.dataset.homeCaseTitle;
-  homeCaseViewerText.textContent = button.dataset.homeCaseText;
-  homeCaseViewerCount.textContent = `${activeHomeCaseIndex + 1} de ${homeCaseButtons.length}`;
+  homeCaseButtons.forEach((button) => {
+    homeCaseAlbums.set(button.dataset.homeCaseKey, {
+      title: button.dataset.homeCaseTitle,
+      text: button.dataset.homeCaseText,
+      categories: (button.dataset.homeCaseCategories || "").split(",").map((item) => item.trim()).filter(Boolean),
+      media: [{
+        type: "image",
+        src: button.dataset.homeCaseSrc,
+        title: button.dataset.homeCaseTitle
+      }]
+    });
+  });
 }
 
-function openHomeCase(index) {
-  renderHomeCase(index);
+async function hydrateHomeCaseAlbums() {
+  if (!homeCaseButtons.length) return;
+  const items = (await loadEvidenceItems(80)).filter((item) => item.mediaUrl);
+  items.forEach((item) => {
+    const album = Array.from(homeCaseAlbums.values()).find((candidate) => candidate.categories.includes(item.category));
+    if (!album) return;
+    album.media.push({
+      type: item.mediaType,
+      src: item.mediaUrl,
+      title: item.title || item.category
+    });
+  });
+}
+
+function renderHomeCasePhoto(index) {
+  const album = homeCaseAlbums.get(activeHomeCaseKey);
+  if (!album || !album.media.length) return;
+  activeHomeCasePhotoIndex = (index + album.media.length) % album.media.length;
+  const media = album.media[activeHomeCasePhotoIndex];
+
+  homeCaseViewerTitle.textContent = album.title;
+  homeCaseViewerText.textContent = album.text;
+  homeCaseViewerCount.textContent = `${media.type === "video" ? "Video" : "Foto"} ${activeHomeCasePhotoIndex + 1} de ${album.media.length}`;
+
+  if (media.type === "video") {
+    homeCaseViewerImage.hidden = true;
+    homeCaseViewerVideo.hidden = false;
+    homeCaseViewerVideo.src = media.src;
+    homeCaseViewerVideo.setAttribute("aria-label", media.title);
+    return;
+  }
+
+  homeCaseViewerVideo.pause();
+  homeCaseViewerVideo.removeAttribute("src");
+  homeCaseViewerVideo.hidden = true;
+  homeCaseViewerImage.hidden = false;
+  homeCaseViewerImage.src = media.src;
+  homeCaseViewerImage.alt = media.title;
+}
+
+function openHomeCase(key) {
+  activeHomeCaseKey = key;
+  renderHomeCasePhoto(0);
   homeCaseViewerModal.showModal();
 }
 
@@ -574,15 +623,24 @@ if (calcInitialAmount) calcInitialAmount.addEventListener("input", updateCalcula
 if (calcRate) calcRate.addEventListener("input", updateCalculator);
 if (calcYears) calcYears.addEventListener("change", updateCalculator);
 
-homeCaseButtons.forEach((button, index) => {
-  button.addEventListener("click", () => openHomeCase(index));
+initializeHomeCaseAlbums();
+hydrateHomeCaseAlbums();
+
+homeCaseButtons.forEach((button) => {
+  button.addEventListener("click", () => openHomeCase(button.dataset.homeCaseKey));
 });
-if (previousHomeCase) previousHomeCase.addEventListener("click", () => renderHomeCase(activeHomeCaseIndex - 1));
-if (nextHomeCase) nextHomeCase.addEventListener("click", () => renderHomeCase(activeHomeCaseIndex + 1));
-if (closeHomeCaseViewer) closeHomeCaseViewer.addEventListener("click", () => homeCaseViewerModal.close());
+if (previousHomeCase) previousHomeCase.addEventListener("click", () => renderHomeCasePhoto(activeHomeCasePhotoIndex - 1));
+if (nextHomeCase) nextHomeCase.addEventListener("click", () => renderHomeCasePhoto(activeHomeCasePhotoIndex + 1));
+if (closeHomeCaseViewer) closeHomeCaseViewer.addEventListener("click", () => {
+  homeCaseViewerVideo?.pause();
+  homeCaseViewerModal.close();
+});
 if (homeCaseViewerModal) {
   homeCaseViewerModal.addEventListener("click", (event) => {
-    if (event.target === homeCaseViewerModal) homeCaseViewerModal.close();
+    if (event.target === homeCaseViewerModal) {
+      homeCaseViewerVideo?.pause();
+      homeCaseViewerModal.close();
+    }
   });
 }
 
@@ -597,9 +655,12 @@ document.querySelectorAll("[data-chat]").forEach((link) => {
 
 window.addEventListener("keydown", (event) => {
   if (!homeCaseViewerModal?.open) return;
-  if (event.key === "ArrowLeft") renderHomeCase(activeHomeCaseIndex - 1);
-  if (event.key === "ArrowRight") renderHomeCase(activeHomeCaseIndex + 1);
-  if (event.key === "Escape") homeCaseViewerModal.close();
+  if (event.key === "ArrowLeft") renderHomeCasePhoto(activeHomeCasePhotoIndex - 1);
+  if (event.key === "ArrowRight") renderHomeCasePhoto(activeHomeCasePhotoIndex + 1);
+  if (event.key === "Escape") {
+    homeCaseViewerVideo?.pause();
+    homeCaseViewerModal.close();
+  }
 });
 
 listingForm.addEventListener("submit", async (event) => {
