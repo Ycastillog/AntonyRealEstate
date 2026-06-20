@@ -102,6 +102,16 @@ const calcPriceLabel = document.querySelector("#calcPriceLabel");
 const calcReserve = document.querySelector("#calcReserve");
 const calcSeparation = document.querySelector("#calcSeparation");
 const calcPayment = document.querySelector("#calcPayment");
+const homeCaseButtons = Array.from(document.querySelectorAll("[data-home-case-src]"));
+const homeCaseViewerModal = document.querySelector("#homeCaseViewerModal");
+const homeCaseViewerImage = document.querySelector("#homeCaseViewerImage");
+const homeCaseViewerTitle = document.querySelector("#homeCaseViewerTitle");
+const homeCaseViewerText = document.querySelector("#homeCaseViewerText");
+const homeCaseViewerCount = document.querySelector("#homeCaseViewerCount");
+const closeHomeCaseViewer = document.querySelector("#closeHomeCaseViewer");
+const previousHomeCase = document.querySelector("#previousHomeCase");
+const nextHomeCase = document.querySelector("#nextHomeCase");
+let activeHomeCaseIndex = 0;
 
 function loadListings() {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -396,6 +406,22 @@ function updateCalculator() {
   calcPayment.textContent = moneyCompact(payment, currency);
 }
 
+function renderHomeCase(index) {
+  if (!homeCaseButtons.length || !homeCaseViewerModal) return;
+  activeHomeCaseIndex = (index + homeCaseButtons.length) % homeCaseButtons.length;
+  const button = homeCaseButtons[activeHomeCaseIndex];
+  homeCaseViewerImage.src = button.dataset.homeCaseSrc;
+  homeCaseViewerImage.alt = button.dataset.homeCaseTitle;
+  homeCaseViewerTitle.textContent = button.dataset.homeCaseTitle;
+  homeCaseViewerText.textContent = button.dataset.homeCaseText;
+  homeCaseViewerCount.textContent = `${activeHomeCaseIndex + 1} de ${homeCaseButtons.length}`;
+}
+
+function openHomeCase(index) {
+  renderHomeCase(index);
+  homeCaseViewerModal.showModal();
+}
+
 function openDetail(id) {
   const listing = listings.find((item) => item.id === id);
   if (!listing) return;
@@ -548,6 +574,18 @@ if (calcInitialAmount) calcInitialAmount.addEventListener("input", updateCalcula
 if (calcRate) calcRate.addEventListener("input", updateCalculator);
 if (calcYears) calcYears.addEventListener("change", updateCalculator);
 
+homeCaseButtons.forEach((button, index) => {
+  button.addEventListener("click", () => openHomeCase(index));
+});
+if (previousHomeCase) previousHomeCase.addEventListener("click", () => renderHomeCase(activeHomeCaseIndex - 1));
+if (nextHomeCase) nextHomeCase.addEventListener("click", () => renderHomeCase(activeHomeCaseIndex + 1));
+if (closeHomeCaseViewer) closeHomeCaseViewer.addEventListener("click", () => homeCaseViewerModal.close());
+if (homeCaseViewerModal) {
+  homeCaseViewerModal.addEventListener("click", (event) => {
+    if (event.target === homeCaseViewerModal) homeCaseViewerModal.close();
+  });
+}
+
 document.querySelectorAll("[data-chat]").forEach((link) => {
   link.href = whatsappUrl(`Hola Antony, ${link.dataset.chat}`);
   link.target = "_blank";
@@ -555,6 +593,13 @@ document.querySelectorAll("[data-chat]").forEach((link) => {
   link.addEventListener("click", (event) => {
     link.href = whatsappUrl(`Hola Antony, ${link.dataset.chat}`);
   });
+});
+
+window.addEventListener("keydown", (event) => {
+  if (!homeCaseViewerModal?.open) return;
+  if (event.key === "ArrowLeft") renderHomeCase(activeHomeCaseIndex - 1);
+  if (event.key === "ArrowRight") renderHomeCase(activeHomeCaseIndex + 1);
+  if (event.key === "Escape") homeCaseViewerModal.close();
 });
 
 listingForm.addEventListener("submit", async (event) => {
