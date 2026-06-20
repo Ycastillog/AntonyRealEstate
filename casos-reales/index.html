@@ -11,9 +11,11 @@
     <meta property="og:image" content="https://antonyrealestate.com/assets/real/evidencia/cierre-feria-01.jpg" />
     <meta property="og:url" content="https://antonyrealestate.com/casos-reales/" />
     <meta property="og:type" content="website" />
-    <link rel="stylesheet" href="../styles.css?v=evidence-actions-v1" />
+    <link rel="stylesheet" href="../styles.css?v=cases-dynamic-v1" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+    <script src="../media-config.js?v=property-portal-v1" defer></script>
     <script src="../contact.js?v=sticky-header-v2" defer></script>
+    <script src="casos-reales.js?v=cases-dynamic-v1" defer></script>
     <script>
       window.addEventListener("DOMContentLoaded", () => {
         document.querySelectorAll("[data-chat]").forEach((link) => {
@@ -52,6 +54,16 @@
             <article class="real-evidence-card"><img src="../assets/real/evidencia/cliente-feria-01.jpg" alt="Clientes orientados" /><span>Clientes orientados</span></article>
             <article class="real-evidence-card"><img src="../assets/real/evidencia/entrega-cliente-01.jpg" alt="Entrega documentada" /><span>Entrega documentada</span></article>
           </div>
+        </div>
+        <div class="live-evidence cases-live-evidence" id="casesLiveEvidence" hidden>
+          <div class="section-head compact-head">
+            <div>
+              <p class="eyebrow">Publicado por Antony</p>
+              <h2>Evidencias cargadas desde el portal</h2>
+              <p class="content-note">Cada foto o video publicado por Antony aparece aqui automaticamente.</p>
+            </div>
+          </div>
+          <div class="live-evidence-grid cases-live-grid" id="casesLiveEvidenceGrid"></div>
         </div>
       </section>
     </main>
