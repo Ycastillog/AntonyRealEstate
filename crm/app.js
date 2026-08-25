@@ -3026,6 +3026,22 @@ function showBackendError(error) {
   showToast(message, 6000);
 }
 
+function reportBackendDiagnostic(scope, error) {
+  const details = error?.details && typeof error.details === "object"
+    ? error.details
+    : {};
+  console.error("Antony CRM backend failure", {
+    scope,
+    name: String(error?.name || "Error"),
+    code: String(error?.code || "CRM_ERROR"),
+    status: Number(error?.status) || 0,
+    kind: String(details.kind || "unknown"),
+    operation: String(details.operation || scope),
+    retryable: Boolean(details.retryable),
+    summary: details.summary ? String(details.summary) : null
+  });
+}
+
 document.querySelectorAll("[data-view-target]").forEach((button) => {
   button.addEventListener("click", () =>
     switchView(button.dataset.viewTarget, true, true)
@@ -3890,6 +3906,7 @@ async function enterCloudSession(session) {
     switchView(viewFromHash(), false, false);
     setLoginStatus("Acceso autorizado.", "success");
   } catch (error) {
+    reportBackendDiagnostic("loadWorkspace", error);
     cloudReady = false;
     storageHealthy = false;
     storageIssue = cloudBackend.humanizeError(error);
@@ -3956,6 +3973,7 @@ async function initializeApplication() {
       }
     });
   } catch (error) {
+    reportBackendDiagnostic("initializeApplication", error);
     setLoginStatus(cloudBackend.humanizeError(error), "error");
     showLoginShell();
   }
@@ -3972,6 +3990,7 @@ document.querySelector("#loginForm").addEventListener("submit", async (event) =>
     const result = await cloudBackend.signIn(email, password);
     await enterCloudSession(result.session);
   } catch (error) {
+    reportBackendDiagnostic("signIn", error);
     setLoginStatus(cloudBackend.humanizeError(error), "error");
     document.querySelector("#loginPassword").select();
   } finally {
