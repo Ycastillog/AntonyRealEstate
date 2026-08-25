@@ -59,6 +59,14 @@ test("Collection inbox exposes every pending balance category", () => {
   assert.match(app, /aria-pressed/);
 });
 
+test("mobile forms expose shared sales and percentage-based installments", () => {
+  assert.match(html, /id="sharedSale"[^>]+type="checkbox"/);
+  assert.match(html, /id="externalAgentWrap"[^>]+hidden/);
+  assert.match(app, /data-installment-percentage/);
+  assert.match(css, /\.shared-sale-toggle/);
+  assert.match(css, /grid-template-columns:\s*minmax\(125px,\s*1\.2fr\)/);
+});
+
 test("Financial values are protected from silent truncation", () => {
   assert.match(css, /metric-card > strong[\s\S]*overflow:\s*visible/);
   assert.match(css, /\.money-cell[\s\S]*text-align:\s*right/);

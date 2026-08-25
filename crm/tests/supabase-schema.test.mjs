@@ -63,7 +63,9 @@ test("production schema defines every CRM table and critical business column", s
   }
 
   assert.match(sql, /create\s+table[\s\S]*?public\.crm_clients\s*\([\s\S]*?captured_at\s+timestamptz\s+not\s+null/i);
+  assert.match(sql, /public\.crm_clients\s*\([\s\S]*?property_stage\s+text\s+not\s+null\s+default\s+'Sin definir'/i);
   assert.match(sql, /create\s+table[\s\S]*?public\.crm_sales\s*\([\s\S]*?cancel_reason\s+text/i);
+  assert.match(sql, /public\.crm_sales\s*\([\s\S]*?delivery_date\s+date[\s\S]*?shared_sale\s+boolean\s+not\s+null[\s\S]*?external_agent\s+text/i);
   assert.match(sql, /public\.crm_commission_installments[\s\S]*?sale_id\s+text\s+not\s+null[\s\S]*?due_date\s+date\s+not\s+null/i);
   assert.match(sql, /public\.crm_payments[\s\S]*?installment_id\s+text[\s\S]*?void_reason\s+text/i);
   assert.match(sql, /primary\s+key\s*\(owner_id\s*,\s*id\s*\)/i);
@@ -206,6 +208,11 @@ test("schema enforces cancellation, installment, payment, and audit invariants",
   assert.match(sql, /v_other_sale_payments\s*\+\s*new\.amount\s*>\s*v_commission/i);
   assert.match(sql, /insert\s+into\s+public\.crm_audit_log/i);
   assert.match(sql, /before\s+truncate\s+on\s+public\.crm_audit_log/i);
+  assert.match(sql, /delivery_date\s+is\s+null\s+or\s+delivery_date\s+>=\s+sale_date/i);
+  assert.match(sql, /shared_sale[\s\S]{0,180}external_agent[\s\S]{0,220}not\s+shared_sale/i);
+  assert.match(sql, /property_stage\s+in\s*\('Sin definir',\s*'Listo',\s*'En planos'/i);
+  assert.match(sql, /v_shared_sale\s*:=\s*coalesce\(\(p_sale\s*->>\s*'shared_sale'\)::boolean,\s*false\)/i);
+  assert.match(sql, /delivery_date\s*=\s*v_delivery_date[\s\S]{0,100}external_agent\s*=\s*v_external_agent/i);
 });
 
 test("production migration is self-contained and portal writes require an admin role", sqlTestOptions, () => {

@@ -1,8 +1,9 @@
 const STORAGE_KEY = "antony-crm-local-v1";
-const APP_VERSION = 3;
+const APP_VERSION = 4;
 const MAX_AUDIT_ENTRIES = 500;
 const VALID_CURRENCIES = ["USD", "DOP"];
 const VALID_CLIENT_STAGES = ["Nuevo", "Calificado", "En seguimiento", "Comprador", "Inactivo"];
+const VALID_PROPERTY_STAGES = ["Sin definir", "Listo", "En planos", "En construcción", "Indiferente"];
 const VALID_SALE_STATUSES = ["Reservada", "Contratada", "Entregada", "Cancelada"];
 const CLOSED_SALE_STATUSES = ["Contratada", "Entregada"];
 const VALID_PAYMENT_METHODS = ["Transferencia", "Efectivo", "Cheque", "Otro"];
@@ -34,6 +35,7 @@ const DEMO_DATA = {
       source: "WhatsApp",
       stage: "En seguimiento",
       desiredZone: "Punta Cana",
+      propertyStage: "En planos",
       budget: 200000,
       budgetCurrency: "USD",
       notes: "Interesada en una propiedad para inversión.",
@@ -49,6 +51,7 @@ const DEMO_DATA = {
       source: "Referido",
       stage: "Comprador",
       desiredZone: "Santo Domingo",
+      propertyStage: "Listo",
       budget: 10000000,
       budgetCurrency: "DOP",
       notes: "Busca apartamento familiar en Santo Domingo.",
@@ -68,6 +71,9 @@ const DEMO_DATA = {
       salePrice: 185000,
       saleCurrency: "USD",
       saleDate: "2026-07-18",
+      deliveryDate: "2027-03-30",
+      sharedSale: true,
+      externalAgent: "Laura Méndez",
       commissionRate: 3,
       commissionAmount: 5550,
       commissionCurrency: "USD",
@@ -88,6 +94,9 @@ const DEMO_DATA = {
       salePrice: 9500000,
       saleCurrency: "DOP",
       saleDate: "2026-08-03",
+      deliveryDate: "2026-12-15",
+      sharedSale: false,
+      externalAgent: "",
       commissionRate: 3,
       commissionAmount: 285000,
       commissionCurrency: "DOP",
@@ -171,7 +180,7 @@ let state = DEMO_MODE ? loadState() : clone(EMPTY_STATE);
 let currentSession = null;
 let cloudReady = false;
 let appBusy = false;
-let collectionFilter = "overdue";
+let collectionFilter = "all";
 let activeDrawer = null;
 let drawerReturnFocus = null;
 let detailRecord = null;
@@ -236,7 +245,7 @@ function dateOnly(value, fallback) {
 function assertImportDates(value) {
   const groups = [
     ["clients", ["capturedAt", "createdAt", "updatedAt"]],
-    ["sales", ["saleDate", "commissionDueDate", "cancelledAt", "createdAt", "updatedAt"]],
+    ["sales", ["saleDate", "deliveryDate", "commissionDueDate", "cancelledAt", "createdAt", "updatedAt"]],
     ["installments", ["dueDate", "createdAt", "updatedAt"]],
     ["payments", ["paymentDate", "voidedAt", "createdAt", "updatedAt"]]
   ];
@@ -273,6 +282,9 @@ function normalizeState(value) {
     source: String(client.source || "Otro"),
     stage: String(client.stage || "Nuevo"),
     desiredZone: String(client.desiredZone || "").trim(),
+    propertyStage: VALID_PROPERTY_STAGES.includes(String(client.propertyStage || ""))
+      ? String(client.propertyStage)
+      : "Sin definir",
     budget: Math.max(numberValue(client.budget), 0),
     budgetCurrency: normalizeCurrency(client.budgetCurrency, "USD"),
     notes: String(client.notes || "").trim(),
@@ -293,6 +305,9 @@ function normalizeState(value) {
       salePrice: Math.max(numberValue(sale.salePrice), 0),
       saleCurrency,
       saleDate: dateOnly(sale.saleDate, today()),
+      deliveryDate: sale.deliveryDate ? dateOnly(sale.deliveryDate, "") : "",
+      sharedSale: Boolean(sale.sharedSale),
+      externalAgent: String(sale.externalAgent || "").trim(),
       commissionRate: Math.max(numberValue(sale.commissionRate), 0),
       commissionAmount: Math.max(numberValue(sale.commissionAmount), 0),
       commissionCurrency: normalizeCurrency(sale.commissionCurrency, saleCurrency),
@@ -395,6 +410,7 @@ function normalizeState(value) {
         !client.name ||
         (!client.phone && !client.email) ||
         !VALID_CLIENT_STAGES.includes(client.stage) ||
+        !VALID_PROPERTY_STAGES.includes(client.propertyStage) ||
         !isValidIsoDate(client.capturedAt) ||
         client.capturedAt > today() ||
         !isValidIsoDate(client.createdAt) ||
@@ -415,6 +431,10 @@ function normalizeState(value) {
         sale.commissionRate < 0 ||
         sale.commissionRate > 100 ||
         !isValidIsoDate(sale.saleDate) ||
+        (sale.deliveryDate &&
+          (!isValidIsoDate(sale.deliveryDate) || sale.deliveryDate < sale.saleDate)) ||
+        (sale.sharedSale && !sale.externalAgent) ||
+        (!sale.sharedSale && sale.externalAgent) ||
         (isCancelledSale(sale) && !sale.cancelReason) ||
         (sale.commissionDueDate &&
           (!isValidIsoDate(sale.commissionDueDate) ||
@@ -1432,6 +1452,7 @@ function clientDetailHtml(client) {
     "</strong></article></div>" +
     '<section class="detail-section"><div class="detail-section-heading"><i data-lucide="map-pin" aria-hidden="true"></i><h3>Perfil de interés</h3></div><dl class="detail-definition-grid">' +
     detailField("Zona", client.desiredZone) +
+    detailField("Estado del inmueble", client.propertyStage || "Sin definir") +
     detailField("Origen", client.source) +
     detailField("Captado", formatDate(client.capturedAt)) +
     detailField("Última actualización", formatDate(client.updatedAt)) +
@@ -1527,6 +1548,14 @@ function saleDetailHtml(sale) {
     '<section class="detail-section"><div class="detail-section-heading"><i data-lucide="contact-round" aria-hidden="true"></i><h3>Cliente y operación</h3></div><dl class="detail-definition-grid">' +
     detailField("Cliente", client?.name || "Cliente eliminado") +
     detailField("Desarrolladora", sale.developer) +
+    detailField(
+      "Fecha estimada de entrega",
+      sale.deliveryDate ? formatDate(sale.deliveryDate) : "Sin definir"
+    ) +
+    detailField(
+      "Venta compartida",
+      sale.sharedSale ? sale.externalAgent || "Asesor externo" : "No"
+    ) +
     detailField("Próximo vencimiento", formatDate(nextCommissionDueDate(sale))) +
     detailField("Tasa acordada", sale.commissionRate ? sale.commissionRate + "%" : "Monto fijo") +
     "</dl></section>" +
@@ -1572,7 +1601,10 @@ function renderRecordDetail() {
     eyebrow.textContent = "Dossier de operación";
     title.textContent = sale.project + " · " + sale.unit;
     body.innerHTML = saleDetailHtml(sale);
-    primary.hidden = isCancelledSale(sale) || pendingForSaleCents(sale) <= 0;
+    primary.hidden =
+      isCancelledSale(sale) ||
+      !isClosedSale(sale) ||
+      pendingForSaleCents(sale) <= 0;
     primary.innerHTML = '<i data-lucide="circle-dollar-sign" aria-hidden="true"></i>Registrar cobro';
     remove.hidden = !DEMO_MODE;
     if (DEMO_MODE) {
@@ -1604,8 +1636,11 @@ function renderClients() {
   const query = normalizeText(document.querySelector("#clientSearch").value);
   const stage = document.querySelector("#clientStageFilter").value;
   const clients = state.clients
-    .filter(
-      (client) =>
+    .filter((client) => {
+      const relatedOperations = state.sales
+        .filter((sale) => sale.clientId === client.id)
+        .flatMap((sale) => [sale.project, sale.unit, sale.developer, sale.externalAgent]);
+      return (
         (!stage || client.stage === stage) &&
         (!query ||
           normalizeText(
@@ -1615,10 +1650,13 @@ function renderClients() {
               client.email,
               client.source,
               client.stage,
-              client.desiredZone
+              client.desiredZone,
+              client.propertyStage,
+              ...relatedOperations
             ].join(" ")
           ).includes(query))
-    )
+      );
+    })
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
   const filtersActive = query || stage;
   document.querySelector("#clientOverviewTotal").textContent = state.clients.length;
@@ -1662,7 +1700,12 @@ function renderClients() {
         '</span><span class="secondary-cell">' +
         escapeHtml(client.email || "Sin correo") +
         '</span></td><td><span class="primary-cell">' +
-        escapeHtml(client.desiredZone || "Sin zona definida") +
+        escapeHtml(
+          (client.desiredZone || "Sin zona definida") +
+            (client.propertyStage && client.propertyStage !== "Sin definir"
+              ? " · " + client.propertyStage
+              : "")
+        ) +
         '</span><span class="secondary-cell">' +
         escapeHtml("Origen: " + client.source) +
         '</span></td><td class="money-cell">' +
@@ -1690,7 +1733,12 @@ function renderClients() {
         '</strong><span class="stage-pill">' +
         escapeHtml(client.stage) +
         '</span></div><div class="mobile-record-main">' +
-        escapeHtml(client.desiredZone || "Interés por definir") +
+        escapeHtml(
+          (client.desiredZone || "Interés por definir") +
+            (client.propertyStage && client.propertyStage !== "Sin definir"
+              ? " · " + client.propertyStage
+              : "")
+        ) +
         '</div><div class="mobile-record-meta"><span>' +
         escapeHtml(client.phone || client.email || "Sin contacto") +
         '</span><span class="mobile-record-amount">' +
@@ -1717,7 +1765,9 @@ function filteredSalesForList() {
               sale.project,
               sale.unit,
               sale.developer,
-              sale.saleStatus
+              sale.saleStatus,
+              sale.externalAgent,
+              sale.deliveryDate
             ].join(" ")
           ).includes(query))
     )
@@ -1805,7 +1855,14 @@ function renderSales() {
         "</strong>" +
         saleStatusBadge(sale) +
         '</div><div class="mobile-record-main">' +
-        escapeHtml(sale.project + " · " + sale.unit) +
+        escapeHtml(
+          sale.project +
+            " · " +
+            sale.unit +
+            (sale.sharedSale && sale.externalAgent
+              ? " · Compartida con " + sale.externalAgent
+              : "")
+        ) +
         '</div><div class="mobile-record-meta"><span>' +
         escapeHtml(
           nextCommissionDueDate(sale)
@@ -1828,6 +1885,9 @@ function renderSales() {
 function collectionActionHtml(sale) {
   if (pendingForSaleCents(sale) <= 0) {
     return '<span class="status-pill status-paid">Pagado</span>';
+  }
+  if (!isClosedSale(sale)) {
+    return '<span class="status-pill status-pending">Disponible al contratar</span>';
   }
   return (
     '<button class="button button-secondary" type="button" data-register-payment="' +
@@ -1852,7 +1912,7 @@ function setCollectionMetric(valueId, metaId, totals, count, singular, plural) {
 
 function renderCollectionQueue() {
   const currentMonth = today().slice(0, 7);
-  const activeSales = state.sales.filter(isClosedSale);
+  const activeSales = state.sales.filter((sale) => !isCancelledSale(sale));
   const collectionItems = activeSales.flatMap((sale) =>
     installmentLedgerForSale(sale.id).map((installment) => ({ ...installment, sale }))
   );
@@ -2500,6 +2560,51 @@ function addMonthsToDate(value, months) {
   );
 }
 
+function installmentPercentageText(amountCents, commissionCents) {
+  if (commissionCents <= 0 || amountCents <= 0) return "";
+  return String(Number(((amountCents / commissionCents) * 100).toFixed(4)));
+}
+
+function syncInstallmentPercentageForRow(row) {
+  const percentage = row?.querySelector("[data-installment-percentage]");
+  const amount = row?.querySelector("[data-installment-amount]");
+  if (!percentage || !amount) return;
+  percentage.value = installmentPercentageText(
+    toCents(amount.value),
+    toCents(document.querySelector("#commissionAmount")?.value)
+  );
+}
+
+function syncInstallmentAmountFromPercentage(row) {
+  const percentage = numberValue(
+    row?.querySelector("[data-installment-percentage]")?.value
+  );
+  const amount = row?.querySelector("[data-installment-amount]");
+  const commissionCents = toCents(document.querySelector("#commissionAmount")?.value);
+  if (!amount) return;
+  const amountCents = Math.round((commissionCents * percentage) / 100);
+  amount.value = percentage > 0 && commissionCents > 0
+    ? fromCents(amountCents).toFixed(2)
+    : "";
+}
+
+function syncAllInstallmentPercentages() {
+  installmentRowsFromForm().forEach(syncInstallmentPercentageForRow);
+}
+
+function relabelInstallmentRows() {
+  const rows = installmentRowsFromForm();
+  rows.forEach((row, index) => {
+    const label = row.querySelector("[data-installment-label]");
+    if (!label) return;
+    if (/^Cuota(?: única| \d+(?: de \d+)?)$/.test(label.value)) {
+      label.value = rows.length === 1
+        ? "Cuota única"
+        : "Cuota " + (index + 1) + " de " + rows.length;
+    }
+  });
+}
+
 function createInstallmentRow(installment) {
   const container = document.querySelector("#installmentRows");
   if (!container) return;
@@ -2508,6 +2613,7 @@ function createInstallmentRow(installment) {
   row.dataset.installmentId = installment?.id || "";
   row.innerHTML =
     '<label>Concepto<input type="text" data-installment-label maxlength="120" required /></label>' +
+    '<label>Porcentaje<input type="number" data-installment-percentage min="0.0001" max="100" step="0.0001" inputmode="decimal" aria-label="Porcentaje de la comisión" required /></label>' +
     '<label>Monto<input type="number" data-installment-amount min="0.01" step="0.01" required /></label>' +
     '<label>Vencimiento<input type="date" data-installment-due-date required /></label>' +
     '<button class="installment-remove" type="button" data-remove-installment aria-label="Eliminar cuota"><i data-lucide="trash-2" aria-hidden="true"></i></button>';
@@ -2518,6 +2624,7 @@ function createInstallmentRow(installment) {
   row.querySelector("[data-installment-due-date]").value =
     installment?.dueDate || document.querySelector("#saleDate")?.value || today();
   container.appendChild(row);
+  syncInstallmentPercentageForRow(row);
   refreshIcons();
 }
 
@@ -2579,11 +2686,15 @@ function updateInstallmentPlanSummary() {
   );
   const commissionCents = toCents(document.querySelector("#commissionAmount")?.value);
   const difference = commissionCents - scheduledCents;
+  const scheduledPercentage = installmentPercentageText(scheduledCents, commissionCents) || "0";
   summary.textContent =
     rows.length +
     (rows.length === 1 ? " cuota" : " cuotas") +
     " · Programado " +
     moneyFromCents(scheduledCents, document.querySelector('#saleForm [name="commissionCurrency"]')?.value) +
+    " (" +
+    scheduledPercentage +
+    "%)" +
     (difference === 0
       ? " · Plan completo"
       : " · Diferencia " +
@@ -2682,6 +2793,15 @@ function updateCancelReasonVisibility() {
   form.elements.cancelReason.required = cancelled;
 }
 
+function updateSharedSaleVisibility() {
+  const form = document.querySelector("#saleForm");
+  const wrapper = document.querySelector("#externalAgentWrap");
+  if (!form || !wrapper) return;
+  const shared = Boolean(form.elements.sharedSale.checked);
+  wrapper.hidden = !shared;
+  form.elements.externalAgent.required = shared;
+}
+
 function resetFormDates() {
   document.querySelector("#saleDate").value = today();
   document.querySelector("#paymentDate").value = today();
@@ -2707,6 +2827,7 @@ function resetSaleForm() {
   setFormValue(form, "cancelReason", "");
   renderInstallmentEditor([]);
   updateCancelReasonVisibility();
+  updateSharedSaleVisibility();
   document.querySelector("#saleFormTitle").textContent = "Registrar venta";
   document.querySelector("#saleSubmitButton").textContent = "Guardar venta";
   document.querySelector("#cancelSaleEdit").hidden = false;
@@ -2731,7 +2852,7 @@ function startClientEdit(id, trigger) {
   const form = document.querySelector("#clientForm");
   [
     "id", "name", "phone", "email", "source", "stage",
-    "desiredZone", "budget", "budgetCurrency", "capturedAt", "notes"
+    "desiredZone", "propertyStage", "budget", "budgetCurrency", "capturedAt", "notes"
   ].forEach((name) => setFormValue(form, name, client[name]));
   document.querySelector("#clientFormTitle").textContent = "Editar cliente";
   document.querySelector("#clientSubmitButton").textContent = "Guardar cambios";
@@ -2746,11 +2867,13 @@ function startSaleEdit(id, trigger) {
   const form = document.querySelector("#saleForm");
   [
     "id", "clientId", "project", "unit", "developer", "saleStatus",
-    "salePrice", "saleCurrency", "saleDate", "commissionRate",
-    "commissionAmount", "commissionCurrency", "cancelReason", "notes"
+    "salePrice", "saleCurrency", "saleDate", "deliveryDate", "externalAgent",
+    "commissionRate", "commissionAmount", "commissionCurrency", "cancelReason", "notes"
   ].forEach((name) => setFormValue(form, name, sale[name]));
+  form.elements.sharedSale.checked = Boolean(sale.sharedSale);
   renderInstallmentEditor(installmentsForSale(sale.id));
   updateCancelReasonVisibility();
+  updateSharedSaleVisibility();
   document.querySelector("#saleFormTitle").textContent = "Editar venta";
   document.querySelector("#saleSubmitButton").textContent = "Guardar cambios";
   document.querySelector("#cancelSaleEdit").hidden = false;
@@ -2909,7 +3032,8 @@ function exportSalesCsv() {
   );
   const rows = [
     [
-      "Fecha", "Cliente", "Proyecto", "Unidad", "Desarrolladora",
+      "Fecha", "Fecha entrega", "Cliente", "Proyecto", "Unidad", "Desarrolladora",
+      "Venta compartida", "Asesor externo",
       "Estado venta", "Precio", "Moneda precio", "Comisión",
       "Moneda comisión", "Cobrado", "Pendiente", "Estado comisión",
       "Vencimiento"
@@ -2918,10 +3042,13 @@ function exportSalesCsv() {
   sales.forEach((sale) => {
     rows.push([
       sale.saleDate,
+      sale.deliveryDate,
       clientName(sale.clientId),
       sale.project,
       sale.unit,
       sale.developer,
+      sale.sharedSale ? "Sí" : "No",
+      sale.externalAgent,
       sale.saleStatus,
       sale.salePrice,
       sale.saleCurrency,
@@ -2991,6 +3118,7 @@ function updateCommissionFromRate() {
       rows[0].querySelector("[data-installment-amount]").value =
         form.elements.commissionAmount.value;
     }
+    syncAllInstallmentPercentages();
     updateInstallmentPlanSummary();
   }
 }
@@ -3077,11 +3205,15 @@ document.querySelector("#clientForm").addEventListener("submit", async (event) =
   const phone = String(data.get("phone") || "").trim();
   const email = String(data.get("email") || "").trim();
   const capturedAt = String(data.get("capturedAt") || today());
+  const propertyStage = String(data.get("propertyStage") || "Sin definir");
   if (!phone && !email) {
     return showFieldError(formElement, "phone", "Indica un teléfono o un correo");
   }
   if (!isValidIsoDate(capturedAt) || capturedAt > today()) {
     return showFieldError(formElement, "capturedAt", "Indica una fecha de captación válida");
+  }
+  if (!VALID_PROPERTY_STAGES.includes(propertyStage)) {
+    return showFieldError(formElement, "propertyStage", "Selecciona un estado válido");
   }
   const duplicate = findDuplicateClient(phone, email, id);
   if (duplicate) {
@@ -3101,6 +3233,7 @@ document.querySelector("#clientForm").addEventListener("submit", async (event) =
     source: String(data.get("source") || "Otro"),
     stage: String(data.get("stage") || "Nuevo"),
     desiredZone: String(data.get("desiredZone") || "").trim(),
+    propertyStage,
     budget: Math.max(numberValue(data.get("budget")), 0),
     budgetCurrency: normalizeCurrency(data.get("budgetCurrency"), "USD"),
     capturedAt,
@@ -3153,19 +3286,34 @@ document.querySelector("#commissionAmount").addEventListener("input", () => {
     rows[0].querySelector("[data-installment-amount]").value =
       document.querySelector("#commissionAmount").value;
   }
+  syncAllInstallmentPercentages();
   updateInstallmentPlanSummary();
 });
 document.querySelector('#saleForm [name="saleStatus"]').addEventListener("change", updateCancelReasonVisibility);
+document.querySelector("#sharedSale").addEventListener("change", updateSharedSaleVisibility);
 document.querySelector("#saleDate").addEventListener("change", () => {
+  const saleDate = document.querySelector("#saleDate").value;
+  const deliveryDate = document.querySelector("#deliveryDate");
+  if (deliveryDate.value && deliveryDate.value < saleDate) {
+    deliveryDate.value = saleDate;
+  }
   installmentRowsFromForm().forEach((row) => {
     const field = row.querySelector("[data-installment-due-date]");
-    if (!field.value || field.value < document.querySelector("#saleDate").value) {
-      field.value = document.querySelector("#saleDate").value;
+    if (!field.value || field.value < saleDate) {
+      field.value = saleDate;
     }
   });
   updateInstallmentPlanSummary();
 });
-document.querySelector("#installmentRows").addEventListener("input", updateInstallmentPlanSummary);
+document.querySelector("#installmentRows").addEventListener("input", (event) => {
+  const row = event.target.closest(".installment-row");
+  if (row && event.target.matches("[data-installment-percentage]")) {
+    syncInstallmentAmountFromPercentage(row);
+  } else if (row && event.target.matches("[data-installment-amount]")) {
+    syncInstallmentPercentageForRow(row);
+  }
+  updateInstallmentPlanSummary();
+});
 document.querySelector("#installmentRows").addEventListener("click", (event) => {
   const button = event.target.closest("[data-remove-installment]");
   if (!button) return;
@@ -3176,12 +3324,7 @@ document.querySelector("#installmentRows").addEventListener("click", (event) => 
     return;
   }
   button.closest(".installment-row").remove();
-  installmentRowsFromForm().forEach((row, index, list) => {
-    const label = row.querySelector("[data-installment-label]");
-    if (/^Cuota \d+ de \d+$/.test(label.value)) {
-      label.value = "Cuota " + (index + 1) + " de " + list.length;
-    }
-  });
+  relabelInstallmentRows();
   updateInstallmentPlanSummary();
 });
 document.querySelector("#splitInstallmentsButton").addEventListener("click", () => {
@@ -3203,6 +3346,7 @@ document.querySelector("#addInstallmentButton").addEventListener("click", () => 
     amount: fromCents(Math.max(totalCents - assignedCents, 0)),
     dueDate: addMonthsToDate(lastDate, 1)
   });
+  relabelInstallmentRows();
   updateInstallmentPlanSummary();
 });
 
@@ -3219,7 +3363,10 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
   const salePrice = numberValue(data.get("salePrice"));
   const saleCurrency = normalizeCurrency(data.get("saleCurrency"), "USD");
   const saleDate = String(data.get("saleDate") || today());
+  const deliveryDate = String(data.get("deliveryDate") || "");
   const saleStatus = String(data.get("saleStatus") || "Contratada");
+  const sharedSale = data.get("sharedSale") === "on";
+  const externalAgent = String(data.get("externalAgent") || "").trim();
   const financialLocked = Boolean(id && activePaymentsForSale(id).length);
   const commissionRate = financialLocked
     ? numberValue(current?.commissionRate)
@@ -3246,6 +3393,20 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
       formElement,
       "salePrice",
       "El precio vendido debe ser mayor que cero"
+    );
+  }
+  if (deliveryDate && (!isValidIsoDate(deliveryDate) || deliveryDate < saleDate)) {
+    return showFieldError(
+      formElement,
+      "deliveryDate",
+      "La entrega no puede ser anterior a la fecha de venta"
+    );
+  }
+  if (sharedSale && !externalAgent) {
+    return showFieldError(
+      formElement,
+      "externalAgent",
+      "Indica el nombre del asesor o broker externo"
     );
   }
   if (commissionAmount <= 0) {
@@ -3335,6 +3496,9 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
     salePrice,
     saleCurrency,
     saleDate,
+    deliveryDate,
+    sharedSale,
+    externalAgent: sharedSale ? externalAgent : "",
     commissionRate,
     commissionAmount,
     commissionCurrency,

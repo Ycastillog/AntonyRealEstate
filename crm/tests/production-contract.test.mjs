@@ -295,6 +295,25 @@ test("production workflows retain capture date, cancellation reason, installment
   );
 });
 
+test("client feedback fields and collection visibility remain wired end to end", () => {
+  assert.match(html, /name="propertyStage"[\s\S]{0,260}>Listo para entrega</);
+  assert.match(html, /name="deliveryDate"[^>]+type="date"/);
+  assert.match(html, /name="sharedSale"[^>]+type="checkbox"/);
+  assert.match(html, /name="externalAgent"[^>]+maxlength="200"/);
+  assert.match(html, /Buscar cliente, proyecto o unidad/);
+  assert.match(html, /data-collection-filter="all"[^>]+aria-pressed="true"/);
+
+  assert.match(app, /let collectionFilter = "all"/);
+  assert.match(app, /state\.sales\.filter\(\(sale\) => !isCancelledSale\(sale\)\)/);
+  assert.match(app, /relatedOperations[\s\S]{0,220}sale\.project[\s\S]{0,100}sale\.unit/);
+  assert.match(app, /data-installment-percentage/);
+  assert.match(app, /syncInstallmentAmountFromPercentage/);
+  assert.match(app, /scheduledPercentage/);
+  assert.match(app, /sharedSale && !externalAgent/);
+  assert.match(app, /deliveryDate < saleDate/);
+  assert.match(app, /externalAgent: sharedSale \? externalAgent : ""/);
+});
+
 test("local demo and cloud production paths stay separated", () => {
   assert.match(app, /const IS_LOCAL_HOST = \["localhost", "127\.0\.0\.1", "::1"\]/);
   assert.match(app, /const DEMO_MODE = IS_LOCAL_HOST && QUERY\.get\("cloud"\) !== "1"/);

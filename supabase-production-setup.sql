@@ -424,6 +424,7 @@ create table if not exists public.crm_clients (
   source text,
   stage text not null default 'Nuevo',
   desired_zone text,
+  property_stage text not null default 'Sin definir',
   budget numeric(18,2),
   budget_currency text,
   captured_at timestamptz not null default clock_timestamp(),
@@ -470,6 +471,9 @@ create table if not exists public.crm_clients (
   constraint crm_clients_zone_check check (
     desired_zone is null or char_length(btrim(desired_zone)) between 1 and 200
   ),
+  constraint crm_clients_property_stage_check check (
+    property_stage in ('Sin definir', 'Listo', 'En planos', 'En construcción', 'Indiferente')
+  ),
   constraint crm_clients_budget_check check (
     budget is null
     or (budget >= 0 and budget::text not in ('NaN', 'Infinity', '-Infinity'))
@@ -500,6 +504,9 @@ create table if not exists public.crm_sales (
   sale_price numeric(18,2) not null,
   sale_currency text not null,
   sale_date date not null default current_date,
+  delivery_date date,
+  shared_sale boolean not null default false,
+  external_agent text,
   commission_rate numeric(7,4),
   commission_amount numeric(18,2) not null,
   commission_currency text not null,
@@ -541,6 +548,20 @@ create table if not exists public.crm_sales (
     and sale_price::text not in ('NaN', 'Infinity', '-Infinity')
   ),
   constraint crm_sales_currency_check check (sale_currency in ('USD', 'DOP')),
+  constraint crm_sales_delivery_date_check check (
+    delivery_date is null or delivery_date >= sale_date
+  ),
+  constraint crm_sales_shared_sale_check check (
+    (
+      shared_sale
+      and nullif(btrim(coalesce(external_agent, '')), '') is not null
+      and char_length(btrim(external_agent)) <= 200
+    )
+    or (
+      not shared_sale
+      and external_agent is null
+    )
+  ),
   constraint crm_sales_commission_rate_check check (
     commission_rate is null
     or (
@@ -579,6 +600,14 @@ comment on table public.crm_sales is
 
 -- Compatibilidad con instalaciones creadas por una version anterior del archivo.
 alter table public.crm_sales alter column developer drop not null;
+alter table public.crm_clients
+  add column if not exists property_stage text not null default 'Sin definir';
+alter table public.crm_sales
+  add column if not exists delivery_date date;
+alter table public.crm_sales
+  add column if not exists shared_sale boolean not null default false;
+alter table public.crm_sales
+  add column if not exists external_agent text;
 
 create table if not exists public.crm_commission_installments (
   owner_id uuid not null default auth.uid(),
@@ -782,6 +811,13 @@ alter table public.crm_clients
     budget is null
     or (budget >= 0 and budget::text not in ('NaN', 'Infinity', '-Infinity'))
   );
+alter table public.crm_clients
+  drop constraint if exists crm_clients_property_stage_check;
+alter table public.crm_clients
+  add constraint crm_clients_property_stage_check
+  check (
+    property_stage in ('Sin definir', 'Listo', 'En planos', 'En construcción', 'Indiferente')
+  );
 
 alter table public.crm_sales
   drop constraint if exists crm_sales_currency_check;
@@ -820,6 +856,26 @@ alter table public.crm_sales
   check (
     commission_amount >= 0
     and commission_amount::text not in ('NaN', 'Infinity', '-Infinity')
+  );
+alter table public.crm_sales
+  drop constraint if exists crm_sales_delivery_date_check;
+alter table public.crm_sales
+  add constraint crm_sales_delivery_date_check
+  check (delivery_date is null or delivery_date >= sale_date);
+alter table public.crm_sales
+  drop constraint if exists crm_sales_shared_sale_check;
+alter table public.crm_sales
+  add constraint crm_sales_shared_sale_check
+  check (
+    (
+      shared_sale
+      and nullif(btrim(coalesce(external_agent, '')), '') is not null
+      and char_length(btrim(external_agent)) <= 200
+    )
+    or (
+      not shared_sale
+      and external_agent is null
+    )
   );
 
 alter table public.crm_commission_installments
@@ -1838,6 +1894,15 @@ begin
   end if;
 
   if exists (
+    select 1 from jsonb_array_elements(v_sales) as x(value)
+    where x.value ? 'shared_sale'
+      and jsonb_typeof(x.value -> 'shared_sale') is distinct from 'boolean'
+      and jsonb_typeof(x.value -> 'shared_sale') is distinct from 'null'
+  ) then
+    raise exception 'shared_sale debe ser boolean o null' using errcode = '22023';
+  end if;
+
+  if exists (
     select 1 from jsonb_array_elements(v_installments) as x(value)
     where jsonb_typeof(x.value -> 'sequence') is distinct from 'number'
        or jsonb_typeof(x.value -> 'amount') is distinct from 'number'
@@ -1856,7 +1921,7 @@ begin
   -- Solo INSERT. Cualquier error revierte toda la llamada, incluidas las filas y
   -- sus entradas de auditoria; no existe ninguna ruta de merge con datos previos.
   insert into public.crm_clients (
-      owner_id, id, name, phone, email, source, stage, desired_zone,
+      owner_id, id, name, phone, email, source, stage, desired_zone, property_stage,
       budget, budget_currency, captured_at, notes, created_at, updated_at
   )
   select
@@ -1868,6 +1933,7 @@ begin
       nullif(btrim(x.value ->> 'source'), ''),
       coalesce(nullif(btrim(x.value ->> 'stage'), ''), 'Nuevo'),
       nullif(btrim(x.value ->> 'desired_zone'), ''),
+      coalesce(nullif(btrim(x.value ->> 'property_stage'), ''), 'Sin definir'),
       (x.value ->> 'budget')::numeric,
       upper(nullif(btrim(x.value ->> 'budget_currency'), '')),
       coalesce((x.value ->> 'captured_at')::timestamptz, clock_timestamp()),
@@ -1892,7 +1958,8 @@ begin
 
     insert into public.crm_sales (
       owner_id, id, client_id, project, unit, developer, status,
-      sale_price, sale_currency, sale_date, commission_rate,
+      sale_price, sale_currency, sale_date, delivery_date, shared_sale, external_agent,
+      commission_rate,
       commission_amount, commission_currency, notes, cancel_reason,
       cancelled_at, created_at, updated_at
     )
@@ -1907,6 +1974,9 @@ begin
       (v_item ->> 'sale_price')::numeric,
       upper(nullif(btrim(v_item ->> 'sale_currency'), '')),
       coalesce((v_item ->> 'sale_date')::date, current_date),
+      (v_item ->> 'delivery_date')::date,
+      coalesce((v_item ->> 'shared_sale')::boolean, false),
+      nullif(btrim(v_item ->> 'external_agent'), ''),
       (v_item ->> 'commission_rate')::numeric,
       (v_item ->> 'commission_amount')::numeric,
       upper(coalesce(
@@ -1982,7 +2052,8 @@ begin
   -- por historicos ya quedaron fuera del indice unico parcial.
   insert into public.crm_sales (
     owner_id, id, client_id, project, unit, developer, status,
-    sale_price, sale_currency, sale_date, commission_rate,
+    sale_price, sale_currency, sale_date, delivery_date, shared_sale, external_agent,
+    commission_rate,
     commission_amount, commission_currency, notes, cancel_reason,
     cancelled_at, created_at, updated_at
   )
@@ -1997,6 +2068,9 @@ begin
     (x.value ->> 'sale_price')::numeric,
     upper(nullif(btrim(x.value ->> 'sale_currency'), '')),
     coalesce((x.value ->> 'sale_date')::date, current_date),
+    (x.value ->> 'delivery_date')::date,
+    coalesce((x.value ->> 'shared_sale')::boolean, false),
+    nullif(btrim(x.value ->> 'external_agent'), ''),
     (x.value ->> 'commission_rate')::numeric,
     (x.value ->> 'commission_amount')::numeric,
     upper(coalesce(
@@ -2148,6 +2222,9 @@ declare
   v_sale_price numeric;
   v_sale_currency text;
   v_sale_date date;
+  v_delivery_date date;
+  v_shared_sale boolean;
+  v_external_agent text;
   v_commission_rate numeric;
   v_commission_amount numeric;
   v_commission_currency text;
@@ -2237,6 +2314,14 @@ begin
       message = 'Los importes de p_sale deben ser numeros JSON finitos';
   end if;
 
+  if p_sale ? 'shared_sale'
+     and jsonb_typeof(p_sale -> 'shared_sale') is distinct from 'boolean'
+     and jsonb_typeof(p_sale -> 'shared_sale') is distinct from 'null' then
+    raise exception using
+      errcode = '22023',
+      message = 'p_sale.shared_sale debe ser boolean o null';
+  end if;
+
   v_sale_id := nullif(btrim(p_sale ->> 'id'), '');
   v_client_id := nullif(btrim(p_sale ->> 'client_id'), '');
   v_project := nullif(btrim(p_sale ->> 'project'), '');
@@ -2250,6 +2335,9 @@ begin
   v_sale_price := (p_sale ->> 'sale_price')::numeric;
   v_sale_currency := upper(nullif(btrim(p_sale ->> 'sale_currency'), ''));
   v_sale_date := (p_sale ->> 'sale_date')::date;
+  v_delivery_date := nullif(p_sale ->> 'delivery_date', '')::date;
+  v_shared_sale := coalesce((p_sale ->> 'shared_sale')::boolean, false);
+  v_external_agent := nullif(btrim(p_sale ->> 'external_agent'), '');
   v_commission_rate := (p_sale ->> 'commission_rate')::numeric;
   v_commission_amount := (p_sale ->> 'commission_amount')::numeric;
   v_commission_currency := upper(coalesce(
@@ -2295,6 +2383,20 @@ begin
 
   if v_sale_date is null then
     raise exception 'sale_date es obligatoria';
+  end if;
+
+  if v_delivery_date is not null and v_delivery_date < v_sale_date then
+    raise exception 'delivery_date no puede ser anterior a sale_date';
+  end if;
+
+  if v_shared_sale and v_external_agent is null then
+    raise exception 'Una venta compartida requiere external_agent';
+  end if;
+  if not v_shared_sale and v_external_agent is not null then
+    raise exception 'external_agent solo aplica cuando shared_sale es true';
+  end if;
+  if v_external_agent is not null and char_length(v_external_agent) > 200 then
+    raise exception 'external_agent no puede exceder 200 caracteres';
   end if;
 
   if v_commission_rate is not null and (
@@ -2485,7 +2587,8 @@ begin
     -- la actualizacion final aplica Cancelada con motivo y fecha.
     insert into public.crm_sales (
       owner_id, id, client_id, project, unit, developer, status,
-      sale_price, sale_currency, sale_date, commission_rate,
+      sale_price, sale_currency, sale_date, delivery_date, shared_sale, external_agent,
+      commission_rate,
       commission_amount, commission_currency, notes, cancel_reason, cancelled_at
     )
     values (
@@ -2496,7 +2599,8 @@ begin
       v_unit,
       v_developer,
       case when v_status = 'Cancelada' then 'Reservada' else v_status end,
-      v_sale_price, v_sale_currency, v_sale_date, v_commission_rate,
+      v_sale_price, v_sale_currency, v_sale_date, v_delivery_date,
+      v_shared_sale, v_external_agent, v_commission_rate,
       v_commission_amount, v_commission_currency, v_notes,
       case when v_status = 'Cancelada' then null else v_cancel_reason end,
       case when v_status = 'Cancelada' then null else v_cancelled_at end
@@ -2637,6 +2741,9 @@ begin
       sale_price = v_sale_price,
       sale_currency = v_sale_currency,
       sale_date = v_sale_date,
+      delivery_date = v_delivery_date,
+      shared_sale = v_shared_sale,
+      external_agent = v_external_agent,
       commission_rate = v_commission_rate,
       commission_amount = v_commission_amount,
       commission_currency = v_commission_currency,
