@@ -1,42 +1,34 @@
-# Siguiente fase tecnica
+# Estado del backend y próximos pasos
 
-La pagina actual es estatica y publica en GitHub Pages. Para que funcione como herramienta real con datos compartidos entre todos los visitantes, hace falta conectar servicios externos.
+## Estado de producción — 25 de agosto de 2026
 
-## Requerido para produccion
+El backend de producción está aprovisionado en Supabase y conectado al frontend:
 
-1. Base de datos
-   - Supabase, Firebase o similar.
-   - Guardar propiedades, clientes, estados, testimonios y unidades entregadas.
+- Proyecto `antony-real-estate-production` (`jwbhzunfgaqvdthvruma`) activo.
+- Supabase Auth con registro público y usuarios anónimos desactivados.
+- Cuenta administrativa confirmada con `app_metadata.role=admin`.
+- PostgreSQL con clientes, ventas, cuotas, cobros y auditoría.
+- RLS por propietario, permisos mínimos y RPC transaccionales.
+- Migración `supabase-production-setup.sql` ejecutada y reejecutada sin errores.
+- Prueba real `crm/tests/supabase-acceptance.sql` aprobada con rollback limpio.
+- 39/39 pruebas automatizadas aprobadas.
+- URL y clave publicable configuradas en `media-config.js`; no hay claves privadas en el navegador.
 
-2. Almacenamiento de fotos y videos
-   - Supabase Storage, Firebase Storage, Cloudinary o S3.
-   - Evita guardar videos pesados en el navegador.
+La contraseña antigua que existió en el historial de Git se considera pública y no se reutilizó para Supabase. El acceso actual depende exclusivamente de Supabase Auth.
 
-3. Panel administrativo real
-   - Login con usuario y contrasena.
-   - Roles para editar propiedades, subir fotos, subir videos y cambiar estados.
+## Operación pendiente después del lanzamiento
 
-4. Formularios reales
-   - Guardar leads en base de datos.
-   - Enviar notificacion por email o WhatsApp Business.
+1. Cambiar la contraseña temporal desde **Sistema → Cambiar contraseña**.
+2. Definir frecuencia, responsable y ubicación cifrada de los respaldos JSON.
+3. Activar y comprobar la política de backups/PITR disponible en el plan de Supabase.
+4. Revisar trimestralmente usuarios, auditoría, políticas RLS y dependencias del frontend.
 
-5. WhatsApp Business
-   - Numero real configurado en `window.ANTONY_WHATSAPP_NUMBER` dentro de `contact.js`.
-   - Para mensajes automatizados se necesita API oficial o proveedor.
+## Fases opcionales posteriores
 
-6. Dominio
-   - Comprar dominio tipo `antonyfulgencio.com`.
-   - Apuntarlo a GitHub Pages o a un hosting con backend.
+- Notificaciones automáticas de vencimientos por correo o WhatsApp Business.
+- Entidades maestras para desarrolladoras, proyectos e inventario de unidades.
+- Adjuntos privados de contratos y comprobantes en un bucket separado y no público.
+- Roles adicionales si se incorporan asistentes o vendedores.
+- Analytics de visitas y conversiones del sitio público.
 
-7. Analytics
-   - Google Analytics, Plausible o Meta Pixel.
-   - Medir visitas, clics en WhatsApp, propiedades vistas y formularios iniciados.
-
-## Datos reales que faltan
-
-- Integracion avanzada con WhatsApp Business si se quieren mensajes automatizados.
-- Fotos reales de entregas.
-- Videos reales o reels descargados/autorizados.
-- Testimonios reales con nombre o captura.
-- Propiedades reales con precio, estado, metraje, ubicacion y multimedia.
-- Dominio final.
+No son requisitos para el primer lanzamiento funcional del CRM. El proceso exacto está en `PRODUCTION-RUNBOOK.md`.

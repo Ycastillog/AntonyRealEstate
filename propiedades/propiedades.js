@@ -125,7 +125,59 @@ const count = document.querySelector("#propertyResultsCount");
 const toast = document.querySelector("#propertyToast");
 
 function whatsappUrl(message) {
-  return window.antonyWhatsappUrl ? window.antonyWhatsappUrl(message) : `https://wa.me/?text=${encodeURIComponent(message)}`;
+  const fallback = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  const candidate = window.antonyWhatsappUrl ? window.antonyWhatsappUrl(message) : fallback;
+  return safeUrl(candidate) || fallback;
+}
+
+function textValue(value, fallback = "") {
+  return value == null ? fallback : String(value);
+}
+
+function escapeHtml(value) {
+  return textValue(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value);
+}
+
+function safeUrl(value, allowedRelativePrefixes = []) {
+  const raw = textValue(value).trim();
+  if (!raw || /[\u0000-\u001f\u007f]/.test(raw)) return "";
+  if (/^(?:javascript|data|vbscript|file|blob):/i.test(raw)) return "";
+
+  try {
+    const parsed = new URL(raw, window.location.href);
+    if (parsed.protocol === "https:") return parsed.href;
+
+    const relativeAllowed =
+      allowedRelativePrefixes.some((prefix) => raw.startsWith(prefix)) &&
+      !/^[a-z][a-z0-9+.-]*:/i.test(raw) &&
+      !raw.startsWith("//") &&
+      !raw.includes("\\") &&
+      parsed.origin === window.location.origin;
+    return relativeAllowed ? raw : "";
+  } catch {
+    return "";
+  }
+}
+
+function safeRelativeRoute(value) {
+  const raw = textValue(value).trim();
+  if (!/^(?:[a-z0-9][a-z0-9-]*\/)+$/i.test(raw)) return "";
+  return raw;
+}
+
+function safeNumber(value) {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function plainSlug(value) {
@@ -139,51 +191,62 @@ function plainSlug(value) {
 
 function normalizeRemoteProperty(item) {
   const tags = Array.isArray(item.tags)
-    ? item.tags
+    ? item.tags.map((tag) => textValue(tag).trim()).filter(Boolean)
     : String(item.tags || "")
         .split(",")
         .map((tag) => tag.trim())
         .filter(Boolean);
   const mediaUrls = Array.isArray(item.media_urls) ? item.media_urls : [item.image_url].filter(Boolean);
-  const title = item.title || "Propiedad para evaluar";
-  const priceLabel = item.price_label || "Precio a consultar";
+  const title = textValue(item.title, "Propiedad para evaluar") || "Propiedad para evaluar";
+  const priceLabel = textValue(item.price_label, "Precio a consultar") || "Precio a consultar";
+  const type = textValue(item.type, "apartamento") || "apartamento";
+  const status = ["disponible", "reservada", "vendida"].includes(item.status)
+    ? item.status
+    : "disponible";
+  const remoteImage = [item.image_url, ...mediaUrls]
+    .map((url) => safeUrl(url))
+    .find(Boolean);
 
   return {
-    id: item.id,
+    id: textValue(item.id),
     title,
-    subtitle: item.subtitle || title,
+    subtitle: textValue(item.subtitle, title) || title,
     priceLabel,
-    priceUsd: item.price_usd ?? null,
-    type: item.type || "apartamento",
-    city: item.city || plainSlug(item.city_label),
-    category: item.category || "santo-domingo",
-    cityLabel: item.city_label || "",
-    zone: item.zone || plainSlug(item.zone_label),
-    zoneLabel: item.zone_label || "",
-    beds: item.beds ?? null,
-    meters: item.meters ?? null,
-    status: item.status || "disponible",
-    statusLabel: item.status_label || "Disponible",
+    priceUsd: safeNumber(item.price_usd),
+    type,
+    city: textValue(item.city) || plainSlug(item.city_label),
+    category: textValue(item.category, "santo-domingo") || "santo-domingo",
+    cityLabel: textValue(item.city_label),
+    zone: textValue(item.zone) || plainSlug(item.zone_label),
+    zoneLabel: textValue(item.zone_label),
+    beds: safeNumber(item.beds),
+    meters: safeNumber(item.meters),
+    status,
+    statusLabel: textValue(item.status_label, "Disponible") || "Disponible",
     detailUrl: "",
-    image: item.image_url || mediaUrls[0] || "../assets/properties/mirador-sur/foto-01.jpg",
-    tags: tags.length ? tags : [item.type || "Propiedad"],
-    notes: item.notes || "Propiedad cargada por Antony. Disponibilidad, precio y condiciones se confirman antes de avanzar.",
+    image: remoteImage || "../assets/properties/mirador-sur/foto-01.jpg",
+    tags: tags.length ? tags : [type || "Propiedad"],
+    notes: textValue(item.notes) || "Propiedad cargada por Antony. Disponibilidad, precio y condiciones se confirman antes de avanzar.",
     message: `Hola Antony, vi la propiedad ${title} (${priceLabel}) en tu pagina y quiero mas informacion.`
   };
 }
 
 async function loadRemoteProperties() {
   if (!hasRemoteProperties) return [];
-  const url = `${config.supabaseUrl}/rest/v1/${config.supabasePropertiesTable}?select=*&is_published=eq.true&order=is_featured.desc,created_at.desc`;
-  const response = await fetch(url, {
-    headers: {
-      apikey: config.supabaseAnonKey,
-      Authorization: `Bearer ${config.supabaseAnonKey}`
-    }
-  });
-  if (!response.ok) return [];
-  const items = await response.json();
-  return items.map(normalizeRemoteProperty);
+  try {
+    const url = `${config.supabaseUrl}/rest/v1/${config.supabasePropertiesTable}?select=*&is_published=eq.true&order=is_featured.desc,created_at.desc`;
+    const response = await fetch(url, {
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`
+      }
+    });
+    if (!response.ok) return [];
+    const items = await response.json();
+    return items.map(normalizeRemoteProperty);
+  } catch {
+    return [];
+  }
 }
 
 function showToast(message) {
@@ -256,39 +319,49 @@ function matches(property, filters) {
 }
 
 function propertyCard(property) {
-  const hasDetail = Boolean(property.detailUrl);
-  const primaryHref = hasDetail ? property.detailUrl : whatsappUrl(property.message);
+  const detailUrl = safeRelativeRoute(property.detailUrl);
+  const hasDetail = Boolean(detailUrl);
+  const contactUrl = safeUrl(whatsappUrl(textValue(property.message))) || "https://wa.me/";
+  const primaryHref = hasDetail ? detailUrl : contactUrl;
   const primaryAttrs = hasDetail ? "" : 'target="_blank" rel="noreferrer"';
   const primaryLabel = hasDetail ? "Ver detalles" : "Solicitar asesoria";
-  const mediaAttrs = hasDetail ? `href="${property.detailUrl}"` : `href="${whatsappUrl(property.message)}" target="_blank" rel="noreferrer"`;
+  const mediaAttrs = hasDetail
+    ? `href="${escapeAttribute(detailUrl)}"`
+    : `href="${escapeAttribute(contactUrl)}" target="_blank" rel="noreferrer"`;
+  const imageUrl = safeUrl(property.image, ["../assets/", "./assets/", "/assets/"])
+    || "../assets/properties/mirador-sur/foto-01.jpg";
+  const status = ["disponible", "reservada", "vendida"].includes(property.status)
+    ? property.status
+    : "disponible";
   const meta = [
-    property.cityLabel,
-    property.beds ? `${property.beds} hab.` : "",
-    property.meters ? `${property.meters} m2` : ""
+    textValue(property.cityLabel),
+    safeNumber(property.beds) ? `${safeNumber(property.beds)} hab.` : "",
+    safeNumber(property.meters) ? `${safeNumber(property.meters)} m2` : ""
   ].filter(Boolean);
+  const tags = Array.isArray(property.tags) ? property.tags : [];
 
   return `
     <article class="featured-property-card property-result-card">
-      <a class="featured-property-media" ${mediaAttrs} aria-label="${primaryLabel} de ${property.title}">
-        <img src="${property.image}" alt="${property.title}" loading="lazy" />
-        <span class="property-status ${property.status}">${property.statusLabel}</span>
+      <a class="featured-property-media" ${mediaAttrs} aria-label="${escapeAttribute(`${primaryLabel} de ${textValue(property.title)}`)}">
+        <img src="${escapeAttribute(imageUrl)}" alt="${escapeAttribute(property.title)}" loading="lazy" />
+        <span class="property-status ${status}">${escapeHtml(property.statusLabel)}</span>
       </a>
       <div class="featured-property-copy">
-        <p class="eyebrow">${property.zoneLabel}</p>
-        <h3>${property.subtitle}</h3>
-        <strong>${property.priceLabel}</strong>
-        ${meta.length ? `<div class="property-card-meta">${meta.map((item) => `<span>${item}</span>`).join("")}</div>` : ""}
-        <p>${property.notes}</p>
+        <p class="eyebrow">${escapeHtml(property.zoneLabel)}</p>
+        <h3>${escapeHtml(property.subtitle)}</h3>
+        <strong>${escapeHtml(property.priceLabel)}</strong>
+        ${meta.length ? `<div class="property-card-meta">${meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
+        <p>${escapeHtml(property.notes)}</p>
         <div class="route-tags">
-          ${property.tags.map((tag) => `<small>${tag}</small>`).join("")}
+          ${tags.map((tag) => `<small>${escapeHtml(tag)}</small>`).join("")}
         </div>
         <div class="property-actions">
-          <a class="primary-button" href="${primaryHref}" ${primaryAttrs}>
+          <a class="primary-button" href="${escapeAttribute(primaryHref)}" ${primaryAttrs}>
             <i data-lucide="${hasDetail ? "building-2" : "message-circle"}"></i>
             <span>${primaryLabel}</span>
           </a>
           ${hasDetail ? `
-            <a class="ghost-button" href="${whatsappUrl(property.message)}" target="_blank" rel="noreferrer">
+            <a class="ghost-button" href="${escapeAttribute(contactUrl)}" target="_blank" rel="noreferrer">
               <i data-lucide="message-circle"></i>
               <span>Solicitar asesoria</span>
             </a>

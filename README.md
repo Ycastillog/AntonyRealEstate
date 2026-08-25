@@ -30,11 +30,15 @@ Luego abre:
 http://127.0.0.1:4173
 ```
 
-## Importante
+## Sitio y oficina privada
 
-Esta version funciona como V1 comercial estatica en GitHub Pages. La pagina publica muestra marca personal, evidencia real, propiedades destacadas, inventario visual por zona y enlaces directos para solicitar asesoria.
+La pagina publica funciona en GitHub Pages con el dominio `antonyrealestate.com`. El repositorio también incluye:
 
-El portal permite preparar contenido, pero la publicacion permanente de fotos, videos y propiedades nuevas requiere una base de datos y almacenamiento en la nube.
+- `/portal/`: administración autenticada de propiedades y evidencias.
+- `/crm/`: Antony Private Office para clientes, ventas, cuotas de comisión, cobros y reportes.
+- `supabase-production-setup.sql`: migración de PostgreSQL, Storage, RLS, auditoría y operaciones transaccionales.
+
+En localhost el CRM usa por defecto datos ficticios del navegador. El backend de producción ya está aprovisionado en Supabase; en el dominio solo entra una cuenta autorizada mediante Supabase Auth. La operación y los respaldos se rigen por `PRODUCTION-RUNBOOK.md`.
 
 ## WhatsApp
 
@@ -46,8 +50,8 @@ window.ANTONY_WHATSAPP_NUMBER = "18299104940";
 
 Todos los botones de WhatsApp usan ese numero y preparan el mensaje segun el contexto.
 
-## Siguiente fase
+## Producción
 
-Ver `BACKEND-NEXT-STEPS.md` para convertir esta pagina estatica en una herramienta real con base de datos, panel administrativo, storage de fotos/videos, analytics y dominio propio.
+Ver `PRODUCTION-RUNBOOK.md` para aprovisionar Supabase, ejecutar las pruebas de aceptación, publicar y operar el sistema.
 
-Ver `CLIENT-PROPOSAL.md` para una estructura de venta por fases y rangos sugeridos de precio.
+Ver `CLIENT-PROPOSAL.md` para la estructura comercial por fases.

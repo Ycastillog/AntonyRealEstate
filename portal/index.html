@@ -2,13 +2,28 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js; style-src 'self' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; worker-src 'self' blob:"
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow,noarchive" />
     <title>Centro de contenido | Antony Real Estate</title>
-    <link rel="stylesheet" href="../styles.css?v=official-logo-v1" />
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
-    <script src="../media-config.js?v=property-portal-v1" defer></script>
-    <script src="../admin.js?v=property-portal-v1" defer></script>
+    <link rel="stylesheet" href="../styles.css?v=secure-auth-v4" />
+    <script src="../media-config.js?v=secure-auth-v3" defer></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"
+      integrity="sha384-ysv13JVP3fufiEXfjML9OdCa/rRbMJvUBOWyor82wfuK8INNZAvmbxHgKIHi+oqz"
+      crossorigin="anonymous"
+      defer
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"
+      integrity="sha384-uTYyvsSSUZeaPhb5RbKlQa0zY/WpX/QHfvg2mczXyBQOpkWPEDy9lczyp+w7SKXu"
+      crossorigin="anonymous"
+      defer
+    ></script>
+    <script src="../admin.js?v=secure-auth-v4" defer></script>
   </head>
   <body class="admin-page">
     <header class="topbar">
@@ -45,16 +60,17 @@
       </section>
 
       <section class="admin-login" id="loginPanel">
-        <form class="admin-card" id="loginForm">
+        <form class="admin-card" id="loginForm" method="post" action="./">
           <p class="eyebrow">Entrar</p>
           <h2>Centro de contenido</h2>
+          <p class="content-note" id="loginStatus" role="status">Validando acceso seguro...</p>
           <label>
-            Usuario
-            <input name="username" autocomplete="username" placeholder="Usuario" required />
+            Correo
+            <input name="email" type="email" autocomplete="email" inputmode="email" maxlength="254" placeholder="correo@dominio.com" required />
           </label>
           <label>
             Contraseña
-            <input name="password" type="password" autocomplete="current-password" placeholder="Clave del portal" required />
+            <input name="password" type="password" autocomplete="current-password" maxlength="1024" placeholder="Contraseña de Supabase" required />
           </label>
           <button class="primary-button" type="submit">
             <i data-lucide="lock-keyhole"></i>
@@ -98,7 +114,12 @@
           </button>
         </div>
 
-        <form class="admin-card evidence-form" id="evidenceForm" hidden>
+        <p class="admin-security-note" role="note">
+          <i data-lucide="shield-alert" aria-hidden="true"></i>
+          <span>Este portal almacena material promocional en un bucket público. No subas contratos, identificaciones, comprobantes ni archivos privados de clientes.</span>
+        </p>
+
+        <form class="admin-card evidence-form" id="evidenceForm" method="post" action="./" hidden>
           <div class="section-head">
             <div>
               <p class="eyebrow">Nuevo contenido</p>
@@ -122,14 +143,14 @@
             </label>
             <label>
               Titulo corto
-              <input name="title" placeholder="Entrega en Santo Domingo" required />
+              <input name="title" maxlength="160" placeholder="Entrega en Santo Domingo" required />
             </label>
           </div>
 
           <div class="form-grid">
             <label>
               Ciudad o zona
-              <input name="city" placeholder="Santo Domingo, Punta Cana, Santiago..." />
+              <input name="city" maxlength="120" placeholder="Santo Domingo, Punta Cana, Santiago..." />
             </label>
             <label>
               Fecha del evento
@@ -139,14 +160,14 @@
 
           <label>
             Descripcion
-            <textarea name="description" rows="3" placeholder="Describe brevemente que se ve en la foto o video."></textarea>
+            <textarea name="description" rows="3" maxlength="3000" placeholder="Describe brevemente que se ve en la foto o video."></textarea>
           </label>
 
           <label class="upload-drop">
-            <input name="media" type="file" accept="image/*,video/*" required />
+            <input name="media" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif,video/mp4,video/webm,video/quicktime" required />
             <i data-lucide="upload-cloud"></i>
             <strong>Subir foto o video</strong>
-            <span>Foto o video de entrega, cliente, llaves, firma o testimonio.</span>
+            <span>Imágenes hasta 12 MB; videos MP4, WebM o MOV hasta 150 MB.</span>
           </label>
 
           <div class="admin-switches">
@@ -160,7 +181,7 @@
           </button>
         </form>
 
-        <form class="admin-card evidence-form" id="propertyForm" hidden>
+        <form class="admin-card evidence-form" id="propertyForm" method="post" action="./" hidden>
           <div class="section-head">
             <div>
               <p class="eyebrow">Nueva propiedad</p>
@@ -171,18 +192,18 @@
           <div class="form-grid">
             <label>
               Nombre
-              <input name="title" placeholder="Apartamento en Naco" required />
+              <input name="title" maxlength="160" placeholder="Apartamento en Naco" required />
             </label>
             <label>
               Frase corta
-              <input name="subtitle" placeholder="Torre moderna para inversion" required />
+              <input name="subtitle" maxlength="200" placeholder="Torre moderna para inversion" required />
             </label>
           </div>
 
           <div class="form-grid">
             <label>
               Precio visible
-              <input name="priceLabel" placeholder="US$185,000 o Precio a consultar" required />
+              <input name="priceLabel" maxlength="80" placeholder="US$185,000 o Precio a consultar" required />
             </label>
             <label>
               Precio en US$ para filtros
@@ -213,11 +234,11 @@
           <div class="form-grid">
             <label>
               Ciudad
-              <input name="cityLabel" placeholder="Santo Domingo, Punta Cana..." required />
+              <input name="cityLabel" maxlength="100" placeholder="Santo Domingo, Punta Cana..." required />
             </label>
             <label>
               Zona
-              <input name="zoneLabel" placeholder="Naco, Bavaro, Cap Cana..." required />
+              <input name="zoneLabel" maxlength="100" placeholder="Naco, Bavaro, Cap Cana..." required />
             </label>
           </div>
 
@@ -243,20 +264,20 @@
             </label>
             <label>
               Etiquetas
-              <input name="tags" placeholder="Familiar, Inversion, Desde USA" />
+              <input name="tags" maxlength="500" placeholder="Familiar, Inversion, Desde USA" />
             </label>
           </div>
 
           <label>
             Descripcion
-            <textarea name="notes" rows="3" placeholder="Describe amenidades, ubicacion y condiciones importantes."></textarea>
+            <textarea name="notes" rows="3" maxlength="3000" placeholder="Describe amenidades, ubicacion y condiciones importantes."></textarea>
           </label>
 
           <label class="upload-drop">
-            <input name="media" type="file" accept="image/*" multiple required />
+            <input name="media" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif" multiple required />
             <i data-lucide="images"></i>
             <strong>Subir fotos de la propiedad</strong>
-            <span>Puedes elegir varias fotos. La primera sera la imagen principal.</span>
+            <span>Hasta 20 imágenes de 12 MB cada una. La primera será la principal.</span>
           </label>
 
           <div class="admin-switches">

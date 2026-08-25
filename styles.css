@@ -3569,6 +3569,26 @@ textarea {
   gap: 10px;
 }
 
+.admin-security-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  color: #7a4b00;
+  background: #fff8e7;
+  border: 1px solid #efd59b;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.admin-security-note svg {
+  flex: 0 0 auto;
+  width: 18px;
+  margin-top: 1px;
+}
+
 .admin-card {
   display: grid;
   gap: 16px;
