@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co; img-src 'self' data: https:; object-src 'none'; base-uri 'self'; form-action 'self'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex,nofollow,noarchive" />
+    <title>Antony Private Office | CRM inmobiliario</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=production-v4" />
+    <script src="../media-config.js?v=secure-auth-v3" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js" integrity="sha384-ysv13JVP3fufiEXfjML9OdCa/rRbMJvUBOWyor82wfuK8INNZAvmbxHgKIHi+oqz" crossorigin="anonymous" defer></script>
+    <script src="backend.js?v=production-v4" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" integrity="sha384-uTYyvsSSUZeaPhb5RbKlQa0zY/WpX/QHfvg2mczXyBQOpkWPEDy9lczyp+w7SKXu" crossorigin="anonymous" defer></script>
+    <script src="app.js?v=production-v4" defer></script>
+  </head>
+  <body>
+    <main class="auth-shell" id="authShell" aria-labelledby="loginTitle">
+      <section class="auth-card">
+        <div class="auth-intro">
+          <a class="auth-brand" href="../" aria-label="Volver al sitio de Antony Real Estate">
+            <img src="../assets/antony-fulgencio-logo-transparent.png" alt="Antony Fulgencio Real Estate" />
+            <span><strong>CRM privado</strong><small>Gestión inmobiliaria</small></span>
+          </a>
+          <div class="auth-copy">
+            <span class="eyebrow">Oficina privada</span>
+            <h1 id="loginTitle">Tu operación inmobiliaria, protegida y en orden.</h1>
+            <p id="loginDescription">Accede al espacio de trabajo reservado para gestionar clientes, ventas y cobros de comisión.</p>
+          </div>
+          <div class="auth-security-note">
+            <span class="auth-security-icon" aria-hidden="true"><i data-lucide="shield-check"></i></span>
+            <p><strong>Conexión segura</strong>Tus credenciales y datos se cifran en tránsito.</p>
+          </div>
+        </div>
+        <form class="auth-form" id="loginForm" method="post" action="./" aria-describedby="loginDescription loginStatus">
+          <div class="auth-form-heading">
+            <span class="auth-form-icon" aria-hidden="true"><i data-lucide="lock-keyhole"></i></span>
+            <div><span class="eyebrow">Acceso autorizado</span><h2>Entrar al CRM</h2></div>
+          </div>
+          <label for="loginEmail">Correo electrónico</label>
+          <input id="loginEmail" name="email" type="email" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" placeholder="correo@empresa.com" required />
+          <label for="loginPassword">Contraseña</label>
+          <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
+          <button class="auth-text-button" id="forgotPasswordButton" type="button">¿Olvidaste tu contraseña?</button>
+          <button class="button button-primary auth-submit" id="loginSubmitButton" type="submit"><span>Ingresar a la oficina</span><i data-lucide="arrow-right" aria-hidden="true"></i></button>
+          <p class="auth-status" id="loginStatus" role="status" aria-live="polite">Usa las credenciales autorizadas para esta oficina privada.</p>
+        </form>
+        <form class="auth-form" id="recoveryForm" method="post" action="./" aria-describedby="recoveryDescription recoveryStatus" hidden>
+          <div class="auth-form-heading">
+            <span class="auth-form-icon" aria-hidden="true"><i data-lucide="mail-check"></i></span>
+            <div><span class="eyebrow">Recuperación segura</span><h2>Recuperar acceso</h2></div>
+          </div>
+          <p class="auth-form-description" id="recoveryDescription">Te enviaremos un enlace de un solo uso al correo autorizado.</p>
+          <label for="recoveryEmail">Correo electrónico</label>
+          <input id="recoveryEmail" name="email" type="email" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" placeholder="correo@empresa.com" required />
+          <button class="button button-primary auth-submit" id="recoverySubmitButton" type="submit"><span>Enviar enlace seguro</span><i data-lucide="send" aria-hidden="true"></i></button>
+          <button class="auth-text-button auth-back-button" id="recoveryBackButton" type="button"><i data-lucide="arrow-left" aria-hidden="true"></i>Volver al inicio de sesión</button>
+          <p class="auth-status" id="recoveryStatus" role="status" aria-live="polite">Solo las cuentas previamente autorizadas pueden recuperar el acceso.</p>
+        </form>
+        <form class="auth-form" id="passwordSetupForm" method="post" action="./" aria-describedby="passwordSetupDescription passwordSetupStatus" hidden>
+          <div class="auth-form-heading">
+            <span class="auth-form-icon" aria-hidden="true"><i data-lucide="key-round"></i></span>
+            <div><span class="eyebrow">Cuenta protegida</span><h2>Crear contraseña</h2></div>
+          </div>
+          <p class="auth-form-description" id="passwordSetupDescription">Define una contraseña privada para terminar de activar tu acceso.</p>
+          <p class="auth-account" id="passwordSetupEmail"></p>
+          <label for="newPassword">Nueva contraseña</label>
+          <input id="newPassword" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required />
+          <label for="confirmPassword">Confirmar contraseña</label>
+          <input id="confirmPassword" name="passwordConfirmation" type="password" autocomplete="new-password" minlength="12" maxlength="128" required />
+          <p class="auth-password-hint">Usa al menos 12 caracteres y evita reutilizar contraseñas.</p>
+          <button class="button button-primary auth-submit" id="passwordSetupSubmitButton" type="submit"><span>Guardar y entrar</span><i data-lucide="shield-check" aria-hidden="true"></i></button>
+          <button class="auth-text-button auth-back-button" id="passwordSetupCancelButton" type="button" hidden><i data-lucide="arrow-left" aria-hidden="true"></i>Volver a la oficina</button>
+          <button class="auth-text-button auth-back-button" id="passwordSetupRecoveryButton" type="button">Solicitar un enlace nuevo</button>
+          <p class="auth-status" id="passwordSetupStatus" role="status" aria-live="polite">El enlace debe ser válido y no haber expirado.</p>
+        </form>
+      </section>
+    </main>
+
+    <main class="app-shell" id="crmApp" hidden inert aria-hidden="true">
+      <a class="skip-link" href="#mainContent">Saltar al contenido</a>
+      <aside class="sidebar">
+        <a class="brand" href="../" aria-label="Volver al sitio de Antony Real Estate">
+          <img class="brand-logo" src="../assets/antony-fulgencio-logo-transparent.png" alt="Antony Fulgencio Real Estate" />
+          <span class="brand-product"><strong>CRM privado</strong><small>Gestión comercial</small></span>
+        </a>
+        <span class="sidebar-section-label">Operación</span>
+        <nav class="main-nav" aria-label="Secciones del CRM">
+          <button class="nav-item active" type="button" data-view-target="dashboard" aria-label="Resumen" title="Resumen"><span class="nav-icon" aria-hidden="true"><i data-lucide="layout-dashboard"></i></span><span>Resumen</span></button>
+          <button class="nav-item" type="button" data-view-target="clients" aria-label="Clientes" title="Clientes"><span class="nav-icon" aria-hidden="true"><i data-lucide="contact-round"></i></span><span>Clientes</span></button>
+          <button class="nav-item" type="button" data-view-target="sales" aria-label="Ventas" title="Ventas"><span class="nav-icon" aria-hidden="true"><i data-lucide="building-2"></i></span><span>Ventas</span></button>
+          <button class="nav-item" type="button" data-view-target="payments" aria-label="Cobros de comisión" title="Cobros de comisión"><span class="nav-icon" aria-hidden="true"><i data-lucide="badge-dollar-sign"></i></span><span>Cobros de comisión</span></button>
+          <button class="nav-item" type="button" data-view-target="reports" aria-label="Reportes" title="Reportes"><span class="nav-icon" aria-hidden="true"><i data-lucide="chart-no-axes-combined"></i></span><span>Reportes</span></button>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="profile-card">
+            <img src="../assets/antony-instagram-profile.jpg" alt="" />
+            <div><strong>Antony Fulgencio</strong><small>Asesor inmobiliario</small></div>
+          </div>
+          <span class="storage-badge" id="storageBadge" aria-live="polite">Nube segura / Supabase</span>
+        </div>
+      </aside>
+
+      <div class="workspace-shell">
+        <header class="topbar">
+          <div class="workspace-context">
+            <span class="workspace-kicker">Oficina privada</span>
+            <strong id="currentViewLabel">Resumen</strong>
+          </div>
+          <div class="topbar-actions">
+            <span class="topbar-date" id="currentDateLabel"></span>
+            <span class="environment-badge sync-state" id="environmentBadge" aria-label="Nube segura mediante Supabase" aria-live="polite"><i data-lucide="cloud" aria-hidden="true"></i><span>Nube segura / Supabase</span></span>
+            <span class="session-identity" aria-label="Identidad de la sesión actual">
+              <span class="session-avatar" aria-hidden="true"><i data-lucide="user-round"></i></span>
+              <span class="session-copy"><small>Sesión activa</small><strong id="currentUserEmail">Verificando sesión…</strong></span>
+            </span>
+            <button class="button button-secondary logout-button" type="button" id="logoutButton" aria-label="Cerrar sesión" title="Cerrar sesión"><i data-lucide="log-out" aria-hidden="true"></i><span>Cerrar sesión</span></button>
+            <details class="data-menu">
+              <summary class="button button-secondary" aria-label="Configuración y respaldo" title="Configuración y respaldo"><i data-lucide="settings-2" aria-hidden="true"></i><span>Sistema</span></summary>
+              <div class="data-menu-panel">
+                <button type="button" id="changePasswordButton"><i data-lucide="key-round" aria-hidden="true"></i>Cambiar contraseña</button>
+                <button type="button" id="exportBackupButton">Descargar respaldo</button>
+                <button class="file-action" type="button" id="importBackupButton">Importar respaldo</button>
+                <input id="importBackupInput" type="file" accept="application/json,.json" hidden />
+                <button class="demo-only" type="button" id="loadDemoButton">Cargar datos de ejemplo</button>
+                <button class="demo-only danger-option" type="button" id="resetDataButton">Vaciar CRM</button>
+              </div>
+            </details>
+          </div>
+        </header>
+
+        <section class="content-shell" id="mainContent" tabindex="-1">
+        <section class="view active" id="view-dashboard" data-view="dashboard">
+          <section class="dashboard-hero">
+            <div class="dashboard-hero-copy">
+              <span class="eyebrow">Agenda de hoy</span>
+              <h1>Buenos días, Antony.</h1>
+              <p id="dailyBriefText">Estamos preparando las prioridades de tu cartera.</p>
+              <div class="hero-actions">
+                <button class="button button-gold" type="button" data-view-target="payments"><i data-lucide="circle-dollar-sign" aria-hidden="true"></i>Revisar cobros de comisión</button>
+                <button class="button button-hero-secondary" type="button" data-open-drawer="saleForm"><i data-lucide="plus" aria-hidden="true"></i>Nueva venta</button>
+              </div>
+            </div>
+            <div class="hero-financial">
+              <span>Comisión pendiente</span>
+              <strong id="heroPending">US$0</strong>
+              <small id="heroPendingDop">RD$0 adicionales</small>
+              <div class="hero-progress" aria-hidden="true"><span id="heroProgressBar"></span></div>
+              <p id="heroProgressMeta">0% de comisión cobrada</p>
+            </div>
+          </section>
+          <div class="dashboard-section-heading">
+            <div><span class="eyebrow">Pulso comercial</span><h2>Tu cartera en números</h2></div>
+            <button class="button button-primary" type="button" data-open-drawer="saleForm"><i data-lucide="plus" aria-hidden="true"></i>Registrar venta</button>
+          </div>
+          <div class="metric-grid">
+            <article class="metric-card"><div class="metric-card-head"><span class="metric-icon"><i data-lucide="building-2"></i></span><span>Operaciones activas</span></div><strong id="metricSalesCount">0</strong><small id="metricSalesVolume">US$0 · RD$0</small></article>
+            <article class="metric-card"><div class="metric-card-head"><span class="metric-icon"><i data-lucide="calendar-check-2"></i></span><span>Cierres del año</span></div><strong id="metricYearSales">0</strong><small id="metricYearVolume">US$0 · RD$0</small></article>
+            <article class="metric-card metric-card-success"><div class="metric-card-head"><span class="metric-icon"><i data-lucide="landmark"></i></span><span>Comisiones cobradas</span></div><strong id="metricReceived">US$0</strong><small id="metricReceivedDop">RD$0</small></article>
+            <article class="metric-card metric-card-attention"><div class="metric-card-head"><span class="metric-icon"><i data-lucide="clock-3"></i></span><span>Por cobrar</span></div><strong id="metricPending">US$0</strong><small id="metricPendingDop">RD$0 por cobrar</small><small class="metric-alert" id="metricOverdue">0 vencidas</small></article>
+          </div>
+          <div class="dashboard-priority-grid">
+            <article class="card priority-card">
+              <div class="card-heading"><div><span class="eyebrow">Prioridad</span><h2>Atención requerida</h2></div><button class="text-button" type="button" data-view-target="payments">Ver cobros de comisión</button></div>
+              <div class="alert-list" id="collectionAlerts"></div><div class="empty-state compact" id="collectionAlertsEmpty" hidden>Todo está al día.</div>
+            </article>
+            <article class="card">
+              <div class="card-heading"><div><span class="eyebrow">Agenda</span><h2>Próximos cobros de comisión</h2></div><button class="text-button" type="button" data-view-target="payments">Gestionar</button></div>
+              <div class="pending-list" id="pendingList"></div><div class="empty-state compact" id="pendingEmpty" hidden>No hay comisiones pendientes.</div>
+            </article>
+          </div>
+          <div class="dashboard-insight-grid">
+            <article class="card">
+              <div class="card-heading"><div><span class="eyebrow">Tendencia</span><h2>Ventas por mes</h2></div><span class="helper-chip" id="trendYear"></span></div>
+              <div class="monthly-chart" id="monthlyChart" aria-label="Gráfico de ventas mensuales"></div>
+            </article>
+            <article class="card">
+              <div class="card-heading"><div><span class="eyebrow">Actividad</span><h2>Ventas recientes</h2></div><button class="text-button" type="button" data-view-target="sales">Ver todas</button></div>
+              <div class="table-wrap compact-table"><table><caption class="visually-hidden">Últimas ventas registradas</caption><thead><tr><th scope="col">Cliente / operación</th><th scope="col">Comisión</th><th scope="col">Estado</th></tr></thead><tbody id="recentSalesBody"></tbody></table></div>
+              <div class="empty-state compact" id="recentSalesEmpty" hidden>No hay ventas registradas todavía.</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="view-clients" data-view="clients">
+          <div class="page-heading">
+            <div><span class="eyebrow">Base de contactos</span><h1>Clientes</h1><p>Consulta relaciones, intereses y oportunidades desde un solo lugar.</p></div>
+            <button class="button button-primary" type="button" data-open-drawer="clientForm"><i data-lucide="user-round-plus" aria-hidden="true"></i>Nuevo cliente</button>
+          </div>
+          <div class="module-overview" aria-label="Resumen de clientes">
+            <article><span>Contactos</span><strong id="clientOverviewTotal">0</strong><small>Cartera registrada</small></article>
+            <article><span>Nuevos este mes</span><strong id="clientOverviewNew">0</strong><small>Captación mensual</small></article>
+            <article><span>En seguimiento</span><strong id="clientOverviewFollowUp">0</strong><small>Relaciones activas</small></article>
+            <article><span>Compradores</span><strong id="clientOverviewBuyers">0</strong><small>Clientes convertidos</small></article>
+          </div>
+          <article class="card records-card">
+            <div class="card-heading records-heading"><div><span class="eyebrow">Cartera privada</span><h2>Clientes registrados</h2><span class="records-count"><span id="clientsCount">0</span> contactos</span></div><div class="heading-tools"><input class="compact-input search-input" id="clientSearch" type="search" placeholder="Buscar nombre, teléfono o correo…" aria-label="Buscar cliente" /><select class="compact-input" id="clientStageFilter" aria-label="Filtrar clientes por etapa"><option value="">Todas las etapas</option><option value="Nuevo">Nuevo</option><option value="Calificado">Calificado</option><option value="En seguimiento">En seguimiento</option><option value="Comprador">Comprador</option><option value="Inactivo">Inactivo</option></select></div></div>
+            <div class="table-wrap desktop-table"><table class="crm-table clients-table"><caption class="visually-hidden">Clientes registrados</caption><thead><tr><th scope="col">Cliente</th><th scope="col">Contacto</th><th scope="col">Interés</th><th scope="col">Presupuesto</th><th scope="col">Estado</th><th scope="col"><span class="visually-hidden">Acciones</span></th></tr></thead><tbody id="clientsBody"></tbody></table></div>
+            <div class="mobile-record-list" id="clientsMobileList"></div><div class="empty-state" id="clientsEmpty" hidden>Aún no hay clientes.</div>
+          </article>
+          <form class="form-card drawer-panel" id="clientForm" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="clientFormTitle" inert>
+            <input name="id" type="hidden" />
+            <div class="drawer-heading"><div><span class="eyebrow">Contacto</span><h2 id="clientFormTitle">Agregar cliente</h2></div><button class="drawer-close" type="button" data-close-drawer aria-label="Cerrar formulario"><i data-lucide="x" aria-hidden="true"></i></button></div>
+            <div class="drawer-body">
+              <label>Nombre completo<input name="name" type="text" autocomplete="name" required /></label>
+              <p class="form-hint contact-requirement" id="clientContactRequirement"><i data-lucide="info" aria-hidden="true"></i><span>Teléfono o correo electrónico: completa al menos uno.</span></p>
+              <div class="form-grid">
+                <label>Teléfono<input name="phone" type="tel" autocomplete="tel" aria-describedby="clientContactRequirement" /></label><label>Correo electrónico<input name="email" type="email" autocomplete="email" aria-describedby="clientContactRequirement" /></label>
+                <label>Fecha de captación<input name="capturedAt" id="capturedAt" type="date" required /></label><label>Origen del contacto<select name="source"><option value="WhatsApp">WhatsApp</option><option value="Instagram">Instagram</option><option value="Referido">Referido</option><option value="Web">Página web</option><option value="Otro">Otro</option></select></label>
+                <label>Estado<select name="stage"><option value="Nuevo">Nuevo</option><option value="Calificado">Calificado</option><option value="En seguimiento">En seguimiento</option><option value="Comprador">Comprador</option><option value="Inactivo">Inactivo</option></select></label>
+                <label>Zona de interés<input name="desiredZone" type="text" /></label>
+                <label>Presupuesto<input name="budget" type="number" min="0" step="0.01" aria-describedby="clientBudgetHelp" /><small class="field-help" id="clientBudgetHelp">Monto estimado para orientar oportunidades.</small></label>
+                <label>Moneda<select name="budgetCurrency"><option value="USD">US$ Dólares</option><option value="DOP">RD$ Pesos</option></select></label>
+              </div>
+              <label>Notas<textarea name="notes" rows="4"></textarea></label>
+            </div>
+            <div class="form-actions drawer-footer"><button class="button button-secondary" type="button" id="cancelClientEdit">Cancelar</button><button class="button button-primary" type="submit" id="clientSubmitButton">Guardar cliente</button></div>
+          </form>
+        </section>
+
+        <section class="view" id="view-sales" data-view="sales">
+          <div class="page-heading">
+            <div><span class="eyebrow">Operaciones</span><h1>Ventas</h1><p>Revisa cada operación y actúa sobre su próxima etapa.</p></div>
+            <button class="button button-primary" type="button" data-open-drawer="saleForm"><i data-lucide="badge-plus" aria-hidden="true"></i>Nueva venta</button>
+          </div>
+          <div class="module-overview" aria-label="Resumen de operaciones">
+            <article><span>Reservadas</span><strong id="saleOverviewReserved">0</strong><small>En proceso</small></article>
+            <article><span>Contratadas</span><strong id="saleOverviewContracted">0</strong><small>Negocios formalizados</small></article>
+            <article><span>Entregadas</span><strong id="saleOverviewDelivered">0</strong><small>Operaciones completadas</small></article>
+          </div>
+          <article class="card records-card">
+            <div class="card-heading records-heading"><div><h2>Operaciones</h2><span class="records-count"><span id="salesCount">0</span> ventas</span></div><div class="heading-tools"><input class="compact-input search-input" id="saleSearch" type="search" placeholder="Buscar cliente, proyecto o unidad…" aria-label="Buscar venta" /><select class="compact-input" id="saleStatusFilter" aria-label="Filtrar por estado"><option value="">Todas las etapas</option><option value="Reservada">Reservada</option><option value="Contratada">Contratada</option><option value="Entregada">Entregada</option><option value="Cancelada">Cancelada</option></select></div></div>
+            <div class="table-wrap desktop-table"><table class="crm-table sales-table"><caption class="visually-hidden">Ventas registradas</caption><thead><tr><th scope="col">Cliente</th><th scope="col">Operación</th><th scope="col">Precio</th><th scope="col">Etapa</th><th scope="col">Comisión</th><th scope="col"><span class="visually-hidden">Acciones</span></th></tr></thead><tbody id="salesBody"></tbody></table></div>
+            <div class="mobile-record-list" id="salesMobileList"></div><div class="empty-state" id="salesEmpty" hidden>Aún no hay ventas.</div>
+          </article>
+          <form class="form-card drawer-panel drawer-panel-wide" id="saleForm" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="saleFormTitle" inert>
+            <input name="id" type="hidden" />
+            <div class="drawer-heading"><div><span class="eyebrow">Operación</span><h2 id="saleFormTitle">Registrar venta</h2></div><button class="drawer-close" type="button" data-close-drawer aria-label="Cerrar formulario"><i data-lucide="x" aria-hidden="true"></i></button></div>
+            <div class="drawer-body">
+              <div class="form-section"><h3>Cliente y propiedad</h3><div class="form-grid">
+                <label>Cliente<select name="clientId" id="saleClientId" required></select></label><label>Fecha de venta<input name="saleDate" id="saleDate" type="date" required /></label>
+                <label>Proyecto<input name="project" type="text" required /></label><label>Unidad<input name="unit" type="text" required /></label>
+                <label>Desarrolladora<input name="developer" type="text" /></label><label>Etapa de la venta<select name="saleStatus"><option value="Reservada">Reservada</option><option value="Contratada">Contratada</option><option value="Entregada">Entregada</option><option value="Cancelada">Cancelada</option></select></label>
+                <label class="form-grid-full" id="cancelReasonWrap" hidden>Motivo de cancelación<textarea name="cancelReason" rows="3" maxlength="500" aria-describedby="cancelReasonHelp"></textarea><small class="field-help" id="cancelReasonHelp">Deja constancia clara del motivo para conservar el historial de la operación.</small></label>
+              </div></div>
+              <div class="form-section"><h3>Valores y comisión</h3><div class="form-grid">
+                <label>Precio vendido<input name="salePrice" id="salePrice" type="number" min="0" step="0.01" aria-describedby="salePriceHelp" required /><small class="field-help" id="salePriceHelp">Monto total de la propiedad.</small></label><label>Moneda del precio<select name="saleCurrency"><option value="USD">US$ Dólares</option><option value="DOP">RD$ Pesos</option></select></label>
+                <label>Tasa de comisión (%)<input name="commissionRate" id="commissionRate" type="number" min="0" step="0.01" /></label><label>Comisión total<input name="commissionAmount" id="commissionAmount" type="number" min="0" step="0.01" required /></label>
+                <label>Moneda de la comisión<select name="commissionCurrency"><option value="USD">US$ Dólares</option><option value="DOP">RD$ Pesos</option></select></label>
+              </div></div>
+              <section class="form-section installment-planner" id="installmentPlanner" aria-labelledby="installmentPlannerTitle">
+                <div class="installment-planner-heading">
+                  <div><span class="eyebrow">Cobranza</span><h3 id="installmentPlannerTitle">Plan de cobro de comisión</h3><p>Organiza la comisión en una o varias cuotas con monto y fecha estimada.</p></div>
+                  <div class="installment-planner-actions">
+                    <button class="button button-secondary" type="button" id="splitInstallmentsButton"><i data-lucide="columns-3" aria-hidden="true"></i>Dividir en cuotas</button>
+                    <button class="button button-secondary" type="button" id="addInstallmentButton"><i data-lucide="plus" aria-hidden="true"></i>Añadir cuota</button>
+                  </div>
+                </div>
+                <div class="installment-rows" id="installmentRows" aria-label="Cuotas del plan de cobro de comisión"></div>
+                <p class="installment-plan-summary" id="installmentPlanSummary" aria-live="polite">Total planificado: pendiente de distribuir.</p>
+              </section>
+              <label>Notas de la operación<textarea name="notes" rows="3"></textarea></label><p class="form-hint">La comisión se actualiza con cada cobro de comisión registrado.</p>
+            </div>
+            <div class="form-actions drawer-footer"><button class="button button-secondary" type="button" id="cancelSaleEdit">Cancelar</button><button class="button button-primary" type="submit" id="saleSubmitButton">Guardar venta</button></div>
+          </form>
+        </section>
+
+        <section class="view" id="view-payments" data-view="payments">
+          <div class="page-heading"><div><span class="eyebrow">Mesa de cobros de comisión</span><h1>Cobros de comisión</h1><p>Prioriza las cuotas vencidas y registra cada abono con su contexto.</p></div><button class="button button-primary" type="button" data-open-drawer="paymentForm"><i data-lucide="circle-dollar-sign" aria-hidden="true"></i>Registrar cobro de comisión</button></div>
+          <div class="collection-metric-grid">
+            <article class="collection-metric collection-metric-danger"><span>Comisión vencida</span><strong id="collectionOverdueValue">US$0</strong><small id="collectionOverdueMeta">0 cuotas</small></article>
+            <article class="collection-metric collection-metric-warning"><span>Comisión en 7 días</span><strong id="collectionNextValue">US$0</strong><small id="collectionNextMeta">0 cuotas</small></article>
+            <article class="collection-metric"><span>Pendiente total</span><strong id="collectionPendingValue">US$0</strong><small id="collectionPendingMeta">0 operaciones</small></article>
+            <article class="collection-metric collection-metric-success"><span>Comisión cobrada este mes</span><strong id="collectionReceivedValue">US$0</strong><small id="collectionReceivedMeta">0 cobros</small></article>
+          </div>
+          <article class="card collection-inbox">
+            <div class="card-heading records-heading"><div><span class="eyebrow">Bandeja de cobros de comisión</span><h2>Qué necesita seguimiento</h2></div></div>
+            <div class="collection-tabs" aria-label="Filtrar cobros de comisión"><button class="collection-tab" type="button" data-collection-filter="all" aria-pressed="false">Todos <span id="collectionCountAll">0</span></button><button class="collection-tab active" type="button" data-collection-filter="overdue" aria-pressed="true">Vencidos <span id="collectionCountOverdue">0</span></button><button class="collection-tab" type="button" data-collection-filter="upcoming" aria-pressed="false">Próximos <span id="collectionCountUpcoming">0</span></button><button class="collection-tab" type="button" data-collection-filter="undated" aria-pressed="false">Sin fecha <span id="collectionCountUndated">0</span></button><button class="collection-tab" type="button" data-collection-filter="paid" aria-pressed="false">Cobrados <span id="collectionCountPaid">0</span></button></div>
+            <div class="table-wrap desktop-table"><table class="crm-table collection-table"><caption class="visually-hidden">Bandeja de cobros de comisión</caption><thead><tr><th scope="col">Cliente / operación</th><th scope="col">Vencimiento</th><th scope="col">Saldo de comisión</th><th scope="col">Estado</th><th scope="col">Acción</th></tr></thead><tbody id="collectionQueueBody"></tbody></table></div>
+            <div class="mobile-record-list" id="collectionQueueMobile"></div><div class="empty-state" id="collectionQueueEmpty" hidden>No hay operaciones en esta vista.</div>
+          </article>
+          <article class="card records-card payment-history">
+            <div class="card-heading records-heading"><div><h2>Historial de cobros de comisión</h2><span class="records-count"><span id="paymentsCount">0</span> movimientos</span></div><div class="heading-tools"><button class="button button-secondary export-payments-button" id="exportPaymentsButton" type="button"><i data-lucide="download" aria-hidden="true"></i>Exportar cobros</button><input class="compact-input search-input" id="paymentSearch" type="search" placeholder="Buscar cliente, referencia o método…" aria-label="Buscar cobro de comisión" /></div></div>
+            <div class="table-wrap desktop-table"><table class="crm-table payments-table"><caption class="visually-hidden">Cobros de comisión registrados</caption><thead><tr><th scope="col">Fecha</th><th scope="col">Cliente / operación</th><th scope="col">Monto de comisión</th><th scope="col">Método</th><th scope="col"><span class="visually-hidden">Acciones</span></th></tr></thead><tbody id="paymentsBody"></tbody></table></div>
+            <div class="mobile-record-list" id="paymentsMobileList"></div><div class="empty-state" id="paymentsEmpty" hidden>Aún no hay cobros de comisión registrados.</div>
+          </article>
+          <form class="form-card drawer-panel payment-drawer" id="paymentForm" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="paymentFormTitle" inert>
+            <input name="id" type="hidden" />
+            <div class="drawer-heading"><div><span class="eyebrow">Cobro de comisión</span><h2 id="paymentFormTitle">Registrar cobro de comisión</h2></div><button class="drawer-close" type="button" data-close-drawer aria-label="Cerrar formulario"><i data-lucide="x" aria-hidden="true"></i></button></div>
+            <div class="drawer-body">
+              <label>Venta relacionada<select name="saleId" id="paymentSaleId" required></select></label><div class="payment-context" id="paymentContext">Selecciona una venta para ver su comisión pendiente.</div><button class="text-button payment-fill" id="fillPendingAmount" type="button" disabled>Cobrar comisión pendiente</button>
+              <div class="form-grid"><label>Monto de comisión recibido<input name="amount" type="number" min="0.01" step="0.01" required /></label><label>Fecha del cobro<input name="paymentDate" id="paymentDate" type="date" required /></label><label>Método<select name="method"><option value="Transferencia">Transferencia</option><option value="Efectivo">Efectivo</option><option value="Cheque">Cheque</option><option value="Otro">Otro</option></select></label><label>Referencia<input name="reference" type="text" aria-describedby="paymentReferenceHelp" /><small class="field-help" id="paymentReferenceHelp">Obligatoria salvo en cobros en efectivo.</small></label></div>
+              <label>Nota del cobro<textarea name="notes" rows="3"></textarea></label>
+            </div>
+            <div class="form-actions drawer-footer"><button class="button button-secondary" type="button" id="cancelPaymentEdit">Cancelar</button><button class="button button-primary" type="submit" id="paymentSubmitButton">Guardar cobro de comisión</button></div>
+          </form>
+        </section>
+
+        <section class="view" id="view-reports" data-view="reports">
+          <div class="page-heading"><div><span class="eyebrow">Inteligencia comercial</span><h1>Reportes</h1><p>Filtra resultados y entiende el rendimiento sin perder legibilidad.</p></div><button class="button button-secondary" id="exportSalesButton" type="button"><i data-lucide="download" aria-hidden="true"></i>Exportar CSV</button></div>
+          <article class="card report-filters">
+            <label>Año<select id="reportYear"></select></label><label>Proyecto<select id="reportProject"></select></label>
+            <label>Etapa de la venta<select id="reportSaleStatus"><option value="">Todas las etapas</option><option value="Reservada">Reservada</option><option value="Contratada">Contratada</option><option value="Entregada">Entregada</option><option value="Cancelada">Cancelada</option></select></label>
+            <label>Estado de comisión<select id="reportCommissionStatus"><option value="">Todas las comisiones</option><option value="Pendiente">Pendientes</option><option value="Parcial">Parciales</option><option value="Pagada">Pagadas</option><option value="Vencida">Vencidas</option><option value="Anulada">Anuladas</option></select></label>
+          </article>
+          <div class="report-summary">
+            <article class="metric-card report-card"><span>Ventas filtradas</span><strong id="reportSalesCount">0</strong></article>
+            <article class="metric-card report-card"><span>Volumen vendido</span><strong id="reportSalesVolume">US$0</strong><small id="reportSalesVolumeDop">RD$0</small></article>
+            <article class="metric-card report-card metric-card-attention"><span>Comisión generada</span><strong id="reportCommission">US$0</strong><small id="reportCommissionDop">RD$0</small></article>
+            <article class="metric-card report-card"><span>Comisión cobrada</span><strong id="reportReceived">US$0</strong><small id="reportReceivedDop">RD$0</small></article>
+            <article class="metric-card report-card metric-card-attention"><span>Comisión pendiente</span><strong id="reportPending">US$0</strong><small id="reportPendingDop">RD$0</small></article>
+          </div>
+          <div class="report-analysis-grid">
+            <article class="card report-analysis-card"><div class="card-heading"><div><span class="eyebrow">Portafolio</span><h2>Rendimiento por proyecto</h2></div></div><div class="project-breakdown" id="reportProjectBreakdown"></div></article>
+            <article class="card report-analysis-card"><div class="card-heading"><div><span class="eyebrow">Salud de cartera</span><h2>Estado de comisiones</h2></div></div><div class="collection-health" id="reportCollectionHealth"></div></article>
+          </div>
+          <article class="card records-card">
+            <div class="card-heading"><div><span class="eyebrow">Detalle</span><h2>Ventas del período</h2></div></div>
+            <div class="table-wrap desktop-table"><table class="crm-table reports-table"><caption class="visually-hidden">Detalle de ventas del período filtrado</caption><thead><tr><th scope="col">Cliente / fecha</th><th scope="col">Operación</th><th scope="col">Etapa</th><th scope="col">Precio</th><th scope="col">Comisión</th><th scope="col">Estado</th></tr></thead><tbody id="reportBody"></tbody></table></div>
+            <div class="mobile-record-list" id="reportMobileList"></div><div class="empty-state" id="reportEmpty" hidden>No hay ventas para estos filtros.</div>
+          </article>
+        </section>
+        </section>
+        <aside class="drawer-panel detail-drawer" id="recordDetailDrawer" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="recordDetailTitle" inert>
+          <div class="drawer-heading"><div><span class="eyebrow" id="recordDetailEyebrow">Expediente</span><h2 id="recordDetailTitle">Detalle</h2></div><button class="drawer-close" type="button" data-close-drawer aria-label="Cerrar expediente"><i data-lucide="x" aria-hidden="true"></i></button></div>
+          <div class="drawer-body detail-body" id="recordDetailBody"></div>
+          <div class="drawer-footer detail-footer"><details class="detail-more"><summary class="button button-tertiary" aria-label="Más acciones"><i data-lucide="ellipsis" aria-hidden="true"></i></summary><div><button class="danger-option" type="button" id="detailDeleteButton">Eliminar registro</button></div></details><button class="button button-secondary" type="button" id="detailEditButton"><i data-lucide="pencil" aria-hidden="true"></i>Editar</button><button class="button button-primary" type="button" id="detailPrimaryButton"></button></div>
+        </aside>
+      </div>
+    </main>
+    <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+    <dialog class="confirm-dialog" id="confirmDialog" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogMessage">
+      <form method="dialog"><span class="confirm-icon"><i data-lucide="shield-alert" aria-hidden="true"></i></span><h2 id="confirmDialogTitle">Confirmar acción</h2><p id="confirmDialogMessage"></p><label id="confirmReasonWrap" hidden>Motivo<textarea id="confirmReason" rows="3"></textarea></label><div class="confirm-actions"><button class="button button-secondary" value="cancel" formnovalidate>Cancelar</button><button class="button button-danger" id="confirmDialogAccept" value="confirm">Confirmar</button></div></form>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

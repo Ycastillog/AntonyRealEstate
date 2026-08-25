@@ -5,6 +5,11 @@ const EVIDENCE_DB_NAME = "antony-media-store";
 const EVIDENCE_DB_STORE = "files";
 const mediaConfig = window.ANTONY_MEDIA_CONFIG || {};
 const remoteEvidenceReady = Boolean(mediaConfig.supabaseUrl && mediaConfig.supabaseAnonKey);
+const trustedObjectUrls = new Set();
+const safeLocalMediaTypes = new Set([
+  "image/png", "image/jpeg", "image/gif", "image/webp",
+  "video/mp4", "video/webm", "video/ogg"
+]);
 
 const seedListings = [
   {
@@ -157,7 +162,9 @@ function statusLabel(status) {
 }
 
 function whatsappUrl(message) {
-  return window.antonyWhatsappUrl ? window.antonyWhatsappUrl(message) : `https://wa.me/?text=${encodeURIComponent(message)}`;
+  const fallback = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  const candidate = window.antonyWhatsappUrl ? window.antonyWhatsappUrl(message) : fallback;
+  return safeMediaUrl(candidate) || fallback;
 }
 
 function openWhatsapp(message) {
@@ -170,44 +177,69 @@ function fallbackPhoto(title) {
 }
 
 function listingMedia(listing) {
-  if (Array.isArray(listing.media) && listing.media.length) return listing.media;
+  const candidates = Array.isArray(listing.media) && listing.media.length
+    ? listing.media
+    : (Array.isArray(listing.photos) ? listing.photos : []).map((src) => ({
+        type: String(src).startsWith("data:video") ? "video" : "image",
+        src
+      }));
 
-  return (listing.photos || []).map((src) => ({
-    type: String(src).startsWith("data:video") ? "video" : "image",
-    src
-  }));
+  return candidates
+    .map((media) => {
+      const src = safeMediaUrl(media?.src, {
+        allowLocalData: true,
+        allowedRelativePrefixes: ["assets/", "./assets/", "../assets/", "/assets/"]
+      });
+      if (!src) return null;
+      return {
+        type: media?.type === "video" ? "video" : "image",
+        src
+      };
+    })
+    .filter(Boolean);
 }
 
 function mediaFromSrc(src) {
+  const safeSrc = safeMediaUrl(src, {
+    allowLocalData: true,
+    allowedRelativePrefixes: ["assets/", "./assets/", "../assets/", "/assets/"]
+  });
   return {
-    type: String(src).startsWith("data:video") ? "video" : "image",
-    src
+    type: String(safeSrc).startsWith("data:video") ? "video" : "image",
+    src: safeSrc
   };
 }
 
 function renderMedia(media, className = "") {
-  if (!media?.src) return "";
+  const src = safeMediaUrl(media?.src, {
+    allowLocalData: true,
+    allowTrustedBlob: true,
+    allowedRelativePrefixes: ["assets/", "./assets/", "../assets/", "/assets/"]
+  });
+  if (!src) return "";
+  const safeClassName = safeClassNames(className);
 
   if (media.type === "video") {
-    return `<video class="${className}" src="${media.src}" controls playsinline preload="metadata"></video>`;
+    return `<video class="${escapeAttribute(safeClassName)}" src="${escapeAttribute(src)}" controls playsinline preload="metadata"></video>`;
   }
 
-  return `<img class="${className}" src="${media.src}" alt="" />`;
+  return `<img class="${escapeAttribute(safeClassName)}" src="${escapeAttribute(src)}" alt="" />`;
 }
 
-function normalizeEvidenceItem(item) {
+function normalizeEvidenceItem(item, isRemote = false) {
+  const rawMediaUrl = item?.mediaUrl || item?.media_url;
   return {
-    id: item.id,
-    title: item.title,
-    category: item.category,
-    city: item.city,
-    eventDate: item.eventDate || item.event_date,
-    description: item.description,
-    mediaType: item.mediaType || item.media_type,
-    mediaUrl: item.mediaUrl || item.media_url,
-    localKey: item.localKey,
-    isFeatured: Boolean(item.isFeatured ?? item.is_featured),
-    isPublished: Boolean(item.isPublished ?? item.is_published)
+    id: textValue(item?.id),
+    title: textValue(item?.title),
+    category: textValue(item?.category),
+    city: textValue(item?.city),
+    eventDate: textValue(item?.eventDate || item?.event_date),
+    description: textValue(item?.description),
+    mediaType: item?.mediaType === "video" || item?.media_type === "video" ? "video" : "image",
+    mediaUrl: isRemote ? safeMediaUrl(rawMediaUrl) : "",
+    localKey: textValue(item?.localKey),
+    isFeatured: Boolean(item?.isFeatured ?? item?.is_featured),
+    isPublished: Boolean(item?.isPublished ?? item?.is_published)
   };
 }
 
@@ -241,17 +273,22 @@ function localEvidenceItems() {
 
 async function loadEvidenceItems(limit = 6) {
   if (remoteEvidenceReady) {
-    const table = mediaConfig.supabaseTable || "evidence_items";
-    const url = `${mediaConfig.supabaseUrl}/rest/v1/${table}?select=*&is_published=eq.true&order=is_featured.desc,created_at.desc&limit=${limit}`;
-    const response = await fetch(url, {
-      headers: {
-        apikey: mediaConfig.supabaseAnonKey,
-        Authorization: `Bearer ${mediaConfig.supabaseAnonKey}`
-      }
-    });
-    if (!response.ok) return [];
-    const items = await response.json();
-    return items.map(normalizeEvidenceItem);
+    try {
+      const table = mediaConfig.supabaseTable || "evidence_items";
+      const url = `${mediaConfig.supabaseUrl}/rest/v1/${table}?select=*&is_published=eq.true&order=is_featured.desc,created_at.desc&limit=${limit}`;
+      const response = await fetch(url, {
+        headers: {
+          apikey: mediaConfig.supabaseAnonKey,
+          Authorization: `Bearer ${mediaConfig.supabaseAnonKey}`
+        }
+      });
+      if (!response.ok) return [];
+      const items = await response.json();
+      return items.map((item) => normalizeEvidenceItem(item, true)).filter((item) => item.mediaUrl);
+    } catch {
+      // The public page keeps its static content if the optional live feed is unavailable.
+      return [];
+    }
   }
 
   const items = localEvidenceItems()
@@ -262,15 +299,20 @@ async function loadEvidenceItems(limit = 6) {
     const normalized = normalizeEvidenceItem(item);
     if (!normalized.localKey) return normalized;
     const blob = await getEvidenceBlob(normalized.localKey);
-    return blob ? { ...normalized, mediaUrl: URL.createObjectURL(blob) } : normalized;
+    if (!blob || !safeLocalMediaTypes.has(blob.type)) return normalized;
+    const objectUrl = URL.createObjectURL(blob);
+    trustedObjectUrls.add(objectUrl);
+    return { ...normalized, mediaUrl: objectUrl };
   }));
 }
 
 function evidenceMediaMarkup(item) {
+  const mediaUrl = safeMediaUrl(item.mediaUrl, { allowTrustedBlob: true });
+  if (!mediaUrl) return "";
   if (item.mediaType === "video") {
-    return `<video src="${item.mediaUrl}" controls playsinline preload="metadata"></video>`;
+    return `<video src="${escapeAttribute(mediaUrl)}" controls playsinline preload="metadata"></video>`;
   }
-  return `<img src="${item.mediaUrl}" alt="${escapeHtml(item.title)}" />`;
+  return `<img src="${escapeAttribute(mediaUrl)}" alt="${escapeAttribute(item.title)}" />`;
 }
 
 async function renderLiveEvidence() {
@@ -298,9 +340,10 @@ async function renderLiveEvidence() {
 
 function loadProfilePhoto() {
   const storedPhoto = localStorage.getItem(PROFILE_PHOTO_KEY);
-  if (!storedPhoto) return;
+  const safePhoto = safeMediaUrl(storedPhoto, { allowLocalData: true });
+  if (!safePhoto) return;
 
-  profilePhoto.src = storedPhoto;
+  profilePhoto.src = safePhoto;
   profilePhoto.hidden = false;
   profileFallback.hidden = true;
 }
@@ -318,6 +361,13 @@ function render() {
   });
 
   grid.innerHTML = filtered.map(renderCard).join("");
+  grid.querySelectorAll("[data-background-image]").forEach((element) => {
+    const backgroundUrl = safeMediaUrl(element.dataset.backgroundImage, {
+      allowLocalData: true,
+      allowedRelativePrefixes: ["assets/", "./assets/", "../assets/", "/assets/"]
+    });
+    if (backgroundUrl) element.style.backgroundImage = `url(${JSON.stringify(backgroundUrl)})`;
+  });
   emptyState.hidden = filtered.length !== 0;
 
   const totalListings = document.querySelector("#totalListings");
@@ -335,17 +385,23 @@ function render() {
 
 function renderCard(listing) {
   const media = listingMedia(listing)[0] || mediaFromSrc(fallbackPhoto(listing.title));
-  const mediaMarkup = media.type === "video"
-    ? `<video src="${media.src}" controls playsinline preload="metadata"></video>`
+  const mediaMarkup = media?.type === "video" && media.src
+    ? `<video src="${escapeAttribute(media.src)}" controls playsinline preload="metadata"></video>`
     : "";
-  const imageStyle = media.type === "image" ? `style="background-image: url('${media.src}')"` : "";
+  const imageAttribute = media?.type === "image" && media.src
+    ? `data-background-image="${escapeAttribute(media.src)}"`
+    : "";
+  const id = textValue(listing.id);
+  const status = listing.status === "project" ? "project" : "ready";
+  const beds = finiteNumber(listing.beds);
+  const meters = finiteNumber(listing.meters);
 
   return `
     <article class="listing-card">
-      <button type="button" data-open="${listing.id}" aria-label="Abrir ${escapeHtml(listing.title)}">
-        <div class="card-image" ${imageStyle}>
+      <button type="button" data-open="${escapeAttribute(id)}" aria-label="Abrir ${escapeAttribute(listing.title)}">
+        <div class="card-image" ${imageAttribute}>
           ${mediaMarkup}
-          <span class="badge ${listing.status}">${statusLabel(listing.status)}</span>
+          <span class="badge ${status}">${statusLabel(status)}</span>
           <span class="reference-badge">Confirmar con Antony</span>
           <span class="card-hook">${escapeHtml(listing.hook || listing.title)}</span>
         </div>
@@ -354,8 +410,8 @@ function renderCard(listing) {
           <span class="price">${money(listing.price)}</span>
           <div class="meta-row">
             <span>${escapeHtml(listing.location)}</span>
-            <span>${listing.beds} hab.</span>
-            <span>${listing.meters} m2</span>
+            <span>${escapeHtml(beds)} hab.</span>
+            <span>${escapeHtml(meters)} m2</span>
           </div>
         </div>
       </button>
@@ -363,8 +419,12 @@ function renderCard(listing) {
   `;
 }
 
+function textValue(value, fallback = "") {
+  return value == null ? fallback : String(value);
+}
+
 function escapeHtml(value) {
-  return String(value)
+  return textValue(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -372,10 +432,65 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function escapeAttribute(value) {
+  return escapeHtml(value);
+}
+
+function finiteNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function safeClassNames(value) {
+  return textValue(value)
+    .split(/\s+/)
+    .filter((name) => /^[a-z0-9_-]+$/i.test(name))
+    .join(" ");
+}
+
+function safeMediaUrl(value, options = {}) {
+  const raw = textValue(value).trim();
+  if (!raw || /[\u0000-\u001f\u007f]/.test(raw)) return "";
+
+  if (options.allowTrustedBlob && trustedObjectUrls.has(raw)) return raw;
+  if (
+    options.allowLocalData &&
+    /^data:(?:image\/(?:png|jpeg|gif|webp)|video\/(?:mp4|webm|ogg));base64,[a-z0-9+/]+={0,2}$/i.test(raw)
+  ) {
+    return raw;
+  }
+
+  if (/^(?:javascript|data|vbscript|file|blob):/i.test(raw)) return "";
+
+  try {
+    const parsed = new URL(raw, window.location.href);
+    if (parsed.protocol === "https:") return parsed.href;
+
+    const prefixes = options.allowedRelativePrefixes || [];
+    const relativeAllowed =
+      prefixes.some((prefix) => raw.startsWith(prefix)) &&
+      !/^[a-z][a-z0-9+.-]*:/i.test(raw) &&
+      !raw.startsWith("//") &&
+      !raw.includes("\\") &&
+      parsed.origin === window.location.origin;
+    return relativeAllowed ? raw : "";
+  } catch {
+    return "";
+  }
+}
+
 async function fileToDataUrl(file) {
+  if (!safeLocalMediaTypes.has(file.type)) {
+    throw new Error("Usa una imagen JPG, PNG, GIF o WebP, o un video MP4, WebM u OGG.");
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
+    reader.onload = () => {
+      const safeResult = safeMediaUrl(reader.result, { allowLocalData: true });
+      if (safeResult) resolve(safeResult);
+      else reject(new Error("El archivo no tiene un formato multimedia seguro."));
+    };
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
@@ -412,15 +527,18 @@ function updateCalculator() {
 function initializeHomeCaseAlbums() {
   if (!homeCaseButtons.length || !homeCaseViewerModal) return;
   homeCaseButtons.forEach((button) => {
+    const source = safeMediaUrl(button.dataset.homeCaseSrc, {
+      allowedRelativePrefixes: ["assets/", "./assets/", "/assets/"]
+    });
     homeCaseAlbums.set(button.dataset.homeCaseKey, {
-      title: button.dataset.homeCaseTitle,
-      text: button.dataset.homeCaseText,
-      categories: (button.dataset.homeCaseCategories || "").split(",").map((item) => item.trim()).filter(Boolean),
-      media: [{
+      title: textValue(button.dataset.homeCaseTitle),
+      text: textValue(button.dataset.homeCaseText),
+      categories: textValue(button.dataset.homeCaseCategories).split(",").map((item) => item.trim()).filter(Boolean),
+      media: source ? [{
         type: "image",
-        src: button.dataset.homeCaseSrc,
-        title: button.dataset.homeCaseTitle
-      }]
+        src: source,
+        title: textValue(button.dataset.homeCaseTitle)
+      }] : []
     });
   });
 }
@@ -444,6 +562,11 @@ function renderHomeCasePhoto(index) {
   if (!album || !album.media.length) return;
   activeHomeCasePhotoIndex = (index + album.media.length) % album.media.length;
   const media = album.media[activeHomeCasePhotoIndex];
+  const mediaUrl = safeMediaUrl(media.src, {
+    allowTrustedBlob: true,
+    allowedRelativePrefixes: ["assets/", "./assets/", "/assets/"]
+  });
+  if (!mediaUrl) return;
 
   homeCaseViewerTitle.textContent = album.title;
   homeCaseViewerText.textContent = album.text;
@@ -452,8 +575,8 @@ function renderHomeCasePhoto(index) {
   if (media.type === "video") {
     homeCaseViewerImage.hidden = true;
     homeCaseViewerVideo.hidden = false;
-    homeCaseViewerVideo.src = media.src;
-    homeCaseViewerVideo.setAttribute("aria-label", media.title);
+    homeCaseViewerVideo.src = mediaUrl;
+    homeCaseViewerVideo.setAttribute("aria-label", textValue(media.title));
     return;
   }
 
@@ -461,8 +584,8 @@ function renderHomeCasePhoto(index) {
   homeCaseViewerVideo.removeAttribute("src");
   homeCaseViewerVideo.hidden = true;
   homeCaseViewerImage.hidden = false;
-  homeCaseViewerImage.src = media.src;
-  homeCaseViewerImage.alt = media.title;
+  homeCaseViewerImage.src = mediaUrl;
+  homeCaseViewerImage.alt = textValue(media.title);
 }
 
 function openHomeCase(key) {
@@ -477,7 +600,8 @@ function openDetail(id) {
 
   activeDetailId = id;
   location.hash = id;
-  const media = listingMedia(listing).length ? listingMedia(listing) : [mediaFromSrc(fallbackPhoto(listing.title))];
+  const listingItems = listingMedia(listing);
+  const media = listingItems.length ? listingItems : [mediaFromSrc(fallbackPhoto(listing.title))];
 
   document.querySelector("#detailStatus").textContent = statusLabel(listing.status);
   document.querySelector("#detailTitle").textContent = listing.title;
@@ -485,10 +609,10 @@ function openDetail(id) {
     .slice(0, 3)
     .map((item, index) => {
       if (item.type === "video") {
-        return `<video src="${item.src}" controls playsinline preload="metadata" aria-label="${escapeHtml(listing.title)} video ${index + 1}"></video>`;
+        return `<video src="${escapeAttribute(item.src)}" controls playsinline preload="metadata" aria-label="${escapeAttribute(listing.title)} video ${index + 1}"></video>`;
       }
 
-      return `<img src="${item.src}" alt="${escapeHtml(listing.title)} foto ${index + 1}" />`;
+      return `<img src="${escapeAttribute(item.src)}" alt="${escapeAttribute(listing.title)} foto ${index + 1}" />`;
     })
     .join("");
   document.querySelector("#detailMeta").innerHTML = [
@@ -535,10 +659,15 @@ profilePhotoInput.addEventListener("change", async () => {
   const file = profilePhotoInput.files?.[0];
   if (!file) return;
 
-  const photo = await fileToDataUrl(file);
-  localStorage.setItem(PROFILE_PHOTO_KEY, photo);
-  loadProfilePhoto();
-  showToast("Foto de perfil actualizada");
+  try {
+    const photo = await fileToDataUrl(file);
+    if (!photo.startsWith("data:image/")) throw new Error("Selecciona un formato de imagen seguro.");
+    localStorage.setItem(PROFILE_PHOTO_KEY, photo);
+    loadProfilePhoto();
+    showToast("Foto de perfil actualizada");
+  } catch (error) {
+    showToast(error.message || "No se pudo usar esa imagen");
+  }
 });
 
 document.querySelector("#closeModal").addEventListener("click", () => listingModal.close());
@@ -668,10 +797,16 @@ listingForm.addEventListener("submit", async (event) => {
   const formData = new FormData(listingForm);
   const title = formData.get("title").toString().trim();
   const files = formData.getAll("photos").filter((file) => file instanceof File && file.size > 0);
-  const media = await Promise.all(files.map(async (file) => ({
-    type: file.type.startsWith("video/") ? "video" : "image",
-    src: await fileToDataUrl(file)
-  })));
+  let media;
+  try {
+    media = await Promise.all(files.map(async (file) => ({
+      type: file.type.startsWith("video/") ? "video" : "image",
+      src: await fileToDataUrl(file)
+    })));
+  } catch (error) {
+    showToast(error.message || "Uno de los archivos no es seguro");
+    return;
+  }
 
   const listing = {
     id: `${Date.now()}-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`,
