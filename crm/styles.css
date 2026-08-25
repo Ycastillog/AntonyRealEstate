@@ -1319,6 +1319,24 @@ body[data-environment="local"] .demo-only,
 }
 .contact-requirement svg { flex: 0 0 auto; height: 15px; width: 15px; }
 .form-grid-full { grid-column: 1 / -1; }
+.shared-sale-toggle {
+  align-content: center;
+  background: #f8f6f0;
+  border: 1px solid #ded3b8;
+  border-radius: 10px;
+  min-height: 72px;
+  padding: 11px 13px;
+}
+.shared-sale-toggle > span { align-items: center; color: var(--navy); display: flex; gap: 9px; }
+.shared-sale-toggle input[type="checkbox"] {
+  accent-color: var(--navy);
+  border-radius: 4px;
+  flex: 0 0 auto;
+  min-height: 18px;
+  padding: 0;
+  width: 18px;
+}
+.shared-sale-toggle small { color: var(--text-secondary); font-size: 10px; font-weight: 400; line-height: 1.4; }
 
 .form-section.installment-planner {
   background: #f8f6f0;
@@ -1363,7 +1381,7 @@ body[data-environment="local"] .demo-only,
   border-radius: 10px;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(130px, 1fr) minmax(130px, 1fr) auto;
+  grid-template-columns: minmax(125px, 1.2fr) minmax(92px, .62fr) minmax(120px, .85fr) minmax(135px, 1fr) auto;
   padding: 12px;
 }
 .installment-row label,

@@ -66,6 +66,7 @@ insert into public.crm_clients (
   source,
   stage,
   desired_zone,
+  property_stage,
   budget,
   budget_currency,
   captured_at,
@@ -78,6 +79,7 @@ values (
   'Prueba de produccion',
   'Nuevo',
   'Santo Domingo',
+  'En planos',
   3000000,
   'DOP',
   clock_timestamp(),
@@ -95,6 +97,9 @@ select public.crm_save_sale(
     'sale_price', 3000000,
     'sale_currency', 'DOP',
     'sale_date', current_date,
+    'delivery_date', current_date + 180,
+    'shared_sale', true,
+    'external_agent', 'Broker QA transaccional',
     'commission_rate', 5,
     'commission_amount', 150000,
     'commission_currency', 'DOP',
@@ -155,6 +160,20 @@ do $qa_financial_contracts$
 declare
   v_rejected boolean;
 begin
+  if not exists (
+    select 1
+    from public.crm_sales as s
+    join public.crm_clients as c
+      on c.owner_id = s.owner_id and c.id = s.client_id
+    where s.id = 'qa-e2e-sale'
+      and c.property_stage = 'En planos'
+      and s.delivery_date = current_date + 180
+      and s.shared_sale is true
+      and s.external_agent = 'Broker QA transaccional'
+  ) then
+    raise exception 'QA fallo: los campos de retroalimentacion no se conservaron';
+  end if;
+
   if (
     select count(*)
     from public.crm_payments

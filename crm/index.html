@@ -13,12 +13,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=production-v4" />
+    <link rel="stylesheet" href="styles.css?v=production-v5" />
     <script src="../media-config.js?v=secure-auth-v3" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js" integrity="sha384-ysv13JVP3fufiEXfjML9OdCa/rRbMJvUBOWyor82wfuK8INNZAvmbxHgKIHi+oqz" crossorigin="anonymous" defer></script>
     <script src="backend.js?v=production-v4" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" integrity="sha384-uTYyvsSSUZeaPhb5RbKlQa0zY/WpX/QHfvg2mczXyBQOpkWPEDy9lczyp+w7SKXu" crossorigin="anonymous" defer></script>
-    <script src="app.js?v=production-v5" defer></script>
+    <script src="app.js?v=production-v6" defer></script>
   </head>
   <body>
     <main class="auth-shell" id="authShell" aria-labelledby="loginTitle">
@@ -200,7 +200,7 @@
             <article><span>Compradores</span><strong id="clientOverviewBuyers">0</strong><small>Clientes convertidos</small></article>
           </div>
           <article class="card records-card">
-            <div class="card-heading records-heading"><div><span class="eyebrow">Cartera privada</span><h2>Clientes registrados</h2><span class="records-count"><span id="clientsCount">0</span> contactos</span></div><div class="heading-tools"><input class="compact-input search-input" id="clientSearch" type="search" placeholder="Buscar nombre, teléfono o correo…" aria-label="Buscar cliente" /><select class="compact-input" id="clientStageFilter" aria-label="Filtrar clientes por etapa"><option value="">Todas las etapas</option><option value="Nuevo">Nuevo</option><option value="Calificado">Calificado</option><option value="En seguimiento">En seguimiento</option><option value="Comprador">Comprador</option><option value="Inactivo">Inactivo</option></select></div></div>
+            <div class="card-heading records-heading"><div><span class="eyebrow">Cartera privada</span><h2>Clientes registrados</h2><span class="records-count"><span id="clientsCount">0</span> contactos</span></div><div class="heading-tools"><input class="compact-input search-input" id="clientSearch" type="search" placeholder="Buscar cliente, proyecto o unidad…" aria-label="Buscar cliente por nombre, contacto, proyecto o unidad" /><select class="compact-input" id="clientStageFilter" aria-label="Filtrar clientes por etapa"><option value="">Todas las etapas</option><option value="Nuevo">Nuevo</option><option value="Calificado">Calificado</option><option value="En seguimiento">En seguimiento</option><option value="Comprador">Comprador</option><option value="Inactivo">Inactivo</option></select></div></div>
             <div class="table-wrap desktop-table"><table class="crm-table clients-table"><caption class="visually-hidden">Clientes registrados</caption><thead><tr><th scope="col">Cliente</th><th scope="col">Contacto</th><th scope="col">Interés</th><th scope="col">Presupuesto</th><th scope="col">Estado</th><th scope="col"><span class="visually-hidden">Acciones</span></th></tr></thead><tbody id="clientsBody"></tbody></table></div>
             <div class="mobile-record-list" id="clientsMobileList"></div><div class="empty-state" id="clientsEmpty" hidden>Aún no hay clientes.</div>
           </article>
@@ -215,6 +215,7 @@
                 <label>Fecha de captación<input name="capturedAt" id="capturedAt" type="date" required /></label><label>Origen del contacto<select name="source"><option value="WhatsApp">WhatsApp</option><option value="Instagram">Instagram</option><option value="Referido">Referido</option><option value="Web">Página web</option><option value="Otro">Otro</option></select></label>
                 <label>Estado<select name="stage"><option value="Nuevo">Nuevo</option><option value="Calificado">Calificado</option><option value="En seguimiento">En seguimiento</option><option value="Comprador">Comprador</option><option value="Inactivo">Inactivo</option></select></label>
                 <label>Zona de interés<input name="desiredZone" type="text" /></label>
+                <label>Estado del inmueble buscado<select name="propertyStage"><option value="Sin definir">Sin definir</option><option value="Listo">Listo para entrega</option><option value="En planos">En planos</option><option value="En construcción">En construcción</option><option value="Indiferente">Indiferente</option></select></label>
                 <label>Presupuesto<input name="budget" type="number" min="0" step="0.01" aria-describedby="clientBudgetHelp" /><small class="field-help" id="clientBudgetHelp">Monto estimado para orientar oportunidades.</small></label>
                 <label>Moneda<select name="budgetCurrency"><option value="USD">US$ Dólares</option><option value="DOP">RD$ Pesos</option></select></label>
               </div>
@@ -247,6 +248,9 @@
                 <label>Cliente<select name="clientId" id="saleClientId" required></select></label><label>Fecha de venta<input name="saleDate" id="saleDate" type="date" required /></label>
                 <label>Proyecto<input name="project" type="text" required /></label><label>Unidad<input name="unit" type="text" required /></label>
                 <label>Desarrolladora<input name="developer" type="text" /></label><label>Etapa de la venta<select name="saleStatus"><option value="Reservada">Reservada</option><option value="Contratada">Contratada</option><option value="Entregada">Entregada</option><option value="Cancelada">Cancelada</option></select></label>
+                <label>Fecha estimada de entrega<input name="deliveryDate" id="deliveryDate" type="date" aria-describedby="deliveryDateHelp" /><small class="field-help" id="deliveryDateHelp">Puede completarse luego si la desarrolladora aún no la confirma.</small></label>
+                <label class="shared-sale-toggle"><span><input name="sharedSale" id="sharedSale" type="checkbox" /> Venta compartida</span><small>Actívalo cuando participa otro broker o asesor.</small></label>
+                <label class="form-grid-full" id="externalAgentWrap" hidden>Asesor o broker externo<input name="externalAgent" type="text" maxlength="200" placeholder="Nombre del asesor externo" /></label>
                 <label class="form-grid-full" id="cancelReasonWrap" hidden>Motivo de cancelación<textarea name="cancelReason" rows="3" maxlength="500" aria-describedby="cancelReasonHelp"></textarea><small class="field-help" id="cancelReasonHelp">Deja constancia clara del motivo para conservar el historial de la operación.</small></label>
               </div></div>
               <div class="form-section"><h3>Valores y comisión</h3><div class="form-grid">
@@ -256,7 +260,7 @@
               </div></div>
               <section class="form-section installment-planner" id="installmentPlanner" aria-labelledby="installmentPlannerTitle">
                 <div class="installment-planner-heading">
-                  <div><span class="eyebrow">Cobranza</span><h3 id="installmentPlannerTitle">Plan de cobro de comisión</h3><p>Organiza la comisión en una o varias cuotas con monto y fecha estimada.</p></div>
+                  <div><span class="eyebrow">Cobranza</span><h3 id="installmentPlannerTitle">Plan de cobro de comisión</h3><p>Distribuye la comisión por porcentaje o monto; por ejemplo, 80% y 20%.</p></div>
                   <div class="installment-planner-actions">
                     <button class="button button-secondary" type="button" id="splitInstallmentsButton"><i data-lucide="columns-3" aria-hidden="true"></i>Dividir en cuotas</button>
                     <button class="button button-secondary" type="button" id="addInstallmentButton"><i data-lucide="plus" aria-hidden="true"></i>Añadir cuota</button>
@@ -281,7 +285,7 @@
           </div>
           <article class="card collection-inbox">
             <div class="card-heading records-heading"><div><span class="eyebrow">Bandeja de cobros de comisión</span><h2>Qué necesita seguimiento</h2></div></div>
-            <div class="collection-tabs" aria-label="Filtrar cobros de comisión"><button class="collection-tab" type="button" data-collection-filter="all" aria-pressed="false">Todos <span id="collectionCountAll">0</span></button><button class="collection-tab active" type="button" data-collection-filter="overdue" aria-pressed="true">Vencidos <span id="collectionCountOverdue">0</span></button><button class="collection-tab" type="button" data-collection-filter="upcoming" aria-pressed="false">Próximos <span id="collectionCountUpcoming">0</span></button><button class="collection-tab" type="button" data-collection-filter="undated" aria-pressed="false">Sin fecha <span id="collectionCountUndated">0</span></button><button class="collection-tab" type="button" data-collection-filter="paid" aria-pressed="false">Cobrados <span id="collectionCountPaid">0</span></button></div>
+            <div class="collection-tabs" aria-label="Filtrar cobros de comisión"><button class="collection-tab active" type="button" data-collection-filter="all" aria-pressed="true">Todos <span id="collectionCountAll">0</span></button><button class="collection-tab" type="button" data-collection-filter="overdue" aria-pressed="false">Vencidos <span id="collectionCountOverdue">0</span></button><button class="collection-tab" type="button" data-collection-filter="upcoming" aria-pressed="false">Próximos <span id="collectionCountUpcoming">0</span></button><button class="collection-tab" type="button" data-collection-filter="undated" aria-pressed="false">Sin fecha <span id="collectionCountUndated">0</span></button><button class="collection-tab" type="button" data-collection-filter="paid" aria-pressed="false">Cobrados <span id="collectionCountPaid">0</span></button></div>
             <div class="table-wrap desktop-table"><table class="crm-table collection-table"><caption class="visually-hidden">Bandeja de cobros de comisión</caption><thead><tr><th scope="col">Cliente / operación</th><th scope="col">Vencimiento</th><th scope="col">Saldo de comisión</th><th scope="col">Estado</th><th scope="col">Acción</th></tr></thead><tbody id="collectionQueueBody"></tbody></table></div>
             <div class="mobile-record-list" id="collectionQueueMobile"></div><div class="empty-state" id="collectionQueueEmpty" hidden>No hay operaciones en esta vista.</div>
           </article>
