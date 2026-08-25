@@ -128,6 +128,8 @@ let authSubscription = null;
 let currentSession = null;
 let currentUser = null;
 let authEpoch = 0;
+let sessionValidationToken = "";
+let sessionValidationPromise = null;
 let dataMode = "blocked";
 let evidenceItemsById = new Map();
 let propertyItemsById = new Map();
@@ -143,6 +145,17 @@ function showToast(message) {
 
 function publicMessage(error, fallback) {
   return error instanceof PublicError ? error.message : fallback;
+}
+
+function reportPortalDiagnostic(scope, error, reason = "unknown") {
+  const payload = {
+    scope,
+    reason: cleanLine(reason, 80) || "unknown",
+    name: cleanLine(error?.name || "Error", 80),
+    code: cleanLine(error?.code || "PORTAL_ERROR", 80),
+    status: Number(error?.status) || 0
+  };
+  console.error(`Antony portal authentication failure ${JSON.stringify(payload)}`);
 }
 
 function renderIcons() {
@@ -957,40 +970,77 @@ async function prepareWorkspace(epoch) {
     renderEvidence(items);
     renderProperties(properties);
     showWorkspace();
-  } catch {
+  } catch (error) {
+    reportPortalDiagnostic("prepareWorkspace", error, "content_load_failed");
     if (epoch !== authEpoch || !hasValidSession()) return;
     if (DEMO_ALLOWED) await activateDemo(epoch, "Backend no disponible; MODO DEMO local activo.");
     else blockAuthenticatedPanel("Panel bloqueado: Supabase no está disponible o la cuenta no tiene permisos sobre tablas y storage.");
   }
 }
 
-async function acceptSession(session, force = false) {
-  if (!sessionLooksValid(session)) {
-    discardInvalidSession("No hay una sesión válida. Inicia sesión para continuar.");
-    return;
-  }
-  if (!force && currentSession && currentUser && currentSession.access_token === session.access_token) return;
+async function validateSessionAndPrepare(session) {
   const epoch = ++authEpoch;
   showAuthPending("Validando la sesión con Supabase...");
   let verifiedUser = null;
-  try {
-    const { data, error } = await supabaseClient.auth.getUser(session.access_token);
-    if (!error && data && data.user && String(data.user.id) === String(session.user.id)) verifiedUser = data.user;
-  } catch {
-    verifiedUser = null;
+  let verificationError = null;
+  for (let attempt = 0; attempt < 2 && !verifiedUser; attempt += 1) {
+    try {
+      const { data, error } = await supabaseClient.auth.getUser(session.access_token);
+      verificationError = error || null;
+      if (!error && data && data.user && String(data.user.id) === String(session.user.id)) {
+        verifiedUser = data.user;
+      }
+    } catch (error) {
+      verificationError = error;
+    }
+    if (!verifiedUser && attempt === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 180));
+    }
   }
   if (epoch !== authEpoch) return;
   if (!verifiedUser || !UUID_RE.test(String(verifiedUser.id || ""))) {
+    reportPortalDiagnostic(
+      "acceptSession",
+      verificationError,
+      verificationError ? "get_user_failed" : "verified_user_invalid"
+    );
     discardInvalidSession("No se pudo validar la sesión. Inicia sesión nuevamente.");
     return;
   }
   if (!isPortalAdmin(verifiedUser)) {
+    reportPortalDiagnostic("acceptSession", null, "admin_role_missing");
     discardInvalidSession("Esta cuenta no tiene autorización para administrar contenido.");
     return;
   }
   currentSession = { ...session, user: verifiedUser };
   currentUser = verifiedUser;
   await prepareWorkspace(epoch);
+}
+
+async function acceptSession(session, force = false) {
+  if (!sessionLooksValid(session)) {
+    reportPortalDiagnostic("acceptSession", null, "invalid_session_shape");
+    discardInvalidSession("No hay una sesión válida. Inicia sesión para continuar.");
+    return;
+  }
+  if (!force && currentSession && currentUser && currentSession.access_token === session.access_token) return;
+
+  const token = session.access_token;
+  if (sessionValidationPromise && sessionValidationToken === token) {
+    await sessionValidationPromise;
+    return;
+  }
+
+  sessionValidationToken = token;
+  sessionValidationPromise = validateSessionAndPrepare(session);
+  try {
+    await sessionValidationPromise;
+  } finally {
+    if (sessionValidationToken === token) {
+      sessionValidationToken = "";
+      sessionValidationPromise = null;
+    }
+  }
 }
 
 async function handleAuthChange(event, session) {
@@ -1249,7 +1299,8 @@ loginForm.addEventListener("submit", async (event) => {
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error || !data || !data.session) throw new Error("sign in rejected");
     await acceptSession(data.session, true);
-  } catch {
+  } catch (error) {
+    reportPortalDiagnostic("signIn", error, "sign_in_or_accept_failed");
     if (hasValidSession()) blockAuthenticatedPanel("No se pudo revalidar el acceso al backend.");
     else showSignedOut("No se pudo iniciar sesión. Verifica el correo, la contraseña y la conexión.");
     showToast("No se pudo iniciar sesión con esas credenciales.");

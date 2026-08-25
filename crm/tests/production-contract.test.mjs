@@ -353,6 +353,9 @@ test("content portal is portable to a new Supabase project and requires admin ap
   }
   assert.match(portalHtml, /No subas contratos, identificaciones, comprobantes/i);
   assert.match(admin, /function isPortalAdmin\(user\)/);
+  assert.match(admin, /function reportPortalDiagnostic\(scope, error, reason/);
+  assert.match(admin, /sessionValidationPromise && sessionValidationToken === token/);
+  assert.match(admin, /attempt < 2 && !verifiedUser/);
   assert.match(admin, /user\.app_metadata\.role/);
   assert.match(admin, /const DEMO_ALLOWED = isLoopback\(window\.location\.hostname\)/);
   assert.doesNotMatch(admin, /DEMO_REQUESTED\s*\|\|\s*isLoopback/);
