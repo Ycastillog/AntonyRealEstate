@@ -142,6 +142,7 @@ test("authentication is a real gated screen with no prefilled password", () => {
   assert.match(app, /#changePasswordButton/);
   assert.match(app, /event === "PASSWORD_RECOVERY"/);
   assert.match(app, /cloudBackend\.signOut\(\)/);
+  assert.match(app, /function reportBackendDiagnostic\(scope, error\)/);
 });
 
 test("Supabase and Lucide are version-pinned and protected by SRI", () => {
