@@ -335,7 +335,7 @@ test("loadWorkspace starts every table read in parallel and maps snake_case deep
         id: "sale-new",
         sale_date: "2026-08-01",
         commission_amount: 200,
-        status: "Contratada"
+        status: "Opción a compra firmada"
       }
     ],
     crm_commission_installments: [
@@ -379,7 +379,7 @@ test("loadWorkspace starts every table read in parallel and maps snake_case deep
     Array.from(workspace.sales, (sale) => sale.id),
     ["sale-new", "sale-old"]
   );
-  assert.equal(workspace.sales[0].saleStatus, "Contratada");
+  assert.equal(workspace.sales[0].saleStatus, "Opción a compra firmada");
   assert.ok(!Object.hasOwn(workspace.sales[0], "status"));
   assert.deepEqual(
     Array.from(workspace.installments, (installment) => installment.id),
@@ -434,7 +434,7 @@ test("saveClient waits for a confirmed row, maps it, and strips dangerous keys",
       "name": "Borrador",
       "phone": "",
       "desiredZone": "",
-      "propertyStage": "En planos",
+      "propertyStage": "En planos / En construcción",
       "capturedAt": "2026-08-20",
       "createdAt": "2026-08-19",
       "updatedAt": "2026-08-20",
@@ -465,7 +465,7 @@ test("saveClient waits for a confirmed row, maps it, and strips dangerous keys",
   assert.equal(capturedPayload.captured_at, "2026-08-20");
   assert.equal(capturedPayload.phone, null);
   assert.equal(capturedPayload.desired_zone, null);
-  assert.equal(capturedPayload.property_stage, "En planos");
+  assert.equal(capturedPayload.property_stage, "En planos / En construcción");
   assert.ok(!Object.hasOwn(capturedPayload, "created_at"));
   assert.ok(!Object.hasOwn(capturedPayload, "updated_at"));
   assert.ok(!Object.hasOwn(capturedPayload, "contact_meta"));
@@ -540,37 +540,58 @@ test("financial mutations use RPC contracts and preserve the UI sale status name
   const saveSalePromise = harness.api.saveSale(
     harness.realmValue({
       id: "sale-1",
-      saleStatus: "Contratada",
+      saleStatus: "Opción a compra firmada",
       commissionDueDate: "2026-09-01",
       commissionAmount: 300
     }),
     harness.realmValue([
-      { id: "installment-1", saleId: "sale-1", sequence: 1, amount: 300 }
+      {
+        id: "installment-1",
+        saleId: "sale-1",
+        sequence: 1,
+        installmentKind: "single",
+        amount: 300
+      }
     ])
   );
   await nextTurn();
   assert.equal(calls[0].name, "crm_save_sale");
-  assert.equal(calls[0].payload.p_sale.status, "Contratada");
+  assert.equal(calls[0].payload.p_sale.status, "Opción a compra firmada");
   assert.ok(!Object.hasOwn(calls[0].payload.p_sale, "sale_status"));
   assert.ok(!Object.hasOwn(calls[0].payload.p_sale, "commission_due_date"));
+  assert.equal(calls[0].payload.p_installments[0].installment_kind, "single");
   pending.crm_save_sale.resolve({
     data: harness.realmValue({
-      sale: { id: "sale-1", status: "Contratada", commission_amount: 300 },
-      installments: [{ id: "installment-1", sale_id: "sale-1", amount: 300 }]
+      sale: { id: "sale-1", status: "Opción a compra firmada", commission_amount: 300 },
+      installments: [
+        {
+          id: "installment-1",
+          sale_id: "sale-1",
+          installment_kind: "single",
+          amount: 300
+        }
+      ]
     }),
     error: null
   });
   const savedSale = await saveSalePromise;
-  assert.equal(savedSale.sale.saleStatus, "Contratada");
+  assert.equal(savedSale.sale.saleStatus, "Opción a compra firmada");
   assert.ok(!Object.hasOwn(savedSale.sale, "status"));
   assert.equal(savedSale.installments[0].saleId, "sale-1");
+  assert.equal(savedSale.installments[0].installmentKind, "single");
 
   const savePaymentPromise = harness.api.savePayment(
-    harness.realmValue({ id: "payment-1", saleId: "sale-1", amount: 100 })
+    harness.realmValue({
+      id: "payment-1",
+      saleId: "sale-1",
+      installmentId: "installment-1",
+      amount: 100
+    })
   );
   await nextTurn();
   assert.equal(calls[1].name, "crm_record_payment");
   assert.equal(calls[1].payload.p_payment.sale_id, "sale-1");
+  assert.equal(calls[1].payload.p_payment.installment_id, "installment-1");
   pending.crm_record_payment.resolve({
     data: harness.realmValue({ id: "payment-1", sale_id: "sale-1", amount: 100 }),
     error: null
@@ -581,14 +602,14 @@ test("financial mutations use RPC contracts and preserve the UI sale status name
   const importPromise = harness.api.importWorkspace(
     harness.realmValue({
       clients: [],
-      sales: [{ id: "sale-1", saleStatus: "Entregada", commissionDueDate: "2026-09-01" }],
+      sales: [{ id: "sale-1", saleStatus: "Entregado", commissionDueDate: "2026-09-01" }],
       installments: [],
       payments: []
     })
   );
   await nextTurn();
   assert.equal(calls[2].name, "crm_import_workspace");
-  assert.equal(calls[2].payload.p_state.sales[0].status, "Entregada");
+  assert.equal(calls[2].payload.p_state.sales[0].status, "Entregado");
   assert.ok(!Object.hasOwn(calls[2].payload.p_state.sales[0], "sale_status"));
   pending.crm_import_workspace.resolve({
     data: harness.realmValue({ sales_upserted: 1 }),

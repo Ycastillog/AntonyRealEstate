@@ -80,8 +80,8 @@ values (
   'qa-antony@example.test',
   'Prueba de produccion',
   'Nuevo',
-  'Santo Domingo',
-  'En planos',
+  'Santo Domingo Este',
+  'En planos / En construcción',
   3000000,
   'DOP',
   clock_timestamp(),
@@ -92,10 +92,10 @@ select public.crm_save_sale(
   jsonb_build_object(
     'id', 'qa-e2e-sale',
     'client_id', 'qa-e2e-client',
-    'project', 'Proyecto QA transaccional',
+    'project', 'Riviera 2',
     'unit', 'QA-01',
-    'developer', 'Antony Real Estate QA',
-    'status', 'Contratada',
+    'developer', 'Constructora LVP',
+    'status', 'Opción a compra firmada',
     'sale_price', 3000000,
     'sale_currency', 'DOP',
     'sale_date', current_date,
@@ -111,17 +111,20 @@ select public.crm_save_sale(
     jsonb_build_object(
       'id', 'qa-e2e-installment-1',
       'sale_id', 'qa-e2e-sale',
-      'label', 'Cuota 1',
+      'label', 'Inicial personalizada',
+      'installmentKind', 'advance',
       'sequence', 1,
-      'amount', 75000,
+      'amount', 12000,
       'due_date', current_date
     ),
     jsonb_build_object(
       'id', 'qa-e2e-installment-2',
       'sale_id', 'qa-e2e-sale',
-      'label', 'Cuota 2',
+      -- Etiqueta deliberadamente engañosa: nunca debe autorizar esta cuota.
+      'label', 'Avance 100%',
+      'installmentKind', 'balance',
       'sequence', 2,
-      'amount', 75000,
+      'amount', 138000,
       'due_date', current_date + 30
     )
   )
@@ -132,7 +135,7 @@ select public.crm_record_payment(
     'id', 'qa-e2e-payment-1',
     'sale_id', 'qa-e2e-sale',
     'installment_id', 'qa-e2e-installment-1',
-    'amount', 50000,
+    'amount', 10000,
     'currency', 'DOP',
     'payment_date', current_date,
     'method', 'Transferencia',
@@ -148,7 +151,7 @@ select public.crm_record_payment(
     'id', 'qa-e2e-payment-1',
     'sale_id', 'qa-e2e-sale',
     'installment_id', 'qa-e2e-installment-1',
-    'amount', 50000,
+    'amount', 10000,
     'currency', 'DOP',
     'payment_date', current_date,
     'method', 'Transferencia',
@@ -157,6 +160,96 @@ select public.crm_record_payment(
     'notes', 'Cobro QA transaccional'
   )
 );
+
+-- Después de cobrar parte del advance, delivery_date y el vencimiento de balance
+-- siguen siendo reprogramables mientras balance no tenga cobros.
+select public.crm_save_sale(
+  jsonb_build_object(
+    'id', 'qa-e2e-sale',
+    'client_id', 'qa-e2e-client',
+    'project', 'Riviera 2',
+    'unit', 'QA-01',
+    'developer', 'Constructora LVP',
+    'status', 'Opción a compra firmada',
+    'sale_price', 3000000,
+    'sale_currency', 'DOP',
+    'sale_date', current_date,
+    'delivery_date', current_date + 210,
+    'shared_sale', true,
+    'external_agent', 'Broker QA transaccional',
+    'commission_rate', 5,
+    'commission_amount', 150000,
+    'commission_currency', 'DOP',
+    'notes', 'Prueba de aceptacion; no es una venta real'
+  ),
+  jsonb_build_array(
+    jsonb_build_object(
+      'id', 'qa-e2e-installment-1',
+      'sale_id', 'qa-e2e-sale',
+      'label', 'Texto no autoritativo',
+      'installmentKind', 'advance',
+      'sequence', 1,
+      'amount', 12000,
+      'due_date', current_date
+    ),
+    jsonb_build_object(
+      'id', 'qa-e2e-installment-2',
+      'sale_id', 'qa-e2e-sale',
+      'label', 'Avance 100%',
+      'installmentKind', 'balance',
+      'sequence', 2,
+      'amount', 138000,
+      'due_date', current_date + 210
+    )
+  )
+);
+
+-- Pago único es una forma estructural válida y cobrable desde Opción.
+select public.crm_save_sale(
+  jsonb_build_object(
+    'id', 'qa-e2e-single-sale',
+    'client_id', 'qa-e2e-client',
+    'project', 'Riviera 3',
+    'unit', 'QA-SINGLE',
+    'developer', 'Constructora LVP',
+    'status', 'Opción a compra firmada',
+    'sale_price', 100000,
+    'sale_currency', 'DOP',
+    'sale_date', current_date,
+    'commission_rate', 5,
+    'commission_amount', 5000,
+    'commission_currency', 'DOP'
+  ),
+  jsonb_build_array(
+    jsonb_build_object(
+      'id', 'qa-e2e-single-installment',
+      'sale_id', 'qa-e2e-single-sale',
+      'label', 'Etiqueta falsa de saldo',
+      'installmentKind', 'single',
+      'sequence', 1,
+      'amount', 5000,
+      'due_date', current_date
+    )
+  )
+);
+
+select public.crm_record_payment(
+  jsonb_build_object(
+    'id', 'qa-e2e-single-payment',
+    'sale_id', 'qa-e2e-single-sale',
+    'installment_id', 'qa-e2e-single-installment',
+    'amount', 5000,
+    'currency', 'DOP',
+    'payment_date', current_date,
+    'method', 'Transferencia',
+    'reference', 'QA-E2E-SINGLE-PAID',
+    'status', 'Contabilizado'
+  )
+);
+
+-- Fuerza la ejecución de los constraint triggers diferidos dentro de esta
+-- transacción, que terminará en ROLLBACK.
+set constraints all immediate;
 
 do $qa_financial_contracts$
 declare
@@ -168,12 +261,53 @@ begin
     join public.crm_clients as c
       on c.owner_id = s.owner_id and c.id = s.client_id
     where s.id = 'qa-e2e-sale'
-      and c.property_stage = 'En planos'
-      and s.delivery_date = current_date + 180
+      and c.desired_zone = 'Santo Domingo Este'
+      and c.property_stage = 'En planos / En construcción'
+      and s.project = 'Riviera 2'
+      and s.developer = 'Constructora LVP'
+      and s.delivery_date = current_date + 210
       and s.shared_sale is true
       and s.external_agent = 'Broker QA transaccional'
   ) then
     raise exception 'QA fallo: los campos de retroalimentacion no se conservaron';
+  end if;
+
+  if not exists (
+    select 1
+    from public.crm_commission_installments
+    where sale_id = 'qa-e2e-sale'
+    group by sale_id
+    having count(*) = 2
+      and count(*) filter (
+        where sequence = 1
+          and installment_kind = 'advance'
+          and label = 'Avance'
+      ) = 1
+      and count(*) filter (
+        where sequence = 2
+          and installment_kind = 'balance'
+          and label = 'Saldo'
+          and due_date = current_date + 210
+      ) = 1
+      and sum(amount) = 150000
+  ) then
+    raise exception 'QA fallo: kind/label/fechas del plan no quedaron canónicos';
+  end if;
+
+  if not exists (
+    select 1
+    from public.crm_commission_installments as i
+    join public.crm_payments as p
+      on p.owner_id = i.owner_id
+     and p.sale_id = i.sale_id
+     and p.installment_id = i.id
+    where i.id = 'qa-e2e-single-installment'
+      and i.installment_kind = 'single'
+      and i.label = 'Pago único'
+      and p.id = 'qa-e2e-single-payment'
+      and p.status = 'Contabilizado'
+  ) then
+    raise exception 'QA fallo: single no fue canónico/cobrable desde Opción';
   end if;
 
   if (
@@ -189,15 +323,260 @@ begin
     select 1
     from public.crm_workspace_health()
     where sale_id = 'qa-e2e-sale'
-      and sale_status = 'Contratada'
+      and sale_status = 'Opción a compra firmada'
       and commission_amount = 150000
       and planned_amount = 150000
-      and accounted_amount = 50000
-      and remaining_to_collect = 100000
+      and accounted_amount = 10000
+      and remaining_to_collect = 140000
       and plan_matches is true
       and is_overpaid is false
   ) then
     raise exception 'QA fallo: el resumen financiero no coincide';
+  end if;
+
+  -- Ataque: una sola cuota advance por 100% no equivale a single.
+  v_rejected := false;
+  begin
+    perform public.crm_save_sale(
+      jsonb_build_object(
+        'id', 'qa-e2e-advance-100-sale',
+        'client_id', 'qa-e2e-client',
+        'project', 'Riviera 2',
+        'unit', 'QA-ADVANCE-100',
+        'developer', 'Constructora LVP',
+        'status', 'Opción a compra firmada',
+        'sale_price', 3000000,
+        'sale_currency', 'DOP',
+        'sale_date', current_date,
+        'commission_rate', 5,
+        'commission_amount', 150000,
+        'commission_currency', 'DOP'
+      ),
+      jsonb_build_array(
+        jsonb_build_object(
+          'id', 'qa-e2e-advance-100-installment',
+          'sale_id', 'qa-e2e-advance-100-sale',
+          'label', 'Avance 100%',
+          'installmentKind', 'advance',
+          'sequence', 1,
+          'amount', 150000,
+          'due_date', current_date
+        )
+      )
+    );
+  exception when others then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'QA fallo: el backend acepto advance como plan único del 100%%';
+  end if;
+
+  -- Ataque: label="Avance 100%" no habilita una cuota kind=balance.
+  v_rejected := false;
+  begin
+    perform public.crm_record_payment(
+      jsonb_build_object(
+        'id', 'qa-e2e-balance-before-delivery',
+        'sale_id', 'qa-e2e-sale',
+        'installment_id', 'qa-e2e-installment-2',
+        'amount', 1,
+        'currency', 'DOP',
+        'payment_date', current_date,
+        'method', 'Transferencia',
+        'reference', 'QA-E2E-BALANCE-EARLY',
+        'status', 'Contabilizado'
+      )
+    );
+  exception when others then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'QA fallo: balance se cobro antes de Entregado';
+  end if;
+
+  -- Ataque: incluso en Entregado, el saldo no puede fecharse antes de la entrega.
+  v_rejected := false;
+  begin
+    perform public.crm_save_sale(
+      jsonb_build_object(
+        'id', 'qa-e2e-retro-balance-sale',
+        'client_id', 'qa-e2e-client',
+        'project', 'Riviera 4',
+        'unit', 'QA-RETRO-BALANCE',
+        'developer', 'Constructora LVP',
+        'status', 'Entregado',
+        'sale_price', 100000,
+        'sale_currency', 'DOP',
+        'sale_date', current_date - 10,
+        'delivery_date', current_date,
+        'commission_rate', 5,
+        'commission_amount', 5000,
+        'commission_currency', 'DOP'
+      ),
+      jsonb_build_array(
+        jsonb_build_object(
+          'id', 'qa-e2e-retro-advance',
+          'sale_id', 'qa-e2e-retro-balance-sale',
+          'label', 'Avance',
+          'installmentKind', 'advance',
+          'sequence', 1,
+          'amount', 1000,
+          'due_date', current_date - 10
+        ),
+        jsonb_build_object(
+          'id', 'qa-e2e-retro-balance',
+          'sale_id', 'qa-e2e-retro-balance-sale',
+          'label', 'Saldo',
+          'installmentKind', 'balance',
+          'sequence', 2,
+          'amount', 4000,
+          'due_date', current_date
+        )
+      )
+    );
+    perform public.crm_record_payment(
+      jsonb_build_object(
+        'id', 'qa-e2e-retro-balance-payment',
+        'sale_id', 'qa-e2e-retro-balance-sale',
+        'installment_id', 'qa-e2e-retro-balance',
+        'amount', 1,
+        'currency', 'DOP',
+        'payment_date', current_date - 1,
+        'method', 'Transferencia',
+        'reference', 'QA-E2E-RETRO-BALANCE',
+        'status', 'Contabilizado'
+      )
+    );
+  exception when others then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'QA fallo: el saldo acepto payment_date anterior a delivery_date';
+  end if;
+
+  -- Ataque: el backend no admite constructoras/proyectos fuera del catálogo visible.
+  v_rejected := false;
+  begin
+    perform public.crm_save_sale(
+      jsonb_build_object(
+        'id', 'qa-e2e-unknown-developer-sale',
+        'client_id', 'qa-e2e-client',
+        'project', 'Proyecto fuera de catálogo',
+        'unit', 'QA-UNKNOWN',
+        'developer', 'Constructora desconocida',
+        'status', 'Reservada',
+        'sale_price', 100000,
+        'sale_currency', 'DOP',
+        'sale_date', current_date,
+        'commission_rate', 5,
+        'commission_amount', 5000,
+        'commission_currency', 'DOP'
+      ),
+      jsonb_build_array(
+        jsonb_build_object(
+          'id', 'qa-e2e-unknown-developer-installment',
+          'sale_id', 'qa-e2e-unknown-developer-sale',
+          'label', 'Pago único',
+          'installmentKind', 'single',
+          'sequence', 1,
+          'amount', 5000,
+          'due_date', current_date
+        )
+      )
+    );
+  exception when others then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'QA fallo: el backend acepto una constructora fuera del catálogo';
+  end if;
+
+  -- Ataque: la escritura directa de clientes tampoco puede inventar una etapa.
+  v_rejected := false;
+  begin
+    insert into public.crm_clients (
+      id, name, phone, email, stage, property_stage
+    ) values (
+      'qa-e2e-invalid-stage-client', 'Cliente etapa inválida', '8095550188',
+      'qa-invalid-stage@example.test', 'Etapa inventada', 'Sin definir'
+    );
+  exception when others then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'QA fallo: authenticated pudo guardar una etapa de cliente inválida';
+  end if;
+
+  -- Ataque: ningún cobro contabilizado puede quedar sin cuota estructural.
+  v_rejected := false;
+  begin
+    perform public.crm_record_payment(
+      jsonb_build_object(
+        'id', 'qa-e2e-without-installment',
+        'sale_id', 'qa-e2e-sale',
+        'amount', 1,
+        'currency', 'DOP',
+        'payment_date', current_date,
+        'method', 'Transferencia',
+        'reference', 'QA-E2E-NO-INSTALLMENT',
+        'status', 'Contabilizado'
+      )
+    );
+  exception when others then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'QA fallo: se acepto un cobro sin installment_id';
+  end if;
+
+  -- Ataque: Entregado exige una fecha real no futura; no se autocompleta.
+  v_rejected := false;
+  begin
+    perform public.crm_save_sale(
+      jsonb_build_object(
+        'id', 'qa-e2e-sale',
+        'client_id', 'qa-e2e-client',
+        'project', 'Riviera 2',
+        'unit', 'QA-01',
+        'developer', 'Constructora LVP',
+        'status', 'Entregado',
+        'sale_price', 3000000,
+        'sale_currency', 'DOP',
+        'sale_date', current_date,
+        'delivery_date', current_date + 210,
+        'shared_sale', true,
+        'external_agent', 'Broker QA transaccional',
+        'commission_rate', 5,
+        'commission_amount', 150000,
+        'commission_currency', 'DOP',
+        'notes', 'Prueba de aceptacion; no es una venta real'
+      ),
+      jsonb_build_array(
+        jsonb_build_object(
+          'id', 'qa-e2e-installment-1',
+          'sale_id', 'qa-e2e-sale',
+          'label', 'Avance',
+          'installmentKind', 'advance',
+          'sequence', 1,
+          'amount', 12000,
+          'due_date', current_date
+        ),
+        jsonb_build_object(
+          'id', 'qa-e2e-installment-2',
+          'sale_id', 'qa-e2e-sale',
+          'label', 'Saldo',
+          'installmentKind', 'balance',
+          'sequence', 2,
+          'amount', 138000,
+          'due_date', current_date + 210
+        )
+      )
+    );
+  exception when others then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'QA fallo: Entregado acepto delivery_date futura';
   end if;
 
   v_rejected := false;
@@ -207,7 +586,7 @@ begin
         'id', 'qa-e2e-overpay',
         'sale_id', 'qa-e2e-sale',
         'installment_id', 'qa-e2e-installment-1',
-        'amount', 100001,
+        'amount', 2001,
         'currency', 'DOP',
         'payment_date', current_date,
         'method', 'Transferencia',
@@ -250,33 +629,39 @@ begin
       jsonb_build_object(
         'id', 'qa-e2e-sale',
         'client_id', 'qa-e2e-client',
-        'project', 'Proyecto QA transaccional',
+        'project', 'Riviera 2',
         'unit', 'QA-01',
-        'developer', 'Antony Real Estate QA',
-        'status', 'Contratada',
+        'developer', 'Constructora LVP',
+        'status', 'Opción a compra firmada',
         'sale_price', 3000000,
         'sale_currency', 'DOP',
         'sale_date', current_date,
+        'delivery_date', current_date + 210,
+        'shared_sale', true,
+        'external_agent', 'Broker QA transaccional',
         'commission_rate', 5,
         'commission_amount', 150000,
-        'commission_currency', 'DOP'
+        'commission_currency', 'DOP',
+        'notes', 'Prueba de aceptacion; no es una venta real'
       ),
       jsonb_build_array(
         jsonb_build_object(
           'id', 'qa-e2e-installment-1',
           'sale_id', 'qa-e2e-sale',
           'label', 'Cuota 1 alterada',
+          'installmentKind', 'advance',
           'sequence', 1,
-          'amount', 70000,
+          'amount', 11000,
           'due_date', current_date
         ),
         jsonb_build_object(
           'id', 'qa-e2e-installment-2',
           'sale_id', 'qa-e2e-sale',
           'label', 'Cuota 2 alterada',
+          'installmentKind', 'balance',
           'sequence', 2,
-          'amount', 80000,
-          'due_date', current_date + 30
+          'amount', 139000,
+          'due_date', current_date + 210
         )
       )
     );
@@ -303,6 +688,83 @@ begin
   end if;
 end
 $qa_financial_contracts$;
+
+-- Flujo positivo: al registrar la fecha real de entrega, balance queda habilitado.
+select public.crm_save_sale(
+  jsonb_build_object(
+    'id', 'qa-e2e-sale',
+    'client_id', 'qa-e2e-client',
+    'project', 'Riviera 2',
+    'unit', 'QA-01',
+    'developer', 'Constructora LVP',
+    'status', 'Entregado',
+    'sale_price', 3000000,
+    'sale_currency', 'DOP',
+    'sale_date', current_date,
+    'delivery_date', current_date,
+    'shared_sale', true,
+    'external_agent', 'Broker QA transaccional',
+    'commission_rate', 5,
+    'commission_amount', 150000,
+    'commission_currency', 'DOP',
+    'notes', 'Prueba de aceptacion; no es una venta real'
+  ),
+  jsonb_build_array(
+    jsonb_build_object(
+      'id', 'qa-e2e-installment-1',
+      'sale_id', 'qa-e2e-sale',
+      'label', 'Avance',
+      'installmentKind', 'advance',
+      'sequence', 1,
+      'amount', 12000,
+      'due_date', current_date
+    ),
+    jsonb_build_object(
+      'id', 'qa-e2e-installment-2',
+      'sale_id', 'qa-e2e-sale',
+      'label', 'Saldo',
+      'installmentKind', 'balance',
+      'sequence', 2,
+      'amount', 138000,
+      'due_date', current_date + 210
+    )
+  )
+);
+
+select public.crm_record_payment(
+  jsonb_build_object(
+    'id', 'qa-e2e-payment-balance',
+    'sale_id', 'qa-e2e-sale',
+    'installment_id', 'qa-e2e-installment-2',
+    'amount', 138000,
+    'currency', 'DOP',
+    'payment_date', current_date,
+    'method', 'Transferencia',
+    'reference', 'QA-E2E-BALANCE-PAID',
+    'status', 'Contabilizado',
+    'notes', 'Saldo habilitado después de Entregado'
+  )
+);
+
+do $qa_delivered_contract$
+begin
+  if not exists (
+    select 1
+    from public.crm_sales
+    where id = 'qa-e2e-sale'
+      and status = 'Entregado'
+      and delivery_date = current_date
+  ) or not exists (
+    select 1
+    from public.crm_payments
+    where id = 'qa-e2e-payment-balance'
+      and installment_id = 'qa-e2e-installment-2'
+      and status = 'Contabilizado'
+  ) then
+    raise exception 'QA fallo: Entregado no habilitó correctamente el balance';
+  end if;
+end
+$qa_delivered_contract$;
 
 -- Un segundo JWT no debe ver los datos del primer propietario.
 select set_config(

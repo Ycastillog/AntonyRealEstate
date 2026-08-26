@@ -466,13 +466,25 @@ create table if not exists public.crm_clients (
     source is null or char_length(btrim(source)) between 1 and 120
   ),
   constraint crm_clients_stage_check check (
-    char_length(btrim(stage)) between 1 and 80
+    stage in ('Nuevo', 'Calificado', 'En seguimiento', 'Comprador', 'Inactivo')
   ),
   constraint crm_clients_zone_check check (
-    desired_zone is null or char_length(btrim(desired_zone)) between 1 and 200
+    desired_zone is null
+    or desired_zone in (
+      'Santo Domingo Norte',
+      'Santo Domingo Este',
+      'Santo Domingo Oeste',
+      'Distrito Nacional',
+      'Punta Cana',
+      'El Cibao',
+      'El Sur',
+      'El Norte'
+    )
   ),
   constraint crm_clients_property_stage_check check (
-    property_stage in ('Sin definir', 'Listo', 'En planos', 'En construcción', 'Indiferente')
+    property_stage in (
+      'Sin definir', 'Listo', 'En planos / En construcción', 'Indiferente'
+    )
   ),
   constraint crm_clients_budget_check check (
     budget is null
@@ -540,8 +552,19 @@ create table if not exists public.crm_sales (
   constraint crm_sales_developer_check check (
     developer is null or char_length(btrim(developer)) between 1 and 200
   ),
+  constraint crm_sales_developer_project_check check (
+    developer is not distinct from 'Constructora LVP'
+    and project in (
+      'Altos del este', 'Riviera 1', 'Riviera 2', 'Riviera 3',
+      'Riviera 4', 'Vistas del limonal', 'Epic Moon', 'Epic River',
+      'Doña Carmen', 'Las Margaritas', 'LP12', 'LP11', 'LP11 ABEY',
+      'East Town'
+    )
+  ),
   constraint crm_sales_status_check check (
-    status in ('Reservada', 'Contratada', 'Entregada', 'Cancelada')
+    status in (
+      'Reservada', 'Opción a compra firmada', 'Entregado', 'Desistió', 'Cambio'
+    )
   ),
   constraint crm_sales_price_check check (
     sale_price > 0
@@ -549,7 +572,8 @@ create table if not exists public.crm_sales (
   ),
   constraint crm_sales_currency_check check (sale_currency in ('USD', 'DOP')),
   constraint crm_sales_delivery_date_check check (
-    delivery_date is null or delivery_date >= sale_date
+    (delivery_date is null or delivery_date >= sale_date)
+    and (status <> 'Entregado' or delivery_date is not null)
   ),
   constraint crm_sales_shared_sale_check check (
     (
@@ -571,7 +595,7 @@ create table if not exists public.crm_sales (
     )
   ),
   constraint crm_sales_commission_amount_check check (
-    commission_amount >= 0
+    commission_amount > 0
     and commission_amount::text not in ('NaN', 'Infinity', '-Infinity')
   ),
   constraint crm_sales_commission_currency_check check (
@@ -579,12 +603,12 @@ create table if not exists public.crm_sales (
   ),
   constraint crm_sales_cancel_check check (
     (
-      status = 'Cancelada'
+      status in ('Desistió', 'Cambio')
       and nullif(btrim(coalesce(cancel_reason, '')), '') is not null
       and cancelled_at is not null
     )
     or (
-      status <> 'Cancelada'
+      status not in ('Desistió', 'Cambio')
       and cancel_reason is null
       and cancelled_at is null
     )
@@ -609,16 +633,55 @@ alter table public.crm_sales
 alter table public.crm_sales
   add column if not exists external_agent text;
 
--- Catálogo inicial confirmado por el cliente. Se normaliza únicamente la
--- constructora de proyectos identificados como LVP; las demás quedan intactas.
-update public.crm_sales
-set developer = 'Constructora LVP'
-where lower(btrim(project)) = any (array[
-  'altos del este', 'riviera 1', 'riviera 2', 'riviera 3', 'riviera 4',
-  'vistas del limonal', 'epic moon', 'epic river', 'doña carmen',
-  'las margaritas', 'lp12', 'lp11', 'lp11 abey', 'east town'
-])
-and developer is distinct from 'Constructora LVP';
+-- Catálogo cerrado de Constructora LVP. Se canonizan proyectos reconocidos y
+-- cualquier pareja fuera del único catálogo disponible se detiene para revisión.
+with crm_lvp_catalog(project_key, canonical_project) as (
+  values
+    ('altos del este', 'Altos del este'),
+    ('riviera 1', 'Riviera 1'),
+    ('riviera 2', 'Riviera 2'),
+    ('riviera 3', 'Riviera 3'),
+    ('riviera 4', 'Riviera 4'),
+    ('vistas del limonal', 'Vistas del limonal'),
+    ('epic moon', 'Epic Moon'),
+    ('epic river', 'Epic River'),
+    ('doña carmen', 'Doña Carmen'),
+    ('las margaritas', 'Las Margaritas'),
+    ('lp12', 'LP12'),
+    ('lp11', 'LP11'),
+    ('lp11 abey', 'LP11 ABEY'),
+    ('east town', 'East Town')
+)
+update public.crm_sales as sale
+set project = catalog.canonical_project,
+    developer = 'Constructora LVP'
+from crm_lvp_catalog as catalog
+where lower(btrim(sale.project)) = catalog.project_key
+  and (
+    sale.project is distinct from catalog.canonical_project
+    or sale.developer is distinct from 'Constructora LVP'
+  );
+
+do $crm_lvp_catalog_review$
+begin
+  if exists (
+    select 1
+    from public.crm_sales
+    where developer is distinct from 'Constructora LVP'
+       or project not in (
+        'Altos del este', 'Riviera 1', 'Riviera 2', 'Riviera 3',
+        'Riviera 4', 'Vistas del limonal', 'Epic Moon', 'Epic River',
+        'Doña Carmen', 'Las Margaritas', 'LP12', 'LP11', 'LP11 ABEY',
+        'East Town'
+      )
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'Hay constructoras o proyectos fuera del catálogo autorizado de Constructora LVP',
+      hint = 'Revise manualmente la pareja constructora/proyecto antes de continuar.';
+  end if;
+end
+$crm_lvp_catalog_review$;
 
 -- Teléfono y correo son parte obligatoria del expediente del cliente. La
 -- migración falla de forma explícita si una instalación anterior necesita ser
@@ -653,6 +716,7 @@ create table if not exists public.crm_commission_installments (
   id text not null,
   sale_id text not null,
   label text not null,
+  installment_kind text not null,
   sequence integer not null,
   amount numeric(18,2) not null,
   due_date date not null,
@@ -680,6 +744,16 @@ create table if not exists public.crm_commission_installments (
   constraint crm_commission_installments_label_check check (
     char_length(btrim(label)) between 1 and 160
   ),
+  constraint crm_commission_installments_label_kind_check check (
+    (installment_kind = 'advance' and label = 'Avance')
+    or (installment_kind = 'balance' and label = 'Saldo')
+    or (installment_kind = 'single' and label = 'Pago único')
+  ),
+  constraint crm_commission_installments_kind_check check (
+    (installment_kind = 'single' and sequence = 1)
+    or (installment_kind = 'advance' and sequence = 1)
+    or (installment_kind = 'balance' and sequence = 2)
+  ),
   constraint crm_commission_installments_sequence_check check (sequence > 0),
   constraint crm_commission_installments_amount_check check (
     amount > 0 and amount::text not in ('NaN', 'Infinity', '-Infinity')
@@ -693,7 +767,18 @@ create table if not exists public.crm_commission_installments (
 );
 
 comment on table public.crm_commission_installments is
-  'Plan de cuotas de la comision; su suma no puede superar commission_amount.';
+  'Plan estructural de comision: single o advance+balance; label es solo presentación.';
+
+-- Compatibilidad con instalaciones anteriores: la columna se agrega nullable y
+-- se endurece únicamente después de validar y migrar la forma completa del plan.
+alter table public.crm_commission_installments
+  add column if not exists installment_kind text;
+alter table public.crm_commission_installments
+  drop constraint if exists crm_commission_installments_kind_check;
+alter table public.crm_commission_installments
+  drop constraint if exists crm_commission_installments_label_kind_check;
+alter table public.crm_commission_installments
+  alter column installment_kind drop not null;
 
 -- Actualiza instalaciones previas de esta misma migracion: la unicidad diferible
 -- permite intercambiar secuencias durante crm_save_sale sin estados intermedios
@@ -716,25 +801,6 @@ begin
   end if;
 end
 $crm_installment_sequence_constraint$;
-
--- Normaliza únicamente los conceptos genéricos creados por versiones previas.
--- Los conceptos personalizados se respetan. Los montos y fechas no cambian.
-with crm_plan_shapes as (
-  select owner_id, sale_id, count(*) as payment_count
-  from public.crm_commission_installments
-  group by owner_id, sale_id
-)
-update public.crm_commission_installments as installment
-set label = case
-  when shape.payment_count = 1 then 'Pago único'
-  when installment.sequence = 1 then 'Avance'
-  else 'Saldo'
-end
-from crm_plan_shapes as shape
-where shape.owner_id = installment.owner_id
-  and shape.sale_id = installment.sale_id
-  and shape.payment_count in (1, 2)
-  and lower(btrim(installment.label)) like 'cuota%';
 
 create table if not exists public.crm_payments (
   owner_id uuid not null default auth.uid(),
@@ -773,6 +839,9 @@ create table if not exists public.crm_payments (
   constraint crm_payments_installment_id_check check (
     installment_id is null
     or (installment_id = btrim(installment_id) and char_length(installment_id) between 1 and 128)
+  ),
+  constraint crm_payments_accounted_installment_check check (
+    status <> 'Contabilizado' or installment_id is not null
   ),
   constraint crm_payments_amount_check check (
     amount > 0 and amount::text not in ('NaN', 'Infinity', '-Infinity')
@@ -872,10 +941,120 @@ alter table public.crm_clients
 alter table public.crm_clients
   drop constraint if exists crm_clients_property_stage_check;
 alter table public.crm_clients
+  drop constraint if exists crm_clients_zone_check;
+alter table public.crm_clients
+  drop constraint if exists crm_clients_stage_check;
+
+-- Normaliza catálogos cerrados sin perder silenciosamente valores desconocidos.
+-- Las variantes reconocidas cubren el vocabulario histórico del CRM; cualquier
+-- otra zona se conserva y provoca un error explícito antes de activar el CHECK.
+update public.crm_clients as client
+set desired_zone = normalized.desired_zone
+from (
+  select
+    owner_id,
+    id,
+    case lower(btrim(desired_zone))
+      when 'santo domingo norte' then 'Santo Domingo Norte'
+      when 'santo domingo este' then 'Santo Domingo Este'
+      when 'santo domingo oriental' then 'Santo Domingo Este'
+      when 'zona oriental' then 'Santo Domingo Este'
+      when 'santo domingo oeste' then 'Santo Domingo Oeste'
+      when 'santo domingo occidental' then 'Santo Domingo Oeste'
+      when 'zona occidental' then 'Santo Domingo Oeste'
+      when 'distrito nacional' then 'Distrito Nacional'
+      when 'punta cana' then 'Punta Cana'
+      when 'el cibao' then 'El Cibao'
+      when 'cibao' then 'El Cibao'
+      when 'el sur' then 'El Sur'
+      when 'sur' then 'El Sur'
+      when 'el norte' then 'El Norte'
+      when 'norte' then 'El Norte'
+      else nullif(btrim(desired_zone), '')
+    end as desired_zone
+  from public.crm_clients
+  where desired_zone is not null
+) as normalized
+where client.owner_id = normalized.owner_id
+  and client.id = normalized.id
+  and client.desired_zone is distinct from normalized.desired_zone;
+
+do $crm_closed_interest_zones$
+begin
+  if exists (
+    select 1
+    from public.crm_clients
+    where desired_zone is not null
+      and desired_zone not in (
+        'Santo Domingo Norte',
+        'Santo Domingo Este',
+        'Santo Domingo Oeste',
+        'Distrito Nacional',
+        'Punta Cana',
+        'El Cibao',
+        'El Sur',
+        'El Norte'
+      )
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'Corrija las zonas de interés anteriores antes de aplicar el catálogo cerrado';
+  end if;
+end
+$crm_closed_interest_zones$;
+
+update public.crm_clients
+set property_stage = 'En planos / En construcción'
+where property_stage in ('En planos', 'En construcción');
+
+do $crm_closed_client_stages$
+begin
+  if exists (
+    select 1
+    from public.crm_clients
+    where stage not in ('Nuevo', 'Calificado', 'En seguimiento', 'Comprador', 'Inactivo')
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'Corrija las etapas de cliente anteriores antes de aplicar el catálogo cerrado';
+  end if;
+end
+$crm_closed_client_stages$;
+
+alter table public.crm_clients
+  add constraint crm_clients_stage_check
+  check (stage in ('Nuevo', 'Calificado', 'En seguimiento', 'Comprador', 'Inactivo'));
+
+alter table public.crm_clients
+  add constraint crm_clients_zone_check
+  check (
+    desired_zone is null
+    or desired_zone in (
+      'Santo Domingo Norte',
+      'Santo Domingo Este',
+      'Santo Domingo Oeste',
+      'Distrito Nacional',
+      'Punta Cana',
+      'El Cibao',
+      'El Sur',
+      'El Norte'
+    )
+  );
+alter table public.crm_clients
   add constraint crm_clients_property_stage_check
   check (
-    property_stage in ('Sin definir', 'Listo', 'En planos', 'En construcción', 'Indiferente')
+    property_stage in (
+      'Sin definir', 'Listo', 'En planos / En construcción', 'Indiferente'
+    )
   );
+
+-- Los CHECK de estado se reinstalan después de reemplazar los triggers y migrar
+-- los valores históricos, sin abrir una vía que omita validación o auditoría.
+alter table public.crm_sales
+  drop constraint if exists crm_sales_status_check;
+alter table public.crm_sales
+  drop constraint if exists crm_sales_cancel_check;
+drop index if exists public.crm_sales_active_project_unit_uidx;
 
 alter table public.crm_sales
   drop constraint if exists crm_sales_currency_check;
@@ -918,8 +1097,18 @@ alter table public.crm_sales
 alter table public.crm_sales
   drop constraint if exists crm_sales_delivery_date_check;
 alter table public.crm_sales
-  add constraint crm_sales_delivery_date_check
-  check (delivery_date is null or delivery_date >= sale_date);
+  drop constraint if exists crm_sales_developer_project_check;
+alter table public.crm_sales
+  add constraint crm_sales_developer_project_check
+  check (
+    developer is not distinct from 'Constructora LVP'
+    and project in (
+      'Altos del este', 'Riviera 1', 'Riviera 2', 'Riviera 3',
+      'Riviera 4', 'Vistas del limonal', 'Epic Moon', 'Epic River',
+      'Doña Carmen', 'Las Margaritas', 'LP12', 'LP11', 'LP11 ABEY',
+      'East Town'
+    )
+  );
 alter table public.crm_sales
   drop constraint if exists crm_sales_shared_sale_check;
 alter table public.crm_sales
@@ -956,6 +1145,8 @@ alter table public.crm_payments
   check (
     amount > 0 and amount::text not in ('NaN', 'Infinity', '-Infinity')
   );
+alter table public.crm_payments
+  drop constraint if exists crm_payments_accounted_installment_check;
 
 -- Indices de acceso y unicidad de negocio.
 create index if not exists crm_clients_owner_stage_idx
@@ -963,9 +1154,6 @@ create index if not exists crm_clients_owner_stage_idx
 create index if not exists crm_clients_owner_captured_idx
   on public.crm_clients(owner_id, captured_at desc);
 
-create unique index if not exists crm_sales_active_project_unit_uidx
-  on public.crm_sales(owner_id, lower(btrim(project)), lower(btrim(unit)))
-  where status <> 'Cancelada';
 create index if not exists crm_sales_owner_client_idx
   on public.crm_sales(owner_id, client_id);
 create index if not exists crm_sales_owner_date_idx
@@ -1064,10 +1252,10 @@ begin
     raise exception 'owner_id e id de una venta son inmutables';
   end if;
 
-  -- La fecha de cancelacion es server-side cuando el cliente no la aporta.
-  if new.status = 'Cancelada' then
+  -- La fecha terminal es server-side cuando el cliente no la aporta.
+  if new.status in ('Desistió', 'Cambio') then
     if nullif(btrim(coalesce(new.cancel_reason, '')), '') is null then
-      raise exception 'Una venta cancelada requiere cancel_reason';
+      raise exception 'Una venta Desistió o Cambio requiere cancel_reason';
     end if;
 
     new.cancelled_at := coalesce(new.cancelled_at, clock_timestamp());
@@ -1076,7 +1264,17 @@ begin
       raise exception 'cancelled_at no puede ser anterior a sale_date';
     end if;
   elsif new.cancel_reason is not null or new.cancelled_at is not null then
-    raise exception 'cancel_reason/cancelled_at solo aplican a una venta Cancelada';
+    raise exception
+      'cancel_reason/cancelled_at solo aplican a una venta Desistió o Cambio';
+  end if;
+
+  if new.status = 'Entregado' then
+    if new.delivery_date is null then
+      raise exception 'Entregado requiere delivery_date explícita';
+    end if;
+    if new.delivery_date > current_date then
+      raise exception 'Entregado no acepta delivery_date futura';
+    end if;
   end if;
 
   if tg_op = 'UPDATE' then
@@ -1106,16 +1304,48 @@ begin
         new.commission_amount, v_accounted;
     end if;
 
-    if new.status = 'Cancelada' and v_accounted > 0 then
+    if v_accounted > 0 and (
+      new.sale_price is distinct from old.sale_price
+      or new.sale_currency is distinct from old.sale_currency
+      or new.sale_date is distinct from old.sale_date
+      or new.commission_rate is distinct from old.commission_rate
+      or new.commission_amount is distinct from old.commission_amount
+      or new.commission_currency is distinct from old.commission_currency
+    ) then
       raise exception
-        'No se puede cancelar: primero anule o revierta los cobros contabilizados (%)',
+        'Montos, monedas y fecha de venta no cambian después de contabilizar cobros';
+    end if;
+
+    if new.status in ('Desistió', 'Cambio') and v_accounted > 0 then
+      raise exception
+        'No se puede cerrar como Desistió o Cambio: primero anule o revierta los cobros contabilizados (%)',
         v_accounted;
     end if;
 
     if v_accounted > 0
-       and new.status not in ('Contratada', 'Entregada') then
+       and new.status not in ('Opción a compra firmada', 'Entregado') then
       raise exception
-        'Una venta con cobros contabilizados debe estar Contratada o Entregada';
+        'Una venta con cobros contabilizados debe estar en Opción a compra firmada o Entregado';
+    end if;
+
+    if new.status = 'Opción a compra firmada'
+       and exists (
+         select 1
+         from public.crm_payments as p
+         left join public.crm_commission_installments as i
+           on i.owner_id = p.owner_id
+          and i.sale_id = p.sale_id
+          and i.id = p.installment_id
+         where p.owner_id = new.owner_id
+           and p.sale_id = new.id
+           and p.status = 'Contabilizado'
+           and (
+             p.installment_id is null
+             or i.installment_kind not in ('advance', 'single')
+           )
+       ) then
+      raise exception
+        'Opción a compra firmada solo admite cuotas kind advance o single';
     end if;
 
     if v_first_payment is not null and v_first_payment < new.sale_date then
@@ -1156,7 +1386,9 @@ declare
   v_sale_date date;
   v_sale_status text;
   v_other_planned numeric := 0;
+  v_sale_accounted numeric := 0;
   v_accounted numeric := 0;
+  v_unallocated_accounted numeric := 0;
 begin
   if v_request_owner is not null
      and new.owner_id is distinct from v_request_owner then
@@ -1165,12 +1397,25 @@ begin
       message = 'owner_id debe coincidir con auth.uid()';
   end if;
 
+  if new.installment_kind not in ('advance', 'balance', 'single') then
+    raise exception 'installment_kind debe ser advance, balance o single';
+  end if;
+
+  -- label es presentación derivada. Nunca decide autorización ni estructura.
+  new.label := case new.installment_kind
+    when 'advance' then 'Avance'
+    when 'balance' then 'Saldo'
+    when 'single' then 'Pago único'
+  end;
+
   if tg_op = 'UPDATE' and (
     new.owner_id is distinct from old.owner_id
     or new.id is distinct from old.id
     or new.sale_id is distinct from old.sale_id
+    or new.installment_kind is distinct from old.installment_kind
   ) then
-    raise exception 'owner_id, id y sale_id de una cuota son inmutables';
+    raise exception
+      'owner_id, id, sale_id e installment_kind de una cuota son inmutables';
   end if;
 
   select s.commission_amount, s.sale_date, s.status
@@ -1184,8 +1429,9 @@ begin
     raise exception 'La venta % no existe para este propietario', new.sale_id;
   end if;
 
-  if v_sale_status = 'Cancelada' then
-    raise exception 'No se puede crear o modificar una cuota de una venta cancelada';
+  if v_sale_status in ('Desistió', 'Cambio') then
+    raise exception
+      'No se puede crear o modificar una cuota de una venta Desistió o Cambio';
   end if;
 
   if new.due_date < v_sale_date then
@@ -1213,13 +1459,41 @@ begin
       v_other_planned + new.amount, v_commission;
   end if;
 
-  select coalesce(sum(p.amount), 0)
-    into v_accounted
+  select
+    coalesce(sum(p.amount), 0),
+    coalesce(sum(p.amount) filter (where p.installment_id = new.id), 0),
+    coalesce(sum(p.amount) filter (where p.installment_id is null), 0)
+    into v_sale_accounted, v_accounted, v_unallocated_accounted
   from public.crm_payments as p
   where p.owner_id = new.owner_id
     and p.sale_id = new.sale_id
-    and p.installment_id = new.id
     and p.status = 'Contabilizado';
+
+  if tg_op = 'INSERT' and v_sale_accounted > 0 then
+    raise exception
+      'No se pueden añadir cuotas después de contabilizar cobros';
+  end if;
+
+  if tg_op = 'UPDATE' and v_sale_accounted > 0 then
+    if new.label is distinct from old.label
+       or new.sequence is distinct from old.sequence
+       or new.amount is distinct from old.amount
+       or new.notes is distinct from old.notes then
+      raise exception
+        'La estructura y los montos del plan no cambian después de contabilizar cobros';
+    end if;
+
+    if new.due_date is distinct from old.due_date
+       and (
+         old.installment_kind <> 'balance'
+         or new.installment_kind <> 'balance'
+         or v_accounted > 0
+         or v_unallocated_accounted > 0
+       ) then
+      raise exception
+        'Solo puede cambiar due_date de Saldo mientras esa cuota no tenga cobros contabilizados';
+    end if;
+  end if;
 
   if v_accounted > new.amount then
     raise exception
@@ -1227,6 +1501,107 @@ begin
       new.amount, v_accounted;
   end if;
 
+  if v_sale_status = 'Opción a compra firmada'
+     and v_accounted > 0
+     and new.installment_kind not in ('advance', 'single') then
+    raise exception
+      'Una cuota cobrada en Opción a compra firmada debe ser kind advance o single';
+  end if;
+
+  return new;
+end
+$function$;
+
+create or replace function public.crm_validate_commission_plan()
+returns trigger
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, pg_temp
+as $function$
+declare
+  v_request_owner uuid := auth.uid();
+  v_owner uuid;
+  v_sale_id text;
+  v_commission numeric;
+  v_plan_count bigint := 0;
+  v_plan_total numeric := 0;
+  v_single_count bigint := 0;
+  v_advance_count bigint := 0;
+  v_balance_count bigint := 0;
+begin
+  if tg_table_name = 'crm_sales' then
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    v_owner := new.owner_id;
+    v_sale_id := new.id;
+  else
+    v_owner := case when tg_op = 'DELETE' then old.owner_id else new.owner_id end;
+    v_sale_id := case when tg_op = 'DELETE' then old.sale_id else new.sale_id end;
+  end if;
+
+  if v_request_owner is not null and v_owner is distinct from v_request_owner then
+    raise exception using
+      errcode = '42501',
+      message = 'owner_id debe coincidir con auth.uid()';
+  end if;
+
+  select s.commission_amount
+    into v_commission
+  from public.crm_sales as s
+  where s.owner_id = v_owner
+    and s.id = v_sale_id;
+
+  if not found then
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    return new;
+  end if;
+
+  select
+    count(*),
+    coalesce(sum(i.amount), 0),
+    count(*) filter (
+      where i.installment_kind = 'single' and i.sequence = 1
+    ),
+    count(*) filter (
+      where i.installment_kind = 'advance' and i.sequence = 1
+    ),
+    count(*) filter (
+      where i.installment_kind = 'balance' and i.sequence = 2
+    )
+    into
+      v_plan_count,
+      v_plan_total,
+      v_single_count,
+      v_advance_count,
+      v_balance_count
+  from public.crm_commission_installments as i
+  where i.owner_id = v_owner
+    and i.sale_id = v_sale_id;
+
+  if v_plan_total <> v_commission
+     or not (
+       (v_plan_count = 1 and v_single_count = 1)
+       or (
+         v_plan_count = 2
+         and v_advance_count = 1
+         and v_balance_count = 1
+       )
+     ) then
+    raise exception using
+      errcode = '23514',
+      message = format(
+        'Plan inválido para venta %s: requiere single 100%% o advance+balance 100%%',
+        v_sale_id
+      );
+  end if;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
   return new;
 end
 $function$;
@@ -1243,9 +1618,11 @@ declare
   v_commission numeric;
   v_commission_currency text;
   v_sale_date date;
+  v_delivery_date date;
   v_sale_status text;
   v_other_sale_payments numeric := 0;
   v_installment_amount numeric;
+  v_installment_kind text;
   v_other_installment_payments numeric := 0;
 begin
   if tg_op = 'DELETE' then
@@ -1283,8 +1660,9 @@ begin
     s.commission_amount,
     s.commission_currency,
     s.sale_date,
+    s.delivery_date,
     s.status
-    into v_commission, v_commission_currency, v_sale_date, v_sale_status
+    into v_commission, v_commission_currency, v_sale_date, v_delivery_date, v_sale_status
   from public.crm_sales as s
   where s.owner_id = new.owner_id
     and s.id = new.sale_id
@@ -1310,9 +1688,13 @@ begin
       raise exception 'Un cobro Contabilizado no puede tener datos de anulacion';
     end if;
 
-    if v_sale_status not in ('Contratada', 'Entregada') then
+    if new.installment_id is null then
+      raise exception 'Todo cobro Contabilizado requiere installment_id';
+    end if;
+
+    if v_sale_status not in ('Opción a compra firmada', 'Entregado') then
       raise exception
-        'Solo ventas Contratadas o Entregadas aceptan cobros contabilizados';
+        'Solo ventas en Opción a compra firmada o Entregado aceptan cobros contabilizados';
     end if;
 
     if new.payment_date < v_sale_date then
@@ -1359,8 +1741,8 @@ begin
     end if;
 
     if new.installment_id is not null then
-      select i.amount
-        into v_installment_amount
+      select i.amount, i.installment_kind
+        into v_installment_amount, v_installment_kind
       from public.crm_commission_installments as i
       where i.owner_id = new.owner_id
         and i.sale_id = new.sale_id
@@ -1370,6 +1752,19 @@ begin
         raise exception
           'La cuota % no pertenece a la venta %',
           new.installment_id, new.sale_id;
+      end if;
+
+      if v_sale_status = 'Opción a compra firmada'
+         and v_installment_kind not in ('advance', 'single') then
+        raise exception
+          'Opción a compra firmada solo permite kind advance o single; balance requiere Entregado';
+      end if;
+
+      if v_installment_kind = 'balance'
+         and (v_delivery_date is null or new.payment_date < v_delivery_date) then
+        raise exception
+          'El saldo no puede cobrarse antes de delivery_date (%)',
+          v_delivery_date;
       end if;
 
       if tg_op = 'UPDATE' then
@@ -1624,6 +2019,277 @@ create trigger crm_audit_log_immutable_bt
 before truncate on public.crm_audit_log
 for each statement execute function public.crm_block_audit_mutation();
 
+-- Cancelada era ambiguo: puede significar Desistió o Cambio. Nunca se convierte
+-- automáticamente; la transacción completa se detiene para revisión humana.
+do $crm_legacy_cancelled_review$
+begin
+  if exists (
+    select 1
+    from public.crm_sales
+    where status = 'Cancelada'
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'Existen ventas Cancelada que requieren revisión manual',
+      hint = 'Clasifique cada registro explícitamente como Desistió o Cambio antes de reejecutar.';
+  end if;
+end
+$crm_legacy_cancelled_review$;
+
+-- installment_kind se deriva solo de una forma inequívoca: una cuota sequence=1
+-- o dos cuotas sequence=1/2. Cualquier otra forma o total se reporta y aborta.
+do $crm_installment_kind_review$
+begin
+  if exists (
+    select 1
+    from public.crm_sales as s
+    left join public.crm_commission_installments as i
+      on i.owner_id = s.owner_id
+     and i.sale_id = s.id
+    group by s.owner_id, s.id
+    having count(i.id) not in (1, 2)
+       or (
+         count(i.id) = 1
+         and count(i.id) filter (where i.sequence = 1) <> 1
+       )
+       or (
+         count(i.id) = 2
+         and (
+           count(i.id) filter (where i.sequence = 1) <> 1
+           or count(i.id) filter (where i.sequence = 2) <> 1
+         )
+       )
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'Hay planes de comisión con más de 2 cuotas o secuencias ambiguas',
+      hint = 'Revise manualmente: solo se admite single(1) o advance(1)+balance(2).';
+  end if;
+
+  if exists (
+    select 1
+    from public.crm_sales as s
+    left join public.crm_commission_installments as i
+      on i.owner_id = s.owner_id
+     and i.sale_id = s.id
+    group by s.owner_id, s.id, s.commission_amount
+    having coalesce(sum(i.amount), 0) <> s.commission_amount
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'Hay planes cuyo total no equivale al 100% de commission_amount',
+      hint = 'Corrija los montos antes de migrar installment_kind.';
+  end if;
+
+  if exists (
+    with plan_shapes as (
+      select owner_id, sale_id, count(*) as plan_count
+      from public.crm_commission_installments
+      group by owner_id, sale_id
+    )
+    select 1
+    from public.crm_commission_installments as i
+    join plan_shapes as shape
+      on shape.owner_id = i.owner_id
+     and shape.sale_id = i.sale_id
+    where i.installment_kind is not null
+      and i.installment_kind <> case
+        when shape.plan_count = 1 then 'single'
+        when i.sequence = 1 then 'advance'
+        when i.sequence = 2 then 'balance'
+      end
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'installment_kind existente contradice la forma estructural del plan',
+      hint = 'Revise manualmente el kind antes de reejecutar.';
+  end if;
+
+  if exists (
+    select 1
+    from public.crm_payments
+    where status = 'Contabilizado'
+      and installment_id is null
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'Hay cobros Contabilizados sin installment_id',
+      hint = 'Asigne cada cobro a su cuota real antes de reejecutar.';
+  end if;
+end
+$crm_installment_kind_review$;
+
+-- Solo se pausa el trigger financiero para poblar la nueva columna en registros
+-- terminales. Identidad, touch y auditoría permanecen activos y toda la operación
+-- sigue aislada dentro de esta transacción.
+drop trigger if exists crm_installments_financial_biu
+  on public.crm_commission_installments;
+
+with plan_shapes as (
+  select owner_id, sale_id, count(*) as plan_count
+  from public.crm_commission_installments
+  group by owner_id, sale_id
+)
+update public.crm_commission_installments as installment
+set installment_kind = case
+      when shape.plan_count = 1 then 'single'
+      when installment.sequence = 1 then 'advance'
+      when installment.sequence = 2 then 'balance'
+    end,
+    label = case
+      when shape.plan_count = 1 then 'Pago único'
+      when installment.sequence = 1 then 'Avance'
+      when installment.sequence = 2 then 'Saldo'
+    end
+from plan_shapes as shape
+where shape.owner_id = installment.owner_id
+  and shape.sale_id = installment.sale_id
+  and (
+    installment.installment_kind is distinct from case
+      when shape.plan_count = 1 then 'single'
+      when installment.sequence = 1 then 'advance'
+      when installment.sequence = 2 then 'balance'
+    end
+    or installment.label is distinct from case
+      when shape.plan_count = 1 then 'Pago único'
+      when installment.sequence = 1 then 'Avance'
+      when installment.sequence = 2 then 'Saldo'
+    end
+  );
+
+alter table public.crm_commission_installments
+  alter column installment_kind set not null;
+alter table public.crm_commission_installments
+  add constraint crm_commission_installments_kind_check
+  check (
+    (installment_kind = 'single' and sequence = 1)
+    or (installment_kind = 'advance' and sequence = 1)
+    or (installment_kind = 'balance' and sequence = 2)
+  );
+alter table public.crm_commission_installments
+  add constraint crm_commission_installments_label_kind_check
+  check (
+    (installment_kind = 'advance' and label = 'Avance')
+    or (installment_kind = 'balance' and label = 'Saldo')
+    or (installment_kind = 'single' and label = 'Pago único')
+  );
+comment on column public.crm_commission_installments.installment_kind is
+  'Clasificación estructural e inmutable; label nunca autoriza cobros.';
+
+alter table public.crm_sales
+  drop constraint if exists crm_sales_commission_amount_check;
+alter table public.crm_sales
+  add constraint crm_sales_commission_amount_check
+  check (
+    commission_amount > 0
+    and commission_amount::text not in ('NaN', 'Infinity', '-Infinity')
+  );
+
+create trigger crm_installments_financial_biu
+before insert or update on public.crm_commission_installments
+for each row execute function public.crm_validate_installment_financials();
+
+alter table public.crm_payments
+  add constraint crm_payments_accounted_installment_check
+  check (status <> 'Contabilizado' or installment_id is not null);
+
+drop trigger if exists crm_sales_plan_constraint_aiu on public.crm_sales;
+create constraint trigger crm_sales_plan_constraint_aiu
+after insert or update on public.crm_sales
+deferrable initially deferred
+for each row execute function public.crm_validate_commission_plan();
+
+drop trigger if exists crm_installments_plan_constraint_aiud
+  on public.crm_commission_installments;
+create constraint trigger crm_installments_plan_constraint_aiud
+after insert or update or delete on public.crm_commission_installments
+deferrable initially deferred
+for each row execute function public.crm_validate_commission_plan();
+
+-- Las ventas entregadas históricas necesitan una fecha real ya ocurrida. No se
+-- completa ni se corrige automáticamente una fecha de negocio.
+do $crm_legacy_delivery_review$
+begin
+  if exists (
+    select 1
+    from public.crm_sales
+    where status in ('Entregada', 'Entregado')
+      and (delivery_date is null or delivery_date > current_date)
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'Hay ventas entregadas sin delivery_date válida y no futura',
+      hint = 'Registre la fecha real de entrega antes de reejecutar.';
+  end if;
+end
+$crm_legacy_delivery_review$;
+
+-- Una Contratada histórica solo puede avanzar si sus cobros activos pertenecen
+-- estructuralmente a advance/single; nunca se decide por label.
+do $crm_legacy_contracted_payments$
+begin
+  if exists (
+    select 1
+    from public.crm_sales as s
+    join public.crm_payments as p
+      on p.owner_id = s.owner_id
+     and p.sale_id = s.id
+     and p.status = 'Contabilizado'
+    join public.crm_commission_installments as i
+      on i.owner_id = p.owner_id
+     and i.sale_id = p.sale_id
+     and i.id = p.installment_id
+    where s.status in ('Contratada', 'Opción a compra firmada')
+      and i.installment_kind not in ('advance', 'single')
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'Una venta en opción tiene cobros activos de kind balance',
+      hint = 'Anule/corrija esos cobros o marque Entregado con su delivery_date real.';
+  end if;
+end
+$crm_legacy_contracted_payments$;
+
+update public.crm_sales
+set status = case status
+  when 'Contratada' then 'Opción a compra firmada'
+  when 'Entregada' then 'Entregado'
+  else status
+end
+where status in ('Contratada', 'Entregada');
+
+alter table public.crm_sales
+  add constraint crm_sales_status_check
+  check (
+    status in (
+      'Reservada', 'Opción a compra firmada', 'Entregado', 'Desistió', 'Cambio'
+    )
+  );
+alter table public.crm_sales
+  add constraint crm_sales_cancel_check
+  check (
+    (
+      status in ('Desistió', 'Cambio')
+      and nullif(btrim(coalesce(cancel_reason, '')), '') is not null
+      and cancelled_at is not null
+    )
+    or (
+      status not in ('Desistió', 'Cambio')
+      and cancel_reason is null
+      and cancelled_at is null
+    )
+  );
+alter table public.crm_sales
+  add constraint crm_sales_delivery_date_check
+  check (
+    (delivery_date is null or delivery_date >= sale_date)
+    and (status <> 'Entregado' or delivery_date is not null)
+  );
+
+create unique index crm_sales_active_project_unit_uidx
+  on public.crm_sales(owner_id, lower(btrim(project)), lower(btrim(unit)))
+  where status not in ('Desistió', 'Cambio');
+
 -- -----------------------------------------------------------------------------
 -- 6. RLS y grants minimos del CRM
 -- -----------------------------------------------------------------------------
@@ -1859,20 +2525,238 @@ begin
     end if;
   end loop;
 
-  -- El respaldo de una venta cancelada puede conservar cobros historicos, pero
-  -- ninguno puede seguir activo. Esta comprobacion ocurre antes de escribir y los
-  -- triggers financieros vuelven a imponer la misma regla al insertar/actualizar.
+  -- La aplicación exporta installmentKind (camelCase); la base persiste
+  -- installment_kind. Se aceptan respaldos SQL previos con snake_case, pero
+  -- nunca dos valores contradictorios.
+  if exists (
+    select 1
+    from jsonb_array_elements(v_installments) as x(value)
+    where nullif(btrim(x.value ->> 'installmentKind'), '') is not null
+      and nullif(btrim(x.value ->> 'installment_kind'), '') is not null
+      and btrim(x.value ->> 'installmentKind')
+        is distinct from btrim(x.value ->> 'installment_kind')
+  ) then
+    raise exception using
+      errcode = '22023',
+      message = 'installmentKind e installment_kind no pueden contradecirse';
+  end if;
+
+  select coalesce(
+    jsonb_agg(
+      x.value || jsonb_build_object(
+        'installment_kind', coalesce(
+          nullif(btrim(x.value ->> 'installmentKind'), ''),
+          nullif(btrim(x.value ->> 'installment_kind'), '')
+        ),
+        'label', case coalesce(
+          nullif(btrim(x.value ->> 'installmentKind'), ''),
+          nullif(btrim(x.value ->> 'installment_kind'), '')
+        )
+          when 'advance' then 'Avance'
+          when 'balance' then 'Saldo'
+          when 'single' then 'Pago único'
+          else x.value ->> 'label'
+        end
+      )
+      order by x.ordinality
+    ),
+    '[]'::jsonb
+  )
+    into v_installments
+  from jsonb_array_elements(v_installments) with ordinality
+    as x(value, ordinality);
+
+  -- Compatibilidad con respaldos anteriores. Se canonizan únicamente valores
+  -- conocidos; cualquier catálogo desconocido se rechaza de forma explícita.
+  select coalesce(
+    jsonb_agg(
+      x.value || jsonb_build_object(
+        'desired_zone', case lower(btrim(x.value ->> 'desired_zone'))
+          when 'santo domingo norte' then 'Santo Domingo Norte'
+          when 'santo domingo este' then 'Santo Domingo Este'
+          when 'santo domingo oriental' then 'Santo Domingo Este'
+          when 'zona oriental' then 'Santo Domingo Este'
+          when 'santo domingo oeste' then 'Santo Domingo Oeste'
+          when 'santo domingo occidental' then 'Santo Domingo Oeste'
+          when 'zona occidental' then 'Santo Domingo Oeste'
+          when 'distrito nacional' then 'Distrito Nacional'
+          when 'punta cana' then 'Punta Cana'
+          when 'el cibao' then 'El Cibao'
+          when 'cibao' then 'El Cibao'
+          when 'el sur' then 'El Sur'
+          when 'sur' then 'El Sur'
+          when 'el norte' then 'El Norte'
+          when 'norte' then 'El Norte'
+          else nullif(btrim(x.value ->> 'desired_zone'), '')
+        end,
+        'property_stage', case coalesce(
+          nullif(btrim(x.value ->> 'property_stage'), ''),
+          'Sin definir'
+        )
+          when 'En planos' then 'En planos / En construcción'
+          when 'En construcción' then 'En planos / En construcción'
+          else coalesce(
+            nullif(btrim(x.value ->> 'property_stage'), ''),
+            'Sin definir'
+          )
+        end
+      )
+      order by x.ordinality
+    ),
+    '[]'::jsonb
+  )
+    into v_clients
+  from jsonb_array_elements(v_clients) with ordinality as x(value, ordinality);
+
+  select coalesce(
+    jsonb_agg(
+      x.value || jsonb_build_object(
+        'status', case coalesce(
+          nullif(btrim(x.value ->> 'status'), ''),
+          'Reservada'
+        )
+          when 'Contratada' then 'Opción a compra firmada'
+          when 'Entregada' then 'Entregado'
+          else coalesce(
+            nullif(btrim(x.value ->> 'status'), ''),
+            'Reservada'
+          )
+        end,
+        'project', case lower(btrim(x.value ->> 'project'))
+          when 'altos del este' then 'Altos del este'
+          when 'riviera 1' then 'Riviera 1'
+          when 'riviera 2' then 'Riviera 2'
+          when 'riviera 3' then 'Riviera 3'
+          when 'riviera 4' then 'Riviera 4'
+          when 'vistas del limonal' then 'Vistas del limonal'
+          when 'epic moon' then 'Epic Moon'
+          when 'epic river' then 'Epic River'
+          when 'doña carmen' then 'Doña Carmen'
+          when 'las margaritas' then 'Las Margaritas'
+          when 'lp12' then 'LP12'
+          when 'lp11' then 'LP11'
+          when 'lp11 abey' then 'LP11 ABEY'
+          when 'east town' then 'East Town'
+          else nullif(btrim(x.value ->> 'project'), '')
+        end,
+        'developer', case lower(btrim(x.value ->> 'developer'))
+          when 'lvp' then 'Constructora LVP'
+          when 'constructora lvp' then 'Constructora LVP'
+          else nullif(btrim(x.value ->> 'developer'), '')
+        end
+      )
+      order by x.ordinality
+    ),
+    '[]'::jsonb
+  )
+    into v_sales
+  from jsonb_array_elements(v_sales) with ordinality as x(value, ordinality);
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_clients) as x(value)
+    where nullif(x.value ->> 'desired_zone', '') is not null
+      and (x.value ->> 'desired_zone') not in (
+        'Santo Domingo Norte',
+        'Santo Domingo Este',
+        'Santo Domingo Oeste',
+        'Distrito Nacional',
+        'Punta Cana',
+        'El Cibao',
+        'El Sur',
+        'El Norte'
+      )
+  ) then
+    raise exception 'El respaldo contiene una zona de interés no permitida'
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_clients) as x(value)
+    where (x.value ->> 'property_stage') not in (
+      'Sin definir', 'Listo', 'En planos / En construcción', 'Indiferente'
+    )
+  ) then
+    raise exception 'El respaldo contiene un property_stage no permitido'
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_clients) as x(value)
+    where coalesce(nullif(btrim(x.value ->> 'stage'), ''), 'Nuevo') not in (
+      'Nuevo', 'Calificado', 'En seguimiento', 'Comprador', 'Inactivo'
+    )
+  ) then
+    raise exception 'El respaldo contiene una etapa de cliente no permitida'
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_sales) as x(value)
+    where (x.value ->> 'status') = 'Cancelada'
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'El respaldo contiene ventas Cancelada que requieren revisión manual',
+      hint = 'Clasifique cada venta explícitamente como Desistió o Cambio.';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_sales) as x(value)
+    where (x.value ->> 'status') not in (
+      'Reservada', 'Opción a compra firmada', 'Entregado', 'Desistió', 'Cambio'
+    )
+  ) then
+    raise exception 'El respaldo contiene un status de venta no permitido'
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_sales) as x(value)
+    where (x.value ->> 'developer') is distinct from 'Constructora LVP'
+       or (x.value ->> 'project') not in (
+      'Altos del este', 'Riviera 1', 'Riviera 2', 'Riviera 3',
+      'Riviera 4', 'Vistas del limonal', 'Epic Moon', 'Epic River',
+      'Doña Carmen', 'Las Margaritas', 'LP12', 'LP11', 'LP11 ABEY',
+      'East Town'
+    )
+  ) then
+    raise exception 'El respaldo solo admite Constructora LVP y sus proyectos autorizados'
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_sales) as x(value)
+    where (x.value ->> 'status') = 'Entregado'
+      and (
+        nullif(x.value ->> 'delivery_date', '') is null
+        or (x.value ->> 'delivery_date')::date > current_date
+      )
+  ) then
+    raise exception 'Entregado requiere delivery_date explícita y no futura'
+      using errcode = '23514';
+  end if;
+
+  -- Un estado terminal puede conservar cobros historicos, pero ninguno puede
+  -- seguir activo. Los triggers vuelven a imponer la regla durante la escritura.
   if exists (
     select 1
     from jsonb_array_elements(v_sales) as s(value)
     join jsonb_array_elements(v_payments) as p(value)
       on btrim(p.value ->> 'sale_id') = btrim(s.value ->> 'id')
-    where coalesce(nullif(btrim(s.value ->> 'status'), ''), 'Reservada') = 'Cancelada'
+    where coalesce(nullif(btrim(s.value ->> 'status'), ''), 'Reservada')
+      in ('Desistió', 'Cambio')
       and coalesce(nullif(btrim(p.value ->> 'status'), ''), 'Contabilizado') = 'Contabilizado'
   ) then
     raise exception using
       errcode = '23514',
-      message = 'Una venta Cancelada no puede importar cobros Contabilizados';
+      message = 'Una venta Desistió o Cambio no puede importar cobros Contabilizados';
   end if;
 
   -- Contrato restore-only. El lock exclusivo se coordina con los triggers por
@@ -1981,10 +2865,129 @@ begin
   end if;
 
   if exists (
+    select 1
+    from jsonb_array_elements(v_sales) as s(value)
+    left join lateral (
+      select
+        count(*) as plan_count,
+        count(*) filter (
+          where (i.value ->> 'sequence')::integer = 1
+        ) as sequence_one_count,
+        count(*) filter (
+          where (i.value ->> 'sequence')::integer = 2
+        ) as sequence_two_count,
+        coalesce(sum((i.value ->> 'amount')::numeric), 0) as plan_total
+      from jsonb_array_elements(v_installments) as i(value)
+      where btrim(i.value ->> 'sale_id') = btrim(s.value ->> 'id')
+    ) as shape on true
+    where shape.plan_count not in (1, 2)
+       or (shape.plan_count = 1 and shape.sequence_one_count <> 1)
+       or (
+         shape.plan_count = 2
+         and (shape.sequence_one_count <> 1 or shape.sequence_two_count <> 1)
+       )
+       or shape.plan_total <> (s.value ->> 'commission_amount')::numeric
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'El respaldo contiene un plan ambiguo o distinto del 100% de la comisión',
+      hint = 'Solo se admite single(1) o advance(1)+balance(2).';
+  end if;
+
+  if exists (
+    with plan_shapes as (
+      select
+        btrim(i.value ->> 'sale_id') as sale_id,
+        count(*) as plan_count
+      from jsonb_array_elements(v_installments) as i(value)
+      group by btrim(i.value ->> 'sale_id')
+    )
+    select 1
+    from jsonb_array_elements(v_installments) as i(value)
+    join plan_shapes as shape
+      on shape.sale_id = btrim(i.value ->> 'sale_id')
+    where nullif(btrim(i.value ->> 'installment_kind'), '') is not null
+      and btrim(i.value ->> 'installment_kind') <> case
+        when shape.plan_count = 1 then 'single'
+        when (i.value ->> 'sequence')::integer = 1 then 'advance'
+        when (i.value ->> 'sequence')::integer = 2 then 'balance'
+      end
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'El respaldo contiene installment_kind contradictorio',
+      hint = 'Revise el kind; no se autoriza ni se migra a partir de label.';
+  end if;
+
+  -- Backups antiguos sin kind se migran solo desde count+sequence. label queda
+  -- canónico para presentación, pero nunca participa en autorización.
+  select coalesce(
+    jsonb_agg(
+      x.value || jsonb_build_object(
+        'installment_kind', case
+          when x.plan_count = 1 then 'single'
+          when (x.value ->> 'sequence')::integer = 1 then 'advance'
+          when (x.value ->> 'sequence')::integer = 2 then 'balance'
+        end,
+        'label', case
+          when x.plan_count = 1 then 'Pago único'
+          when (x.value ->> 'sequence')::integer = 1 then 'Avance'
+          when (x.value ->> 'sequence')::integer = 2 then 'Saldo'
+        end
+      )
+      order by x.ordinality
+    ),
+    '[]'::jsonb
+  )
+    into v_installments
+  from (
+    select
+      i.value,
+      i.ordinality,
+      count(*) over (partition by btrim(i.value ->> 'sale_id')) as plan_count
+    from jsonb_array_elements(v_installments) with ordinality
+      as i(value, ordinality)
+  ) as x;
+
+  if exists (
     select 1 from jsonb_array_elements(v_payments) as x(value)
     where jsonb_typeof(x.value -> 'amount') is distinct from 'number'
   ) then
     raise exception 'amount de cobro debe ser un numero JSON' using errcode = '22023';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_payments) as x(value)
+    where coalesce(
+      nullif(btrim(x.value ->> 'status'), ''),
+      'Contabilizado'
+    ) = 'Contabilizado'
+      and nullif(btrim(x.value ->> 'installment_id'), '') is null
+  ) then
+    raise exception 'Todo cobro Contabilizado del respaldo requiere installment_id'
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_payments) as p(value)
+    join jsonb_array_elements(v_installments) as i(value)
+      on btrim(i.value ->> 'id') = btrim(p.value ->> 'installment_id')
+     and btrim(i.value ->> 'sale_id') = btrim(p.value ->> 'sale_id')
+    join jsonb_array_elements(v_sales) as s(value)
+      on btrim(s.value ->> 'id') = btrim(p.value ->> 'sale_id')
+    where coalesce(nullif(btrim(p.value ->> 'status'), ''), 'Contabilizado')
+      = 'Contabilizado'
+      and btrim(i.value ->> 'installment_kind') = 'balance'
+      and (
+        nullif(s.value ->> 'delivery_date', '') is null
+        or (p.value ->> 'payment_date')::date
+          < (s.value ->> 'delivery_date')::date
+      )
+  ) then
+    raise exception 'Un saldo del respaldo tiene fecha anterior a la entrega'
+      using errcode = '23514';
   end if;
 
   -- Solo INSERT. Cualquier error revierte toda la llamada, incluidas las filas y
@@ -2012,15 +3015,16 @@ begin
   from jsonb_array_elements(v_clients) as x(value);
   get diagnostics v_client_count = row_count;
 
-  -- Las canceladas se restauran una por una antes que las ventas activas. Cada
+  -- Las terminales se restauran una por una antes que las ventas activas. Cada
   -- fila vive como Reservada solo mientras se insertan su plan y sus cobros
-  -- Anulados/Revertidos, y se cancela antes de procesar la siguiente. Esto evita
-  -- tanto el trigger de cuotas sobre Cancelada como colisiones temporales del
-  -- indice parcial proyecto+unidad entre historicos cancelados.
+  -- Anulados/Revertidos, y se cierra antes de procesar la siguiente. Esto evita
+  -- tanto el trigger de cuotas terminales como colisiones temporales del índice
+  -- parcial proyecto+unidad entre históricos Desistió/Cambio.
   for v_item in
     select x.value
     from jsonb_array_elements(v_sales) as x(value)
-    where coalesce(nullif(btrim(x.value ->> 'status'), ''), 'Reservada') = 'Cancelada'
+    where coalesce(nullif(btrim(x.value ->> 'status'), ''), 'Reservada')
+      in ('Desistió', 'Cambio')
     order by btrim(x.value ->> 'id')
   loop
     v_sale_id := btrim(v_item ->> 'id');
@@ -2062,7 +3066,7 @@ begin
     v_sale_count := v_sale_count + 1;
 
     insert into public.crm_commission_installments (
-      owner_id, id, sale_id, label, sequence, amount, due_date,
+      owner_id, id, sale_id, label, installment_kind, sequence, amount, due_date,
       notes, created_at, updated_at
     )
     select
@@ -2070,6 +3074,7 @@ begin
       btrim(x.value ->> 'id'),
       btrim(x.value ->> 'sale_id'),
       btrim(x.value ->> 'label'),
+      btrim(x.value ->> 'installment_kind'),
       (x.value ->> 'sequence')::integer,
       (x.value ->> 'amount')::numeric,
       (x.value ->> 'due_date')::date,
@@ -2108,17 +3113,17 @@ begin
     v_payment_count := v_payment_count + v_rows;
 
     -- El UPDATE final vuelve a ejecutar crm_validate_sale_financials. Si hubiera
-    -- aparecido un cobro activo, la cancelacion completa falla y revierte todo.
+    -- aparecido un cobro activo, el cierre terminal falla y revierte todo.
     update public.crm_sales
-    set status = 'Cancelada',
+    set status = btrim(v_item ->> 'status'),
         cancel_reason = nullif(btrim(v_item ->> 'cancel_reason'), ''),
         cancelled_at = (v_item ->> 'cancelled_at')::timestamptz
     where owner_id = v_owner
       and id = v_sale_id;
   end loop;
 
-  -- Las ventas no canceladas se cargan despues, cuando las unidades usadas solo
-  -- por historicos ya quedaron fuera del indice unico parcial.
+  -- Las ventas no terminales se cargan después, cuando las unidades usadas solo
+  -- por históricos ya quedaron fuera del índice único parcial.
   insert into public.crm_sales (
     owner_id, id, client_id, project, unit, developer, status,
     sale_price, sale_currency, sale_date, delivery_date, shared_sale, external_agent,
@@ -2152,12 +3157,13 @@ begin
     coalesce((x.value ->> 'created_at')::timestamptz, clock_timestamp()),
     coalesce((x.value ->> 'updated_at')::timestamptz, clock_timestamp())
   from jsonb_array_elements(v_sales) as x(value)
-  where coalesce(nullif(btrim(x.value ->> 'status'), ''), 'Reservada') <> 'Cancelada';
+  where coalesce(nullif(btrim(x.value ->> 'status'), ''), 'Reservada')
+    not in ('Desistió', 'Cambio');
   get diagnostics v_rows = row_count;
   v_sale_count := v_sale_count + v_rows;
 
   insert into public.crm_commission_installments (
-    owner_id, id, sale_id, label, sequence, amount, due_date,
+    owner_id, id, sale_id, label, installment_kind, sequence, amount, due_date,
     notes, created_at, updated_at
   )
   select
@@ -2165,6 +3171,7 @@ begin
     btrim(x.value ->> 'id'),
     btrim(x.value ->> 'sale_id'),
     btrim(x.value ->> 'label'),
+    btrim(x.value ->> 'installment_kind'),
     (x.value ->> 'sequence')::integer,
     (x.value ->> 'amount')::numeric,
     (x.value ->> 'due_date')::date,
@@ -2175,13 +3182,14 @@ begin
   where not exists (
     select 1
     from jsonb_array_elements(v_sales) as s(value)
-    where coalesce(nullif(btrim(s.value ->> 'status'), ''), 'Reservada') = 'Cancelada'
+    where coalesce(nullif(btrim(s.value ->> 'status'), ''), 'Reservada')
+      in ('Desistió', 'Cambio')
       and btrim(s.value ->> 'id') = btrim(x.value ->> 'sale_id')
   );
   get diagnostics v_rows = row_count;
   v_installment_count := v_installment_count + v_rows;
 
-  -- Un respaldo completo debe conservar exactamente el plan de cada comision.
+  -- Un respaldo completo debe conservar exactamente la forma y el 100% del plan.
   select s.id
     into v_bad_sale_id
   from public.crm_sales as s
@@ -2191,6 +3199,23 @@ begin
   where s.owner_id = v_owner
   group by s.id, s.commission_amount
   having coalesce(sum(i.amount), 0) <> s.commission_amount
+     or not (
+       (
+         count(i.id) = 1
+         and count(i.id) filter (
+           where i.installment_kind = 'single' and i.sequence = 1
+         ) = 1
+       )
+       or (
+         count(i.id) = 2
+         and count(i.id) filter (
+           where i.installment_kind = 'advance' and i.sequence = 1
+         ) = 1
+         and count(i.id) filter (
+           where i.installment_kind = 'balance' and i.sequence = 2
+         ) = 1
+       )
+     )
   order by s.id
   limit 1;
 
@@ -2198,7 +3223,7 @@ begin
     raise exception using
       errcode = '23514',
       message = format(
-        'La suma de cuotas de la venta %s no coincide exactamente con commission_amount',
+        'El plan de la venta %s no es single o advance+balance por el 100%%',
         v_bad_sale_id
       );
   end if;
@@ -2228,7 +3253,8 @@ begin
   where not exists (
     select 1
     from jsonb_array_elements(v_sales) as s(value)
-    where coalesce(nullif(btrim(s.value ->> 'status'), ''), 'Reservada') = 'Cancelada'
+    where coalesce(nullif(btrim(s.value ->> 'status'), ''), 'Reservada')
+      in ('Desistió', 'Cambio')
       and btrim(s.value ->> 'id') = btrim(x.value ->> 'sale_id')
   );
   get diagnostics v_rows = row_count;
@@ -2241,12 +3267,12 @@ begin
       on p.owner_id = s.owner_id
      and p.sale_id = s.id
     where s.owner_id = v_owner
-      and s.status = 'Cancelada'
+      and s.status in ('Desistió', 'Cambio')
       and p.status = 'Contabilizado'
   ) then
     raise exception using
       errcode = '23514',
-      message = 'La restauracion no puede dejar cobros Contabilizados en ventas Canceladas';
+      message = 'La restauracion no puede dejar cobros Contabilizados en ventas Desistió/Cambio';
   end if;
 
   -- Se conservan estos nombres de contadores por compatibilidad del consumidor;
@@ -2303,6 +3329,7 @@ declare
   v_item_id text;
   v_item_sale_id text;
   v_item_label text;
+  v_item_kind text;
   v_item_sequence integer;
   v_item_amount numeric;
   v_item_due_date date;
@@ -2310,6 +3337,9 @@ declare
   v_distinct_ids integer := 0;
   v_distinct_sequences integer := 0;
   v_plan_total numeric := 0;
+  v_single_count integer := 0;
+  v_advance_count integer := 0;
+  v_balance_count integer := 0;
   v_persisted_total numeric := 0;
   v_exists boolean := false;
   v_working_status text;
@@ -2346,6 +3376,46 @@ begin
       errcode = '54000',
       message = 'crm_save_sale excede el limite de 5 MiB';
   end if;
+
+  -- Contrato frontend -> PostgreSQL: installmentKind se normaliza a la columna
+  -- installment_kind. snake_case se conserva para clientes SQL existentes.
+  if exists (
+    select 1
+    from jsonb_array_elements(v_installments) as x(value)
+    where nullif(btrim(x.value ->> 'installmentKind'), '') is not null
+      and nullif(btrim(x.value ->> 'installment_kind'), '') is not null
+      and btrim(x.value ->> 'installmentKind')
+        is distinct from btrim(x.value ->> 'installment_kind')
+  ) then
+    raise exception using
+      errcode = '22023',
+      message = 'installmentKind e installment_kind no pueden contradecirse';
+  end if;
+
+  select coalesce(
+    jsonb_agg(
+      x.value || jsonb_build_object(
+        'installment_kind', coalesce(
+          nullif(btrim(x.value ->> 'installmentKind'), ''),
+          nullif(btrim(x.value ->> 'installment_kind'), '')
+        ),
+        'label', case coalesce(
+          nullif(btrim(x.value ->> 'installmentKind'), ''),
+          nullif(btrim(x.value ->> 'installment_kind'), '')
+        )
+          when 'advance' then 'Avance'
+          when 'balance' then 'Saldo'
+          when 'single' then 'Pago único'
+          else x.value ->> 'label'
+        end
+      )
+      order by x.ordinality
+    ),
+    '[]'::jsonb
+  )
+    into v_installments
+  from jsonb_array_elements(v_installments) with ordinality
+    as x(value, ordinality);
 
   if nullif(btrim(p_sale ->> 'owner_id'), '') is not null then
     begin
@@ -2435,7 +3505,19 @@ begin
     raise exception 'developer no puede exceder 200 caracteres';
   end if;
 
-  if v_status not in ('Reservada', 'Contratada', 'Entregada', 'Cancelada') then
+  if v_developer is distinct from 'Constructora LVP'
+     or v_project not in (
+    'Altos del este', 'Riviera 1', 'Riviera 2', 'Riviera 3',
+    'Riviera 4', 'Vistas del limonal', 'Epic Moon', 'Epic River',
+    'Doña Carmen', 'Las Margaritas', 'LP12', 'LP11', 'LP11 ABEY',
+    'East Town'
+  ) then
+    raise exception 'Solo se admite Constructora LVP con un proyecto autorizado';
+  end if;
+
+  if v_status not in (
+    'Reservada', 'Opción a compra firmada', 'Entregado', 'Desistió', 'Cambio'
+  ) then
     raise exception 'Status de venta no valido: %', v_status;
   end if;
 
@@ -2458,6 +3540,15 @@ begin
     raise exception 'delivery_date no puede ser anterior a sale_date';
   end if;
 
+  if v_status = 'Entregado' then
+    if v_delivery_date is null then
+      raise exception 'Entregado requiere delivery_date explícita';
+    end if;
+    if v_delivery_date > current_date then
+      raise exception 'Entregado no acepta delivery_date futura';
+    end if;
+  end if;
+
   if v_shared_sale and v_external_agent is null then
     raise exception 'Una venta compartida requiere external_agent';
   end if;
@@ -2476,31 +3567,32 @@ begin
     raise exception 'commission_rate debe estar entre 0 y 100 con hasta 4 decimales';
   end if;
 
-  if v_commission_amount is null or v_commission_amount < 0
+  if v_commission_amount is null or v_commission_amount <= 0
      or v_commission_amount <> round(v_commission_amount, 2) then
-    raise exception 'commission_amount debe ser no negativa y tener hasta 2 decimales';
+    raise exception 'commission_amount debe ser positiva y tener hasta 2 decimales';
   end if;
 
   if v_notes is not null and char_length(v_notes) > 20000 then
     raise exception 'notes no puede exceder 20000 caracteres';
   end if;
 
-  if v_status = 'Cancelada' then
+  if v_status in ('Desistió', 'Cambio') then
     if v_cancel_reason is null then
-      raise exception 'Una venta Cancelada requiere cancel_reason';
+      raise exception 'Una venta Desistió o Cambio requiere cancel_reason';
     end if;
     v_cancelled_at := coalesce(v_cancelled_at, clock_timestamp());
     if v_cancelled_at::date < v_sale_date then
       raise exception 'cancelled_at no puede ser anterior a sale_date';
     end if;
   elsif v_cancel_reason is not null or v_cancelled_at is not null then
-    raise exception 'cancel_reason/cancelled_at solo aplican a una venta Cancelada';
+    raise exception
+      'cancel_reason/cancelled_at solo aplican a una venta Desistió o Cambio';
   end if;
 
-  if jsonb_array_length(v_installments) > 1000 then
+  if jsonb_array_length(v_installments) > 2 then
     raise exception using
-      errcode = '54000',
-      message = 'Una venta no puede importar mas de 1000 cuotas';
+      errcode = '23514',
+      message = 'El plan no puede tener más de 2 cuotas';
   end if;
 
   for v_item in select value from jsonb_array_elements(v_installments)
@@ -2525,6 +3617,7 @@ begin
     v_item_id := nullif(btrim(v_item ->> 'id'), '');
     v_item_sale_id := nullif(btrim(v_item ->> 'sale_id'), '');
     v_item_label := nullif(btrim(v_item ->> 'label'), '');
+    v_item_kind := nullif(btrim(v_item ->> 'installment_kind'), '');
     if jsonb_typeof(v_item -> 'sequence') is distinct from 'number'
        or jsonb_typeof(v_item -> 'amount') is distinct from 'number' then
       raise exception using
@@ -2547,9 +3640,21 @@ begin
     if v_item_label is null or char_length(v_item_label) > 160 then
       raise exception 'Cada cuota requiere label de hasta 160 caracteres';
     end if;
+    if v_item_kind is null
+       or v_item_kind not in ('advance', 'balance', 'single') then
+      raise exception
+        'Cada cuota requiere installment_kind advance, balance o single';
+    end if;
     if v_item_sequence is null or v_item_sequence <= 0
        or v_item_sequence > 1000000 then
       raise exception 'La secuencia de cuota debe estar entre 1 y 1000000';
+    end if;
+    if not (
+      (v_item_kind = 'single' and v_item_sequence = 1)
+      or (v_item_kind = 'advance' and v_item_sequence = 1)
+      or (v_item_kind = 'balance' and v_item_sequence = 2)
+    ) then
+      raise exception 'installment_kind no coincide con su secuencia estructural';
     end if;
     if v_item_amount is null or v_item_amount <= 0
        or v_item_amount <> round(v_item_amount, 2) then
@@ -2568,8 +3673,27 @@ begin
     count(*),
     count(distinct btrim(e.value ->> 'id')),
     count(distinct (e.value ->> 'sequence')::integer),
-    coalesce(sum((e.value ->> 'amount')::numeric), 0)
-    into v_plan_count, v_distinct_ids, v_distinct_sequences, v_plan_total
+    coalesce(sum((e.value ->> 'amount')::numeric), 0),
+    count(*) filter (
+      where btrim(e.value ->> 'installment_kind') = 'single'
+        and (e.value ->> 'sequence')::integer = 1
+    ),
+    count(*) filter (
+      where btrim(e.value ->> 'installment_kind') = 'advance'
+        and (e.value ->> 'sequence')::integer = 1
+    ),
+    count(*) filter (
+      where btrim(e.value ->> 'installment_kind') = 'balance'
+        and (e.value ->> 'sequence')::integer = 2
+    )
+    into
+      v_plan_count,
+      v_distinct_ids,
+      v_distinct_sequences,
+      v_plan_total,
+      v_single_count,
+      v_advance_count,
+      v_balance_count
   from jsonb_array_elements(v_installments) as e(value);
 
   if v_plan_count <> v_distinct_ids then
@@ -2577,6 +3701,17 @@ begin
   end if;
   if v_plan_count <> v_distinct_sequences then
     raise exception 'p_installments contiene secuencias duplicadas';
+  end if;
+  if not (
+    (v_plan_count = 1 and v_single_count = 1)
+    or (
+      v_plan_count = 2
+      and v_advance_count = 1
+      and v_balance_count = 1
+    )
+  ) then
+    raise exception
+      'El plan requiere exactamente single o advance(1)+balance(2)';
   end if;
   if v_plan_total <> v_commission_amount then
     raise exception
@@ -2610,9 +3745,9 @@ begin
       message = 'Un id de cuota ya pertenece a otra venta del owner';
   end if;
 
-  -- Tras el primer cobro contabilizado se congela el contrato financiero y el
-  -- plan completo, incluso cuando un pago abarque varias cuotas y no tenga
-  -- installment_id. Solo pueden editarse datos no financieros o avanzar status.
+  -- Tras el primer cobro se congela el contrato financiero y la estructura del
+  -- plan. delivery_date sigue siendo editable y due_date solo puede variar para
+  -- una cuota Saldo sin cobros propios ni cobros contabilizados sin asignar.
   if v_exists and exists (
     select 1
     from public.crm_payments as p
@@ -2620,7 +3755,9 @@ begin
       and p.sale_id = v_sale_id
       and p.status = 'Contabilizado'
   ) and (
-    v_existing.sale_date is distinct from v_sale_date
+    v_existing.sale_price is distinct from v_sale_price
+    or v_existing.sale_currency is distinct from v_sale_currency
+    or v_existing.sale_date is distinct from v_sale_date
     or v_existing.commission_rate is distinct from v_commission_rate
     or v_existing.commission_amount is distinct from v_commission_amount
     or v_existing.commission_currency is distinct from v_commission_currency
@@ -2639,21 +3776,38 @@ begin
           from jsonb_array_elements(v_installments) as e(value)
           where btrim(e.value ->> 'id') = i.id
             and btrim(e.value ->> 'label') = i.label
+            and btrim(e.value ->> 'installment_kind') = i.installment_kind
             and (e.value ->> 'sequence')::integer = i.sequence
             and (e.value ->> 'amount')::numeric = i.amount
-            and (e.value ->> 'due_date')::date = i.due_date
+            and (
+              (e.value ->> 'due_date')::date = i.due_date
+              or (
+                i.installment_kind = 'balance'
+                and not exists (
+                  select 1
+                  from public.crm_payments as p
+                  where p.owner_id = i.owner_id
+                    and p.sale_id = i.sale_id
+                    and p.status = 'Contabilizado'
+                    and (
+                      p.installment_id = i.id
+                      or p.installment_id is null
+                    )
+                )
+              )
+            )
             and i.notes is not distinct from nullif(e.value ->> 'notes', '')
         )
     )
   ) then
     raise exception
-      'El contrato financiero y su plan no cambian despues de contabilizar cobros';
+      'El contrato financiero y la estructura del plan no cambian despues de contabilizar cobros';
   end if;
 
   if not v_exists then
-    -- Una venta historica Cancelada se crea transitoriamente como Reservada para
+    -- Una venta histórica terminal se crea transitoriamente como Reservada para
     -- poder insertar su plan. La fila queda bloqueada/no visible hasta el commit y
-    -- la actualizacion final aplica Cancelada con motivo y fecha.
+    -- la actualización final aplica Desistió/Cambio con motivo y fecha.
     insert into public.crm_sales (
       owner_id, id, client_id, project, unit, developer, status,
       sale_price, sale_currency, sale_date, delivery_date, shared_sale, external_agent,
@@ -2667,17 +3821,18 @@ begin
       v_project,
       v_unit,
       v_developer,
-      case when v_status = 'Cancelada' then 'Reservada' else v_status end,
+      case when v_status in ('Desistió', 'Cambio') then 'Reservada' else v_status end,
       v_sale_price, v_sale_currency, v_sale_date, v_delivery_date,
       v_shared_sale, v_external_agent, v_commission_rate,
       v_commission_amount, v_commission_currency, v_notes,
-      case when v_status = 'Cancelada' then null else v_cancel_reason end,
-      case when v_status = 'Cancelada' then null else v_cancelled_at end
+      case when v_status in ('Desistió', 'Cambio') then null else v_cancel_reason end,
+      case when v_status in ('Desistió', 'Cambio') then null else v_cancelled_at end
     )
     returning * into v_saved;
   else
     v_working_status := v_existing.status;
-    if v_existing.status = 'Cancelada' and v_status <> 'Cancelada' then
+    if v_existing.status in ('Desistió', 'Cambio')
+       and v_status not in ('Desistió', 'Cambio') then
       v_working_status := v_status;
     end if;
     v_working_commission := greatest(
@@ -2688,12 +3843,14 @@ begin
 
     update public.crm_sales
     set project = case
-          when v_existing.status = 'Cancelada' and v_status <> 'Cancelada'
+          when v_existing.status in ('Desistió', 'Cambio')
+            and v_status not in ('Desistió', 'Cambio')
             then v_project
           else v_existing.project
         end,
         unit = case
-          when v_existing.status = 'Cancelada' and v_status <> 'Cancelada'
+          when v_existing.status in ('Desistió', 'Cambio')
+            and v_status not in ('Desistió', 'Cambio')
             then v_unit
           else v_existing.unit
         end,
@@ -2701,11 +3858,13 @@ begin
         sale_date = v_working_sale_date,
         commission_amount = v_working_commission,
         cancel_reason = case
-          when v_working_status = 'Cancelada' then v_existing.cancel_reason
+          when v_working_status in ('Desistió', 'Cambio')
+            then v_existing.cancel_reason
           else null
         end,
         cancelled_at = case
-          when v_working_status = 'Cancelada' then v_existing.cancelled_at
+          when v_working_status in ('Desistió', 'Cambio')
+            then v_existing.cancelled_at
           else null
         end
     where owner_id = v_owner
@@ -2751,13 +3910,15 @@ begin
       btrim(e.value ->> 'id')
   loop
     insert into public.crm_commission_installments as ci (
-      owner_id, id, sale_id, label, sequence, amount, due_date, notes
+      owner_id, id, sale_id, label, installment_kind, sequence, amount, due_date,
+      notes
     )
     values (
       v_owner,
       btrim(v_item ->> 'id'),
       v_sale_id,
       btrim(v_item ->> 'label'),
+      btrim(v_item ->> 'installment_kind'),
       (v_item ->> 'sequence')::integer,
       (v_item ->> 'amount')::numeric,
       (v_item ->> 'due_date')::date,
@@ -2766,6 +3927,7 @@ begin
     on conflict (owner_id, id) do update
     set sale_id = excluded.sale_id,
         label = excluded.label,
+        installment_kind = excluded.installment_kind,
         sequence = excluded.sequence,
         amount = excluded.amount,
         due_date = excluded.due_date,
@@ -2773,6 +3935,7 @@ begin
     where (
       ci.sale_id,
       ci.label,
+      ci.installment_kind,
       ci.sequence,
       ci.amount,
       ci.due_date,
@@ -2780,6 +3943,7 @@ begin
     ) is distinct from (
       excluded.sale_id,
       excluded.label,
+      excluded.installment_kind,
       excluded.sequence,
       excluded.amount,
       excluded.due_date,
@@ -2789,8 +3953,22 @@ begin
 
   set constraints public.crm_commission_installments_sequence_key immediate;
 
-  select coalesce(sum(i.amount), 0)
-    into v_persisted_total
+  select
+    coalesce(sum(i.amount), 0),
+    count(*) filter (
+      where i.installment_kind = 'single' and i.sequence = 1
+    ),
+    count(*) filter (
+      where i.installment_kind = 'advance' and i.sequence = 1
+    ),
+    count(*) filter (
+      where i.installment_kind = 'balance' and i.sequence = 2
+    )
+    into
+      v_persisted_total,
+      v_single_count,
+      v_advance_count,
+      v_balance_count
   from public.crm_commission_installments as i
   where i.owner_id = v_owner
     and i.sale_id = v_sale_id;
@@ -2799,6 +3977,17 @@ begin
     raise exception
       'El plan persistido (%) no coincide con commission_amount (%)',
       v_persisted_total, v_commission_amount;
+  end if;
+
+  if not (
+    (v_plan_count = 1 and v_single_count = 1)
+    or (
+      v_plan_count = 2
+      and v_advance_count = 1
+      and v_balance_count = 1
+    )
+  ) then
+    raise exception 'El plan persistido no conserva su forma estructural';
   end if;
 
   update public.crm_sales
@@ -2869,6 +4058,7 @@ declare
   v_saved public.crm_payments%rowtype;
   v_total_accounted numeric := 0;
   v_installment_amount numeric;
+  v_installment_kind text;
   v_installment_accounted numeric := 0;
 begin
   if v_owner is null then
@@ -2928,8 +4118,9 @@ begin
   if v_sale_id is null or char_length(v_sale_id) > 128 then
     raise exception 'p_payment.sale_id es obligatorio y no puede exceder 128 caracteres';
   end if;
-  if v_installment_id is not null and char_length(v_installment_id) > 128 then
-    raise exception 'installment_id no puede exceder 128 caracteres';
+  if v_installment_id is null or char_length(v_installment_id) > 128 then
+    raise exception
+      'Todo cobro Contabilizado requiere installment_id de hasta 128 caracteres';
   end if;
   if v_requested_status <> 'Contabilizado' then
     raise exception 'crm_record_payment solo crea cobros Contabilizados';
@@ -3004,9 +4195,9 @@ begin
     raise exception 'La venta % no existe para este owner', v_sale_id;
   end if;
 
-  if v_sale.status not in ('Contratada', 'Entregada') then
+  if v_sale.status not in ('Opción a compra firmada', 'Entregado') then
     raise exception
-      'Solo ventas Contratadas o Entregadas aceptan cobros; status actual: %',
+      'Solo ventas en Opción a compra firmada o Entregado aceptan cobros; status actual: %',
       v_sale.status;
   end if;
   if v_payment_date < v_sale.sale_date then
@@ -3035,8 +4226,8 @@ begin
   end if;
 
   if v_installment_id is not null then
-    select i.amount
-      into v_installment_amount
+    select i.amount, i.installment_kind
+      into v_installment_amount, v_installment_kind
     from public.crm_commission_installments as i
     where i.owner_id = v_owner
       and i.sale_id = v_sale_id
@@ -3044,6 +4235,19 @@ begin
 
     if not found then
       raise exception 'La cuota % no pertenece a la venta', v_installment_id;
+    end if;
+
+    if v_sale.status = 'Opción a compra firmada'
+       and v_installment_kind not in ('advance', 'single') then
+      raise exception
+        'Opción a compra firmada solo permite kind advance o single; balance requiere Entregado';
+    end if;
+
+    if v_installment_kind = 'balance'
+       and (v_sale.delivery_date is null or v_payment_date < v_sale.delivery_date) then
+      raise exception
+        'El saldo no puede cobrarse antes de delivery_date (%)',
+        v_sale.delivery_date;
     end if;
 
     select coalesce(sum(p.amount), 0)
@@ -3159,8 +4363,8 @@ $function$;
 comment on function public.crm_void_payment(text, text) is
   'Anula un cobro Contabilizado del owner actual; no elimina el registro.';
 
--- Salud financiera del workspace. plan_matches permite validar que la suma de
--- cuotas coincide exactamente con la comision sin impedir una planificacion parcial.
+-- Salud financiera del workspace. plan_matches exige tanto el total exacto como
+-- una estructura valida: Pago unico o Avance + Saldo.
 create or replace function public.crm_workspace_health()
 returns table (
   sale_id text,
@@ -3187,11 +4391,38 @@ as $function$
     s.commission_amount - coalesce(i.planned_amount, 0) as unplanned_amount,
     greatest(s.commission_amount - coalesce(p.accounted_amount, 0), 0)
       as remaining_to_collect,
-    coalesce(i.planned_amount, 0) = s.commission_amount as plan_matches,
+    (
+      coalesce(i.planned_amount, 0) = s.commission_amount
+      and (
+        (
+          coalesce(i.installment_count, 0) = 1
+          and coalesce(i.single_count, 0) = 1
+          and coalesce(i.advance_count, 0) = 0
+          and coalesce(i.balance_count, 0) = 0
+        )
+        or (
+          coalesce(i.installment_count, 0) = 2
+          and coalesce(i.single_count, 0) = 0
+          and coalesce(i.advance_count, 0) = 1
+          and coalesce(i.balance_count, 0) = 1
+        )
+      )
+    ) as plan_matches,
     coalesce(p.accounted_amount, 0) > s.commission_amount as is_overpaid
   from public.crm_sales as s
   left join lateral (
-    select sum(ci.amount) as planned_amount
+    select
+      sum(ci.amount) as planned_amount,
+      count(*) as installment_count,
+      count(*) filter (
+        where ci.installment_kind = 'single' and ci.sequence = 1
+      ) as single_count,
+      count(*) filter (
+        where ci.installment_kind = 'advance' and ci.sequence = 1
+      ) as advance_count,
+      count(*) filter (
+        where ci.installment_kind = 'balance' and ci.sequence = 2
+      ) as balance_count
     from public.crm_commission_installments as ci
     where ci.owner_id = s.owner_id
       and ci.sale_id = s.id
@@ -3217,6 +4448,7 @@ revoke all on function public.crm_touch_updated_at() from public, anon, authenti
 revoke all on function public.crm_enforce_immutable_identity() from public, anon, authenticated;
 revoke all on function public.crm_validate_sale_financials() from public, anon, authenticated;
 revoke all on function public.crm_validate_installment_financials() from public, anon, authenticated;
+revoke all on function public.crm_validate_commission_plan() from public, anon, authenticated;
 revoke all on function public.crm_validate_payment_financials() from public, anon, authenticated;
 revoke all on function public.crm_write_audit() from public, anon, authenticated;
 revoke all on function public.crm_block_audit_mutation() from public, anon, authenticated;
