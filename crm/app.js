@@ -1,5 +1,5 @@
 const STORAGE_KEY = "antony-crm-local-v2";
-const APP_VERSION = 9;
+const APP_VERSION = 10;
 const MAX_AUDIT_ENTRIES = 500;
 const VALID_CURRENCIES = ["USD", "DOP"];
 const VALID_CLIENT_STAGES = ["Nuevo", "Calificado", "En seguimiento", "Comprador", "Inactivo"];
@@ -1138,6 +1138,10 @@ function isCancelledSale(sale) {
   return TERMINAL_SALE_STATUSES.includes(sale?.saleStatus);
 }
 
+function activeOperationalSales() {
+  return state.sales.filter((sale) => !isCancelledSale(sale));
+}
+
 function isClosedSale(sale) {
   return CLOSED_SALE_STATUSES.includes(sale?.saleStatus);
 }
@@ -1713,7 +1717,7 @@ function renderCollectionAlerts(activeSales) {
 
 function renderDashboard() {
   const year = String(new Date().getFullYear());
-  const activeSales = state.sales.filter((sale) => !isCancelledSale(sale));
+  const activeSales = activeOperationalSales();
   const closedSales = activeSales.filter(isClosedSale);
   const historicalSales = activeHistoricalSales().map(historicalAnalyticsSale);
   const documentedSales = [...activeSales.map(operationalAnalyticsSale), ...historicalSales];
@@ -1824,7 +1828,7 @@ function renderDashboard() {
   document.querySelector("#metricOverdue").textContent =
     overdue.length + (overdue.length === 1 ? " vencida" : " vencidas");
 
-  const recent = [...state.sales.map(operationalAnalyticsSale), ...historicalSales]
+  const recent = [...activeSales.map(operationalAnalyticsSale), ...historicalSales]
     .sort((a, b) => String(b.saleDate).localeCompare(String(a.saleDate)))
     .slice(0, 5);
   document.querySelector("#recentSalesBody").innerHTML = recent
@@ -2005,6 +2009,7 @@ function clientDetailHtml(client) {
 
 function saleDetailHtml(sale) {
   const client = clientById(sale.clientId);
+  const archived = isCancelledSale(sale);
   const payments = paymentsForSale(sale.id).sort((a, b) =>
     String(b.paymentDate).localeCompare(String(a.paymentDate))
   );
@@ -2021,18 +2026,20 @@ function saleDetailHtml(sale) {
           const paid = installment.pendingCents === 0;
           const collectible = isInstallmentCollectible(sale, installment);
           const overdue = collectible && !paid && installment.dueDate < today();
-          const status = paid
-            ? "Pagada"
-            : !collectible
-              ? "Disponible al entregar"
-              : overdue
-                ? "Vencida"
-                : installment.paidCents
-                  ? "Parcial"
-                  : "Pendiente";
+          const status = archived
+            ? "Archivada — no cobrable"
+            : paid
+              ? "Pagada"
+              : !collectible
+                ? "Disponible al entregar"
+                : overdue
+                  ? "Vencida"
+                  : installment.paidCents
+                    ? "Parcial"
+                    : "Pendiente";
           return (
             '<div class="detail-payment"><span class="detail-payment-icon"><i data-lucide="' +
-            (paid ? "check" : !collectible ? "lock-keyhole" : overdue ? "triangle-alert" : "calendar-clock") +
+            (archived ? "archive-x" : paid ? "check" : !collectible ? "lock-keyhole" : overdue ? "triangle-alert" : "calendar-clock") +
             '" aria-hidden="true"></i></span><div><strong>' +
             escapeHtml(installment.label) +
             '</strong><small>Vence ' +
@@ -2068,6 +2075,15 @@ function saleDetailHtml(sale) {
         )
         .join("")
     : '<div class="detail-empty">Todavía no hay cobros registrados.</div>';
+  const archivedNotice = archived
+    ? '<section class="detail-terminal-notice"><span><i data-lucide="archive-x" aria-hidden="true"></i></span><div><strong>Operación archivada</strong><p>' +
+      escapeHtml(
+        sale.saleStatus === "Cambio"
+          ? "La operación anterior dejó de contar en ventas, comisiones y cobros. Registra el nuevo proyecto o unidad como una venta aparte."
+          : "Esta operación dejó de contar en ventas, comisiones pendientes, cobros y reportes activos. Se conserva únicamente para control y auditoría."
+      ) +
+      "</p></div></section>"
+    : "";
   return (
     '<section class="deal-dossier"><div><span class="eyebrow">' +
     escapeHtml(sale.saleStatus) +
@@ -2080,11 +2096,14 @@ function saleDetailHtml(sale) {
     "</p></div><strong>" +
     escapeHtml(money(sale.salePrice, sale.saleCurrency)) +
     "</strong></section>" +
-    '<section class="detail-commission"><div class="detail-commission-heading"><div><span>Comisión cobrada</span><strong>' +
+    archivedNotice +
+    '<section class="detail-commission"><div class="detail-commission-heading"><div><span>' +
+    (archived ? "Comisión fuera de cartera" : "Comisión cobrada") +
+    "</span><strong>" +
     escapeHtml(moneyFromCents(paidCents, sale.commissionCurrency)) +
     '</strong></div><span>' +
-    progress +
-    '%</span></div><div class="detail-progress"><span style="width:' +
+    (archived ? "Archivada" : progress + "%") +
+    '</span></div><div class="detail-progress"><span style="width:' +
     progress +
     '%"></span></div><div class="detail-commission-meta"><span>Total ' +
     escapeHtml(money(sale.commissionAmount, sale.commissionCurrency)) +
@@ -2230,7 +2249,7 @@ function renderClients() {
   document.querySelector("#clientsBody").innerHTML = clients
     .map((client) => {
       const salesCount = state.sales.filter(
-        (sale) => sale.clientId === client.id
+        (sale) => sale.clientId === client.id && !isCancelledSale(sale)
       ).length;
       const budget = client.budget
         ? money(client.budget, client.budgetCurrency)
@@ -2312,8 +2331,14 @@ function filteredSalesForList() {
   return state.sales
     .filter((sale) => {
       const client = clientById(sale.clientId);
+      const matchesStatus =
+        status === "all"
+          ? true
+          : status
+            ? sale.saleStatus === status
+            : !isCancelledSale(sale);
       return (
-        (!status || sale.saleStatus === status) &&
+        matchesStatus &&
         (!query ||
           normalizeText(
             [
@@ -2345,12 +2370,17 @@ function saleActionsHtml(sale) {
 
 function renderSales() {
   const sales = filteredSalesForList();
-  const filtersActive =
-    document.querySelector("#saleSearch").value ||
-    document.querySelector("#saleStatusFilter").value;
-  document.querySelector("#salesCount").textContent = filtersActive
-    ? sales.length + " / " + state.sales.length
-    : state.sales.length;
+  const queryActive = Boolean(document.querySelector("#saleSearch").value);
+  const status = document.querySelector("#saleStatusFilter").value;
+  const scopedTotal =
+    status === "all"
+      ? state.sales.length
+      : status
+        ? state.sales.filter((sale) => sale.saleStatus === status).length
+        : activeOperationalSales().length;
+  document.querySelector("#salesCount").textContent = queryActive
+    ? sales.length + " / " + scopedTotal
+    : scopedTotal;
   document.querySelector("#saleOverviewReserved").textContent = state.sales.filter(
     (sale) => sale.saleStatus === "Reservada"
   ).length;
@@ -2441,7 +2471,12 @@ function renderSales() {
         '</div><div class="mobile-record-open"><span>Ver dossier</span><i data-lucide="arrow-right" aria-hidden="true"></i></div></article>'
     )
     .join("");
-  document.querySelector("#salesEmpty").hidden = sales.length !== 0;
+  const empty = document.querySelector("#salesEmpty");
+  empty.textContent =
+    status || queryActive
+      ? "No hay operaciones para estos filtros."
+      : "No hay operaciones activas. Usa el filtro para consultar las archivadas.";
+  empty.hidden = sales.length !== 0;
   refreshIcons();
 }
 
@@ -3711,15 +3746,28 @@ function updateCancelReasonVisibility() {
   const form = document.querySelector("#saleForm");
   const wrapper = document.querySelector("#cancelReasonWrap");
   if (!form || !wrapper) return;
-  const terminal = TERMINAL_SALE_STATUSES.includes(form.elements.saleStatus.value);
+  const status = form.elements.saleStatus.value;
+  const terminal = TERMINAL_SALE_STATUSES.includes(status);
   wrapper.hidden = !terminal;
   form.elements.cancelReason.required = terminal;
   const label = document.querySelector("#cancelReasonLabel");
   if (label) {
     label.textContent =
-      form.elements.saleStatus.value === "Cambio"
+      status === "Cambio"
         ? "Motivo y detalle del cambio"
         : "Motivo del desistimiento";
+  }
+  const noticeTitle = document.querySelector("#terminalSaleNoticeTitle");
+  const noticeText = document.querySelector("#terminalSaleNoticeText");
+  if (noticeTitle) {
+    noticeTitle.textContent =
+      status === "Cambio" ? "La operación anterior será archivada" : "La venta será archivada";
+  }
+  if (noticeText) {
+    noticeText.textContent =
+      status === "Cambio"
+        ? "Dejará de contar en ventas, comisiones y cobros. Registra el nuevo proyecto o unidad como una venta aparte."
+        : "Dejará de contar como venta, comisión pendiente o cobro. Solo quedará disponible en el filtro de operaciones archivadas para fines de control.";
   }
 }
 
@@ -4641,6 +4689,8 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
   );
   const cancelReason = String(data.get("cancelReason") || "").trim();
   const payments = id ? paymentsForSale(id) : [];
+  const archiveTransition =
+    TERMINAL_SALE_STATUSES.includes(saleStatus) && current?.saleStatus !== saleStatus;
 
   if (!clientById(clientId)) {
     return showFieldError(
@@ -4823,6 +4873,17 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
       saleStatus === "Cambio" ? "Describe qué cambió" : "Indica el motivo del desistimiento"
     );
   }
+  if (archiveTransition) {
+    const confirmation = await requestConfirmation({
+      title: saleStatus === "Cambio" ? "Archivar operación anterior" : "Confirmar desistimiento",
+      message:
+        saleStatus === "Cambio"
+          ? "La operación anterior dejará de contar en ventas, comisiones pendientes y cobros. Quedará archivada para control; registra el nuevo proyecto o unidad como una venta aparte."
+          : "La venta dejará de contar en ventas, comisiones pendientes, cobros y reportes activos. Quedará archivada únicamente para control y auditoría.",
+      confirmLabel: saleStatus === "Cambio" ? "Archivar por cambio" : "Archivar como desistida"
+    });
+    if (!confirmation.confirmed) return;
+  }
 
   const saleId = id || makeId("sale");
   syncBalanceDueDateWithDelivery();
@@ -4882,7 +4943,16 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
   resetSaleForm();
   renderAll();
   closeDrawer(false);
-  showToast(id ? "Venta actualizada" : "Venta guardada");
+  showToast(
+    archiveTransition
+      ? saleStatus === "Cambio"
+        ? "Operación anterior archivada; registra la nueva venta por separado"
+        : "Venta desistida y archivada; ya no cuenta en ventas ni cobros"
+      : id
+        ? "Venta actualizada"
+        : "Venta guardada",
+    archiveTransition ? 6500 : 3500
+  );
 });
 
 document.querySelector("#cancelSaleEdit").addEventListener("click", () => closeDrawer());
