@@ -346,6 +346,34 @@ test("production workflows retain capture date, cancellation reason, installment
   );
 });
 
+test("desisted and changed sales are archived outside active sales and collections", () => {
+  assert.ok(tagWithId(html, "strong", "terminalSaleNoticeTitle"));
+  assert.ok(tagWithId(html, "small", "terminalSaleNoticeText"));
+  assert.match(html, /id="saleStatusFilter"[\s\S]{0,220}<option value="">Operaciones activas<\/option>/);
+  assert.match(html, /<option value="all">Todas, incluyendo archivadas<\/option>/);
+  assert.match(html, /Desistió \(archivada\)/);
+  assert.match(html, /Cambio \(archivada\)/);
+
+  assert.match(app, /function activeOperationalSales\(\)/);
+  assert.match(
+    app,
+    /status === "all"[\s\S]{0,180}!isCancelledSale\(sale\)/,
+    "The default sales list must hide terminal operations"
+  );
+  assert.match(
+    app,
+    /sale\.clientId === client\.id && !isCancelledSale\(sale\)/,
+    "Client sale counts must exclude archived operations"
+  );
+  assert.match(app, /const recent = \[\.\.\.activeSales\.map\(operationalAnalyticsSale\)/);
+  assert.match(app, /if \(!sale \|\| isCancelledSale\(sale\)\) return 0;/);
+  assert.match(app, /No se puede cobrar una operación desistida o cambiada/);
+  assert.match(app, /title: saleStatus === "Cambio" \? "Archivar operación anterior" : "Confirmar desistimiento"/);
+  assert.match(app, /Venta desistida y archivada; ya no cuenta en ventas ni cobros/);
+  assert.match(app, /Operación archivada/);
+  assert.match(app, /Archivada — no cobrable/);
+});
+
 test("client feedback fields and collection visibility remain wired end to end", () => {
   assert.match(
     html,
