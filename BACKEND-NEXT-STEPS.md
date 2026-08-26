@@ -9,9 +9,11 @@ El backend de producción está aprovisionado en Supabase y conectado al fronten
 - Cuenta administrativa confirmada con `app_metadata.role=admin`.
 - PostgreSQL con clientes, ventas, cuotas, cobros y auditoría.
 - RLS por propietario, permisos mínimos y RPC transaccionales.
-- Migración `supabase-production-setup.sql` ejecutada y reejecutada sin errores.
-- Prueba real `crm/tests/supabase-acceptance.sql` aprobada con rollback limpio.
-- 39/39 pruebas automatizadas aprobadas.
+- Catálogo cerrado de Constructora LVP con sus 14 proyectos autorizados.
+- Plan estructural `Pago único` o `Avance` + `Saldo`; el saldo solo se cobra después de la fecha real de entrega.
+- Migración `supabase-production-setup.sql` ejecutada y reejecutada sin errores el 25 de agosto de 2026.
+- Prueba real `crm/tests/supabase-acceptance.sql` aprobada con `{"status":"passed","qa_rows_remaining":0}`.
+- 47/47 pruebas automatizadas aprobadas.
 - URL y clave publicable configuradas en `media-config.js`; no hay claves privadas en el navegador.
 
 La contraseña antigua que existió en el historial de Git se considera pública y no se reutilizó para Supabase. El acceso actual depende exclusivamente de Supabase Auth.
@@ -26,7 +28,7 @@ La contraseña antigua que existió en el historial de Git se considera pública
 ## Fases opcionales posteriores
 
 - Notificaciones automáticas de vencimientos por correo o WhatsApp Business.
-- Entidades maestras para desarrolladoras, proyectos e inventario de unidades.
+- Entidades maestras editables si en el futuro se incorporan nuevas constructoras, proyectos o inventario de unidades.
 - Adjuntos privados de contratos y comprobantes en un bucket separado y no público.
 - Roles adicionales si se incorporan asistentes o vendedores.
 - Analytics de visitas y conversiones del sitio público.
