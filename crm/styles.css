@@ -506,6 +506,7 @@ label { color: #344054; display: grid; font-size: 12px; font-weight: 700; gap: 6
   .report-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .clients-table th:nth-child(3), .clients-table td:nth-child(3),
   .sales-table th:nth-child(3), .sales-table td:nth-child(3),
+  .historical-table th:nth-child(3), .historical-table td:nth-child(3),
   .reports-table th:nth-child(3), .reports-table td:nth-child(3) { display: none; }
   .clients-table th:nth-child(1), .clients-table td:nth-child(1) { width: 25%; }
   .clients-table th:nth-child(2), .clients-table td:nth-child(2) { width: 25%; }
@@ -642,6 +643,12 @@ label { color: #344054; display: grid; font-size: 12px; font-weight: 700; gap: 6
 .historical-tools select { min-width: 150px; }
 .historical-table th:nth-child(3),
 .historical-table td:nth-child(3) { text-align: right; }
+.historical-table th:nth-child(1), .historical-table td:nth-child(1) { width: 25%; }
+.historical-table th:nth-child(2), .historical-table td:nth-child(2) { width: 20%; }
+.historical-table th:nth-child(3), .historical-table td:nth-child(3) { width: 13%; }
+.historical-table th:nth-child(4), .historical-table td:nth-child(4) { width: 18%; }
+.historical-table th:nth-child(5), .historical-table td:nth-child(5) { width: 14%; }
+.historical-table th:nth-child(6), .historical-table td:nth-child(6) { width: 132px; }
 #historicalOverviewVolume { font-size: clamp(20px, 2vw, 27px); }
 .historical-pending-list { display: flex; flex-wrap: wrap; gap: 5px; }
 .historical-pending-item {
@@ -661,6 +668,17 @@ label { color: #344054; display: grid; font-size: 12px; font-weight: 700; gap: 6
   color: #344054;
 }
 .historical-source-note { color: var(--text-secondary); font-size: 10px; }
+.historical-contact-context {
+  background: #f8f6f1;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--gold);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 12px 14px;
+}
+.historical-contact-context strong { color: var(--navy); display: block; font-size: 13px; }
 
 @media (max-width: 1180px) {
   #view-historical .module-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }

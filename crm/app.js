@@ -1,5 +1,5 @@
 const STORAGE_KEY = "antony-crm-local-v2";
-const APP_VERSION = 8;
+const APP_VERSION = 9;
 const MAX_AUDIT_ENTRIES = 500;
 const VALID_CURRENCIES = ["USD", "DOP"];
 const VALID_CLIENT_STAGES = ["Nuevo", "Calificado", "En seguimiento", "Comprador", "Inactivo"];
@@ -1070,12 +1070,18 @@ function activeHistoricalSales() {
 
 function historicalMissingFields(sale) {
   const missing = [];
-  if (!sale.buyerPhone || !sale.buyerEmail) missing.push("Contacto");
+  if (!sale.buyerPhone) missing.push("Teléfono");
+  if (!sale.buyerEmail) missing.push("Correo");
   if (!sale.saleStatus) missing.push("Estatus");
   if (!sale.deliveryDate) missing.push("Entrega");
   if (!(sale.commissionAmount > 0) || !sale.commissionPlan) missing.push("Comisión");
   if (!sale.paymentsConfirmed) missing.push("Cobros");
   return missing;
+}
+
+function historicalContactSummary(sale) {
+  return [sale.buyerPhone, sale.buyerEmail].filter(Boolean).join(" · ") ||
+    "Sin teléfono ni correo";
 }
 
 function historicalAnalyticsSale(sale) {
@@ -1428,6 +1434,7 @@ function resetDrawerForm(formId) {
   if (formId === "clientForm") resetClientForm();
   if (formId === "saleForm") resetSaleForm();
   if (formId === "paymentForm") resetPaymentForm();
+  if (formId === "historicalContactForm") resetHistoricalContactForm();
 }
 
 function unlockModalBackground() {
@@ -2489,6 +2496,16 @@ function historicalPendingHtml(sale) {
   );
 }
 
+function historicalActionsHtml(sale) {
+  return (
+    '<div class="row-actions"><button class="icon-action record-open-action" type="button" data-edit-history="' +
+    escapeHtml(sale.id) +
+    '" aria-label="Editar contacto de ' +
+    escapeHtml(sale.buyerName) +
+    '"><span>Editar</span><i data-lucide="pencil" aria-hidden="true"></i></button></div>'
+  );
+}
+
 function renderHistoricalSales() {
   populateHistoricalFilters();
   const all = activeHistoricalSales();
@@ -2515,6 +2532,8 @@ function renderHistoricalSales() {
         '<tr><td><span class="primary-cell">' +
         escapeHtml(sale.buyerName) +
         '</span><span class="secondary-cell">' +
+        escapeHtml(historicalContactSummary(sale)) +
+        '</span><span class="historical-source-note">Venta ' +
         escapeHtml(formatDate(sale.saleDate)) +
         '</span></td><td><span class="primary-cell">' +
         escapeHtml(sale.project) +
@@ -2524,7 +2543,9 @@ function renderHistoricalSales() {
         escapeHtml(money(sale.salePrice, sale.saleCurrency)) +
         "</td><td>" +
         historicalPendingHtml(sale) +
-        '</td><td><span class="status-pill status-historical">Vendida · por completar</span></td></tr>'
+        '</td><td><span class="status-pill status-historical">Vendida · por completar</span></td><td>' +
+        historicalActionsHtml(sale) +
+        "</td></tr>"
     )
     .join("");
   document.querySelector("#historicalMobileList").innerHTML = filtered
@@ -2540,7 +2561,11 @@ function renderHistoricalSales() {
         escapeHtml(money(sale.salePrice, sale.saleCurrency)) +
         '</span></div><div>' +
         historicalPendingHtml(sale) +
-        "</div></article>"
+        '</div><div class="mobile-record-meta"><span>' +
+        escapeHtml(historicalContactSummary(sale)) +
+        '</span></div><div class="mobile-record-actions"><button class="icon-action" type="button" data-edit-history="' +
+        escapeHtml(sale.id) +
+        '"><i data-lucide="pencil" aria-hidden="true"></i>Editar contacto</button></div></article>'
     )
     .join("");
   document.querySelector("#historicalEmpty").hidden = filtered.length !== 0;
@@ -3774,6 +3799,16 @@ function resetPaymentForm() {
   populatePaymentSelect();
 }
 
+function resetHistoricalContactForm() {
+  const form = document.querySelector("#historicalContactForm");
+  if (!form) return;
+  clearFormErrors(form);
+  form.reset();
+  setFormValue(form, "id", "");
+  document.querySelector("#historicalContactContext").innerHTML = "";
+  document.querySelector("#historicalContactSubmitButton").textContent = "Guardar cambios";
+}
+
 function startClientEdit(id, trigger) {
   const client = clientById(id);
   if (!client) return;
@@ -3809,6 +3844,25 @@ function startSaleEdit(id, trigger) {
   document.querySelector("#cancelSaleEdit").hidden = false;
   switchView("sales", true, false);
   openDrawer("saleForm", trigger);
+}
+
+function startHistoricalContactEdit(id, trigger) {
+  const sale = historicalSaleById(id);
+  if (!sale || sale.reviewStatus === "Convertida") return;
+  const form = document.querySelector("#historicalContactForm");
+  clearFormErrors(form);
+  ["id", "buyerName", "buyerPhone", "buyerEmail"].forEach((name) =>
+    setFormValue(form, name, sale[name])
+  );
+  document.querySelector("#historicalContactContext").innerHTML =
+    "<strong>" +
+    escapeHtml(sale.project + " · " + sale.unit) +
+    "</strong>Vendida el " +
+    escapeHtml(formatDate(sale.saleDate)) +
+    " por " +
+    escapeHtml(money(sale.salePrice, sale.saleCurrency));
+  switchView("historical", true, false);
+  openDrawer("historicalContactForm", trigger);
 }
 
 function startPaymentEdit(id, trigger) {
@@ -3959,6 +4013,7 @@ async function importBackup(file) {
     resetClientForm();
     resetSaleForm();
     resetPaymentForm();
+    resetHistoricalContactForm();
     renderAll();
     document.querySelector(".data-menu").open = false;
     showToast("Respaldo importado correctamente");
@@ -3983,6 +4038,95 @@ async function importHistoricalFile(file) {
   }
   try {
     const source = await file.text();
+    let contactRows = [];
+    try {
+      contactRows = window.AntonyHistoricalImport.parseHistoricalContactUpdates(source);
+    } catch (contactError) {
+      if (!/al menos una columna de Correo o Teléfono/i.test(contactError.message)) {
+        throw contactError;
+      }
+    }
+    const existingByUnit = new Map(
+      activeHistoricalSales().map((sale) => [
+        normalizeText(sale.project) + "::" + normalizeText(sale.unit),
+        sale
+      ])
+    );
+    const matchingExisting = contactRows.map((row) => ({
+      source: row,
+      existing: existingByUnit.get(
+        normalizeText(row.project) + "::" + normalizeText(row.unit)
+      )
+    }));
+
+    if (matchingExisting.length && matchingExisting.every((match) => match.existing)) {
+      const updates = matchingExisting
+        .map(({ source: contact, existing }) => ({
+          id: existing.id,
+          buyerPhone: existing.buyerPhone ? "" : contact.buyerPhone,
+          buyerEmail: existing.buyerEmail ? "" : contact.buyerEmail
+        }))
+        .filter((contact) => contact.buyerPhone || contact.buyerEmail);
+      const phonesToFill = updates.filter((contact) => contact.buyerPhone).length;
+      const emailsToFill = updates.filter((contact) => contact.buyerEmail).length;
+
+      if (!updates.length) {
+        showToast("La base coincide con el historial, pero no contiene contactos nuevos", 5500);
+        return;
+      }
+
+      const confirmation = await requestConfirmation({
+        title: "Actualizar contactos históricos",
+        message:
+          "La base coincide con " +
+          contactRows.length +
+          " ventas existentes. Se completarán " +
+          phonesToFill +
+          " teléfonos y " +
+          emailsToFill +
+          " correos vacíos. Los datos ya guardados no se reemplazarán y los faltantes podrán editarse después.",
+        confirmLabel: "Actualizar contactos"
+      });
+      if (!confirmation.confirmed) return;
+
+      let result = {
+        updated: updates.length,
+        phonesFilled: phonesToFill,
+        emailsFilled: emailsToFill
+      };
+      if (DEMO_MODE) {
+        const updatesById = new Map(updates.map((contact) => [contact.id, contact]));
+        state.historicalSales = state.historicalSales.map((sale) => {
+          const contact = updatesById.get(sale.id);
+          if (!contact) return sale;
+          return {
+            ...sale,
+            buyerPhone: sale.buyerPhone || contact.buyerPhone,
+            buyerEmail: sale.buyerEmail || contact.buyerEmail,
+            updatedAt: new Date().toISOString()
+          };
+        });
+        recordAudit("update", "historical", "contacts", updates.length + " contactos completados");
+      } else {
+        result = await performCloudMutation(() =>
+          cloudBackend.enrichHistoricalContacts(updates)
+        );
+        state = normalizeState(await cloudBackend.loadWorkspace());
+      }
+      renderAll();
+      switchView("historical", true, false);
+      showToast(
+        result.updated +
+          " contactos actualizados: " +
+          result.phonesFilled +
+          " teléfonos y " +
+          result.emailsFilled +
+          " correos",
+        6500
+      );
+      return;
+    }
+
     const rows = window.AntonyHistoricalImport.parseHistoricalFile(source, { today: today() });
     const fingerprint = await window.AntonyHistoricalImport.sha256(source);
     const summary = window.AntonyHistoricalImport.summarize(rows);
@@ -4318,7 +4462,63 @@ document.querySelector("#clientForm").addEventListener("submit", async (event) =
   showToast(id ? "Cliente actualizado" : "Cliente guardado");
 });
 
+document.querySelector("#historicalContactForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formElement = event.currentTarget;
+  clearFormErrors(formElement);
+  const data = new FormData(formElement);
+  const id = String(data.get("id") || "").trim();
+  const buyerName = String(data.get("buyerName") || "").trim().replace(/\s+/g, " ");
+  const buyerPhone = String(data.get("buyerPhone") || "").trim();
+  const buyerEmail = String(data.get("buyerEmail") || "").trim().toLowerCase();
+  const existing = historicalSaleById(id);
+
+  if (!existing || existing.reviewStatus === "Convertida") {
+    showToast("La venta histórica ya no está disponible", 5000);
+    closeDrawer();
+    return;
+  }
+  if (!buyerName) {
+    return showFieldError(formElement, "buyerName", "El nombre del comprador es obligatorio");
+  }
+  if (buyerPhone && buyerPhone.replace(/\D/g, "").length < 7) {
+    return showFieldError(formElement, "buyerPhone", "Indica un teléfono válido o déjalo vacío");
+  }
+  if (buyerEmail && !/^\S+@\S+\.\S+$/.test(buyerEmail)) {
+    return showFieldError(formElement, "buyerEmail", "Indica un correo válido o déjalo vacío");
+  }
+
+  let savedHistorical = {
+    ...existing,
+    buyerName,
+    buyerPhone,
+    buyerEmail,
+    updatedAt: new Date().toISOString()
+  };
+  if (!DEMO_MODE) {
+    try {
+      savedHistorical = await performCloudMutation(() =>
+        cloudBackend.updateHistoricalContact({ id, buyerName, buyerPhone, buyerEmail })
+      );
+    } catch (error) {
+      showBackendError(error);
+      return;
+    }
+  }
+
+  state.historicalSales = state.historicalSales.map((sale) =>
+    sale.id === id ? savedHistorical : sale
+  );
+  recordAudit("update", "historical", id, "Contacto histórico actualizado");
+  renderAll();
+  closeDrawer(false);
+  showToast("Contacto histórico actualizado");
+});
+
 document.querySelector("#cancelClientEdit").addEventListener("click", () => closeDrawer());
+document
+  .querySelector("#cancelHistoricalContactEdit")
+  .addEventListener("click", () => closeDrawer());
 document.querySelector("#clientSearch").addEventListener("input", renderClients);
 document.querySelector("#clientStageFilter").addEventListener("change", renderClients);
 document.querySelector("#saleDeveloper").addEventListener("change", () => {
@@ -4898,6 +5098,7 @@ document.querySelector("#loadDemoButton").addEventListener("click", async () => 
   resetClientForm();
   resetSaleForm();
   resetPaymentForm();
+  resetHistoricalContactForm();
   renderAll();
   document.querySelector(".data-menu").open = false;
   showToast("Datos demo restaurados");
@@ -4920,6 +5121,7 @@ document.querySelector("#resetDataButton").addEventListener("click", async () =>
   resetClientForm();
   resetSaleForm();
   resetPaymentForm();
+  resetHistoricalContactForm();
   renderAll();
   document.querySelector(".data-menu").open = false;
   showToast("Datos locales eliminados");
@@ -5006,6 +5208,7 @@ document.addEventListener("click", async (event) => {
   const viewClient = target?.closest("[data-view-client]");
   const viewSale = target?.closest("[data-view-sale]");
   const viewHistory = target?.closest("[data-view-history]");
+  const editHistory = target?.closest("[data-edit-history]");
   const editClient = target?.closest("[data-edit-client]");
   const deleteClient = target?.closest("[data-delete-client]");
   const editSale = target?.closest("[data-edit-sale]");
@@ -5038,6 +5241,9 @@ document.addEventListener("click", async (event) => {
     document.querySelector("#historicalSearch").value = historical?.unit || "";
     renderHistoricalSales();
     return;
+  }
+  if (editHistory) {
+    return startHistoricalContactEdit(editHistory.dataset.editHistory, editHistory);
   }
   if (editClient) return startClientEdit(editClient.dataset.editClient, editClient);
   if (deleteClient) {
@@ -5252,6 +5458,7 @@ async function enterCloudSession(session) {
     resetClientForm();
     resetSaleForm();
     resetPaymentForm();
+    resetHistoricalContactForm();
     renderWorkspaceContext();
     renderAll(false);
     switchView(viewFromHash(), false, false);
@@ -5276,6 +5483,7 @@ async function initializeApplication() {
     resetClientForm();
     resetSaleForm();
     resetPaymentForm();
+    resetHistoricalContactForm();
     renderWorkspaceContext();
     renderAll();
     switchView(viewFromHash(), false, false);

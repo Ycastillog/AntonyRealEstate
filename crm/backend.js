@@ -1008,6 +1008,54 @@
     return mapFromDatabase(data);
   }
 
+  async function updateHistoricalContact(record) {
+    var db = requireClient();
+    var source = requireRecord(record, 'El contacto histórico');
+    var allowed = {
+      id: requireId(source.id),
+      buyerName: source.buyerName,
+      buyerPhone: source.buyerPhone,
+      buyerEmail: source.buyerEmail
+    };
+    var request;
+    var data;
+
+    try {
+      request = db.rpc('crm_update_historical_contact', {
+        p_contact: mapToDatabase(allowed)
+      });
+    } catch (error) {
+      throw normalizeError(error, 'updateHistoricalContact');
+    }
+    data = await executeRequest(request, 'updateHistoricalContact', true);
+    return mapFromDatabase(data);
+  }
+
+  async function enrichHistoricalContacts(rows) {
+    var db = requireClient();
+    var sourceRows = requireArray(rows, 'historicalContacts');
+    var allowedRows = sourceRows.map(function (row) {
+      var source = requireRecord(row, 'El contacto histórico');
+      return {
+        id: requireId(source.id),
+        buyerPhone: source.buyerPhone,
+        buyerEmail: source.buyerEmail
+      };
+    });
+    var request;
+    var data;
+
+    try {
+      request = db.rpc('crm_enrich_historical_contacts', {
+        p_rows: mapToDatabase(allowedRows)
+      });
+    } catch (error) {
+      throw normalizeError(error, 'enrichHistoricalContacts');
+    }
+    data = await executeRequest(request, 'enrichHistoricalContacts', true);
+    return mapFromDatabase(data);
+  }
+
   var api = {
     configured: !!client,
     client: client,
@@ -1027,6 +1075,8 @@
     voidPayment: voidPayment,
     importWorkspace: importWorkspace,
     importHistoricalSales: importHistoricalSales,
+    updateHistoricalContact: updateHistoricalContact,
+    enrichHistoricalContacts: enrichHistoricalContacts,
     humanizeError: humanizeError
   };
 

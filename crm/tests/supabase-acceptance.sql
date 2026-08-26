@@ -63,6 +63,8 @@ do $qa_historical_import$
 declare
   v_first jsonb;
   v_second jsonb;
+  v_contact_result jsonb;
+  v_historical_id text;
   v_rejected boolean := false;
   v_batch jsonb := jsonb_build_object(
     'id', 'qa-client-supplied-batch-id-is-ignored',
@@ -118,6 +120,61 @@ begin
       and payments_confirmed is false
   ) then
     raise exception 'QA fallo: staging histórico inventó datos o no canonizó LVP';
+  end if;
+
+  select id
+    into v_historical_id
+  from public.crm_historical_sales
+  where batch_id = (v_first ->> 'batchId')
+    and unit = 'QA-HIST-01';
+
+  v_contact_result := public.crm_enrich_historical_contacts(
+    jsonb_build_array(jsonb_build_object(
+      'id', v_historical_id,
+      'buyer_phone', '8095550188',
+      'buyer_email', 'historico-qa@example.test'
+    ))
+  );
+  if (v_contact_result ->> 'updated')::integer <> 1
+     or (v_contact_result ->> 'phonesFilled')::integer <> 1
+     or (v_contact_result ->> 'emailsFilled')::integer <> 1 then
+    raise exception 'QA fallo: el enriquecimiento histórico no completó el contacto';
+  end if;
+
+  v_contact_result := public.crm_enrich_historical_contacts(
+    jsonb_build_array(jsonb_build_object(
+      'id', v_historical_id,
+      'buyer_phone', '8095559999',
+      'buyer_email', 'no-reemplazar@example.test'
+    ))
+  );
+  if (v_contact_result ->> 'updated')::integer <> 0
+     or not exists (
+       select 1
+       from public.crm_historical_sales
+       where id = v_historical_id
+         and buyer_phone = '8095550188'
+         and buyer_email = 'historico-qa@example.test'
+     ) then
+    raise exception 'QA fallo: el enriquecimiento reemplazó un contacto existente';
+  end if;
+
+  perform public.crm_update_historical_contact(jsonb_build_object(
+    'id', v_historical_id,
+    'buyer_name', 'Comprador histórico QA corregido',
+    'buyer_phone', null,
+    'buyer_email', null
+  ));
+  if not exists (
+    select 1
+    from public.crm_historical_sales
+    where id = v_historical_id
+      and buyer_name = 'Comprador histórico QA corregido'
+      and buyer_phone is null
+      and buyer_email is null
+      and review_status = 'Por completar'
+  ) then
+    raise exception 'QA fallo: la edición histórica no permite contacto pendiente';
   end if;
 
   begin

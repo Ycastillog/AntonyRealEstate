@@ -330,6 +330,76 @@
     return rows;
   }
 
+  function parseHistoricalContactUpdates(text) {
+    var source = String(text || "");
+    var byteLength = typeof TextEncoder === "function"
+      ? new TextEncoder().encode(source).byteLength
+      : source.length;
+    var delimiter;
+    var matrix;
+    var headers;
+    var headerMap = {};
+    var missingHeaders;
+    var seenUnits = new Set();
+
+    if (!source.trim()) throw new Error("El archivo está vacío.");
+    if (byteLength > MAX_FILE_BYTES) throw new Error("El archivo excede el límite de 5 MB.");
+    delimiter = detectDelimiter(source);
+    matrix = parseDelimited(source, delimiter);
+    if (matrix.length < 2) throw new Error("El archivo no contiene contactos para actualizar.");
+    headers = matrix[0].map(cleanText);
+    headers.forEach(function (header, index) {
+      var canonical = HEADER_ALIASES[normalizeHeader(header)];
+      if (canonical && headerMap[canonical] === undefined) headerMap[canonical] = index;
+    });
+    missingHeaders = ["project", "unit"].filter(function (field) {
+      return headerMap[field] === undefined;
+    });
+    if (missingHeaders.length) {
+      throw new Error("Para actualizar contactos se requieren las columnas Proyecto y Unidad.");
+    }
+    if (headerMap.buyerEmail === undefined && headerMap.buyerPhone === undefined) {
+      throw new Error("La base debe incluir al menos una columna de Correo o Teléfono.");
+    }
+    if (matrix.length - 1 > MAX_ROWS) {
+      throw new Error("El archivo excede el límite de " + MAX_ROWS + " contactos.");
+    }
+
+    return matrix.slice(1).map(function (cells, dataIndex) {
+      var sourceRow = dataIndex + 2;
+      var read = function (field) {
+        return headerMap[field] === undefined ? "" : cleanText(cells[headerMap[field]]);
+      };
+      var project = canonicalProject(read("project"));
+      var unit = read("unit");
+      var buyerEmail = read("buyerEmail").toLowerCase();
+      var buyerPhone = read("buyerPhone");
+      var identity;
+
+      if (!project) throw new Error("Proyecto fuera del catálogo en la fila " + sourceRow + ".");
+      if (!unit) throw new Error("Falta la unidad en la fila " + sourceRow + ".");
+      if (buyerEmail && !/^\S+@\S+\.\S+$/.test(buyerEmail)) {
+        throw new Error("Correo inválido en la fila " + sourceRow + ".");
+      }
+      if (buyerPhone && buyerPhone.replace(/\D/g, "").length < 7) {
+        throw new Error("Teléfono inválido en la fila " + sourceRow + ".");
+      }
+      identity = normalizeText(project) + "::" + normalizeText(unit);
+      if (seenUnits.has(identity)) {
+        throw new Error("La unidad " + project + " · " + unit + " aparece más de una vez.");
+      }
+      seenUnits.add(identity);
+      return {
+        sourceRow: sourceRow,
+        project: project,
+        unit: unit,
+        buyerName: read("buyerName"),
+        buyerEmail: buyerEmail,
+        buyerPhone: buyerPhone
+      };
+    });
+  }
+
   async function sha256(value) {
     var cryptoObject = root.crypto;
     var bytes;
@@ -368,6 +438,7 @@
     MAX_ROWS: MAX_ROWS,
     PROJECTS: PROJECTS,
     canonicalProject: canonicalProject,
+    parseHistoricalContactUpdates: parseHistoricalContactUpdates,
     parseHistoricalFile: parseHistoricalFile,
     sha256: sha256,
     summarize: summarize

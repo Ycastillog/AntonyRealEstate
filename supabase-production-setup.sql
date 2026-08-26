@@ -3252,6 +3252,359 @@ $function$;
 comment on function public.crm_import_historical_sales(jsonb, jsonb) is
   'Importa staging histórico LVP de forma atómica, idempotente y aislada por owner.';
 
+-- Completar o corregir manualmente el nombre y el contacto de una venta
+-- histórica. Teléfono y correo son opcionales mientras el expediente siga en
+-- staging; si se proporcionan, se validan antes de escribir.
+drop function if exists public.crm_update_historical_contact(jsonb);
+
+create function public.crm_update_historical_contact(p_contact jsonb)
+returns public.crm_historical_sales
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, pg_temp
+as $function$
+declare
+  v_owner uuid := auth.uid();
+  v_unknown_key text;
+  v_id text;
+  v_buyer_name text;
+  v_buyer_phone text;
+  v_buyer_email text;
+  v_result public.crm_historical_sales%rowtype;
+begin
+  if v_owner is null then
+    raise exception using
+      errcode = '42501',
+      message = 'crm_update_historical_contact requiere una sesion authenticated';
+  end if;
+
+  if jsonb_typeof(p_contact) is distinct from 'object'
+     or pg_column_size(p_contact) > 8192 then
+    raise exception using
+      errcode = '22023',
+      message = 'p_contact debe ser un objeto JSON de hasta 8 KiB';
+  end if;
+
+  select keys.key
+    into v_unknown_key
+  from jsonb_object_keys(p_contact) as keys(key)
+  where not (keys.key = any (array[
+    'id', 'buyer_name', 'buyer_phone', 'buyer_email'
+  ]))
+  limit 1;
+
+  if v_unknown_key is not null then
+    raise exception using
+      errcode = '22023',
+      message = format('p_contact contiene la clave no autorizada: %s', v_unknown_key);
+  end if;
+
+  if jsonb_typeof(p_contact -> 'id') is distinct from 'string'
+     or jsonb_typeof(p_contact -> 'buyer_name') is distinct from 'string'
+     or (
+       p_contact ? 'buyer_phone'
+       and jsonb_typeof(p_contact -> 'buyer_phone') not in ('string', 'null')
+     )
+     or (
+       p_contact ? 'buyer_email'
+       and jsonb_typeof(p_contact -> 'buyer_email') not in ('string', 'null')
+     ) then
+    raise exception using
+      errcode = '22023',
+      message = 'p_contact requiere id, buyer_name y contacto opcional como texto';
+  end if;
+
+  v_id := btrim(p_contact ->> 'id');
+  v_buyer_name := regexp_replace(
+    btrim(p_contact ->> 'buyer_name'),
+    '[[:space:]]+',
+    ' ',
+    'g'
+  );
+  v_buyer_phone := nullif(btrim(p_contact ->> 'buyer_phone'), '');
+  v_buyer_email := nullif(lower(btrim(p_contact ->> 'buyer_email')), '');
+
+  if char_length(v_id) not between 1 and 128 or v_id ~ '[[:cntrl:]]' then
+    raise exception using
+      errcode = '22023',
+      message = 'El id histórico no es válido';
+  end if;
+
+  if char_length(v_buyer_name) not between 1 and 300
+     or v_buyer_name ~ '[[:cntrl:]]' then
+    raise exception using
+      errcode = '22023',
+      message = 'El nombre del comprador es obligatorio y admite hasta 300 caracteres';
+  end if;
+
+  if v_buyer_phone is not null
+     and (
+       char_length(v_buyer_phone) not between 7 and 40
+       or char_length(regexp_replace(v_buyer_phone, '[^0-9]', '', 'g')) < 7
+       or v_buyer_phone ~ '[[:cntrl:]]'
+     ) then
+    raise exception using
+      errcode = '22023',
+      message = 'El teléfono histórico no tiene un formato válido';
+  end if;
+
+  if v_buyer_email is not null
+     and (
+       char_length(v_buyer_email) > 320
+       or v_buyer_email !~* '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+     ) then
+    raise exception using
+      errcode = '22023',
+      message = 'El correo histórico no tiene un formato válido';
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended('crm_workspace:' || v_owner::text, 0)
+  );
+
+  update public.crm_historical_sales as hs
+  set buyer_name = v_buyer_name,
+      buyer_phone = v_buyer_phone,
+      buyer_email = v_buyer_email,
+      review_status = case
+        when v_buyer_phone is not null
+         and v_buyer_email is not null
+         and hs.sale_status in ('Reservada', 'Opción a compra firmada', 'Entregado')
+         and hs.commission_amount is not null
+         and hs.commission_currency is not null
+         and hs.commission_plan is not null
+         and (
+           hs.commission_plan = 'single'
+           or (
+             hs.commission_plan = 'advance_balance'
+             and hs.advance_percentage is not null
+           )
+         )
+         and hs.payments_confirmed
+         and (hs.sale_status <> 'Entregado' or hs.delivery_date is not null)
+        then 'Lista para convertir'
+        else 'Por completar'
+      end
+  where hs.owner_id = v_owner
+    and hs.id = v_id
+    and hs.review_status <> 'Convertida'
+  returning hs.* into v_result;
+
+  if v_result.id is null then
+    raise exception using
+      errcode = 'P0002',
+      message = 'La venta histórica no existe o ya fue convertida';
+  end if;
+
+  return v_result;
+end
+$function$;
+
+comment on function public.crm_update_historical_contact(jsonb) is
+  'Edita nombre, teléfono y correo opcionales de una venta histórica del owner actual.';
+
+-- Enriquecimiento masivo idempotente: solo rellena teléfono o correo cuando el
+-- valor almacenado está vacío. Nunca reemplaza datos existentes.
+drop function if exists public.crm_enrich_historical_contacts(jsonb);
+
+create function public.crm_enrich_historical_contacts(p_rows jsonb)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, pg_temp
+as $function$
+declare
+  v_owner uuid := auth.uid();
+  v_row jsonb;
+  v_position bigint;
+  v_unknown_key text;
+  v_id text;
+  v_seen_ids text[] := array[]::text[];
+  v_buyer_phone text;
+  v_buyer_email text;
+  v_existing public.crm_historical_sales%rowtype;
+  v_processed integer := 0;
+  v_updated integer := 0;
+  v_phone_filled integer := 0;
+  v_email_filled integer := 0;
+begin
+  if v_owner is null then
+    raise exception using
+      errcode = '42501',
+      message = 'crm_enrich_historical_contacts requiere una sesion authenticated';
+  end if;
+
+  if jsonb_typeof(p_rows) is distinct from 'array' then
+    raise exception using
+      errcode = '22023',
+      message = 'p_rows debe ser un arreglo JSON';
+  end if;
+
+  if jsonb_array_length(p_rows) not between 1 and 5000
+     or pg_column_size(p_rows) > 2097152 then
+    raise exception using
+      errcode = '22023',
+      message = 'p_rows debe contener entre 1 y 5000 contactos y hasta 2 MiB';
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended('crm_workspace:' || v_owner::text, 0)
+  );
+
+  for v_row, v_position in
+    select item.value, item.ordinality
+    from jsonb_array_elements(p_rows) with ordinality as item(value, ordinality)
+  loop
+    if jsonb_typeof(v_row) is distinct from 'object' then
+      raise exception using
+        errcode = '22023',
+        message = format('El contacto %s debe ser un objeto JSON', v_position);
+    end if;
+
+    v_unknown_key := null;
+    select keys.key
+      into v_unknown_key
+    from jsonb_object_keys(v_row) as keys(key)
+    where not (keys.key = any (array['id', 'buyer_phone', 'buyer_email']))
+    limit 1;
+
+    if v_unknown_key is not null then
+      raise exception using
+        errcode = '22023',
+        message = format(
+          'El contacto %s contiene la clave no autorizada: %s',
+          v_position,
+          v_unknown_key
+        );
+    end if;
+
+    if jsonb_typeof(v_row -> 'id') is distinct from 'string'
+       or (
+         v_row ? 'buyer_phone'
+         and jsonb_typeof(v_row -> 'buyer_phone') not in ('string', 'null')
+       )
+       or (
+         v_row ? 'buyer_email'
+         and jsonb_typeof(v_row -> 'buyer_email') not in ('string', 'null')
+       ) then
+      raise exception using
+        errcode = '22023',
+        message = format('El contacto %s tiene tipos inválidos', v_position);
+    end if;
+
+    v_id := btrim(v_row ->> 'id');
+    v_buyer_phone := nullif(btrim(v_row ->> 'buyer_phone'), '');
+    v_buyer_email := nullif(lower(btrim(v_row ->> 'buyer_email')), '');
+
+    if char_length(v_id) not between 1 and 128
+       or v_id ~ '[[:cntrl:]]' then
+      raise exception using
+        errcode = '22023',
+        message = format('El contacto %s tiene id inválido', v_position);
+    end if;
+
+    if v_id = any (v_seen_ids) then
+      raise exception using
+        errcode = '22023',
+        message = format('El contacto %s repite un id del mismo lote', v_position);
+    end if;
+    v_seen_ids := array_append(v_seen_ids, v_id);
+
+    if v_buyer_phone is null and v_buyer_email is null then
+      raise exception using
+        errcode = '22023',
+        message = format('El contacto %s no contiene teléfono ni correo', v_position);
+    end if;
+
+    if v_buyer_phone is not null
+       and (
+         char_length(v_buyer_phone) not between 7 and 40
+         or char_length(regexp_replace(v_buyer_phone, '[^0-9]', '', 'g')) < 7
+         or v_buyer_phone ~ '[[:cntrl:]]'
+       ) then
+      raise exception using
+        errcode = '22023',
+        message = format('El contacto %s tiene teléfono inválido', v_position);
+    end if;
+
+    if v_buyer_email is not null
+       and (
+         char_length(v_buyer_email) > 320
+         or v_buyer_email !~* '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+       ) then
+      raise exception using
+        errcode = '22023',
+        message = format('El contacto %s tiene correo inválido', v_position);
+    end if;
+
+    select hs.*
+      into v_existing
+    from public.crm_historical_sales as hs
+    where hs.owner_id = v_owner
+      and hs.id = v_id
+      and hs.review_status <> 'Convertida'
+    for update;
+
+    if v_existing.id is null then
+      raise exception using
+        errcode = 'P0002',
+        message = format('El contacto histórico %s no existe o ya fue convertido', v_position);
+    end if;
+
+    v_processed := v_processed + 1;
+    if (v_existing.buyer_phone is null and v_buyer_phone is not null)
+       or (v_existing.buyer_email is null and v_buyer_email is not null) then
+      if v_existing.buyer_phone is null and v_buyer_phone is not null then
+        v_phone_filled := v_phone_filled + 1;
+      end if;
+      if v_existing.buyer_email is null and v_buyer_email is not null then
+        v_email_filled := v_email_filled + 1;
+      end if;
+
+      update public.crm_historical_sales as hs
+      set buyer_phone = coalesce(hs.buyer_phone, v_buyer_phone),
+          buyer_email = coalesce(hs.buyer_email, v_buyer_email),
+          review_status = case
+            when coalesce(hs.buyer_phone, v_buyer_phone) is not null
+             and coalesce(hs.buyer_email, v_buyer_email) is not null
+             and hs.sale_status in ('Reservada', 'Opción a compra firmada', 'Entregado')
+             and hs.commission_amount is not null
+             and hs.commission_currency is not null
+             and hs.commission_plan is not null
+             and (
+               hs.commission_plan = 'single'
+               or (
+                 hs.commission_plan = 'advance_balance'
+                 and hs.advance_percentage is not null
+               )
+             )
+             and hs.payments_confirmed
+             and (hs.sale_status <> 'Entregado' or hs.delivery_date is not null)
+            then 'Lista para convertir'
+            else 'Por completar'
+          end
+      where hs.owner_id = v_owner
+        and hs.id = v_id;
+
+      v_updated := v_updated + 1;
+    end if;
+  end loop;
+
+  return jsonb_build_object(
+    'processed', v_processed,
+    'updated', v_updated,
+    'unchanged', v_processed - v_updated,
+    'phonesFilled', v_phone_filled,
+    'emailsFilled', v_email_filled
+  );
+end
+$function$;
+
+comment on function public.crm_enrich_historical_contacts(jsonb) is
+  'Rellena en lote teléfono y correo faltantes sin reemplazar valores existentes.';
+
 -- -----------------------------------------------------------------------------
 -- 8. RPC atomica para importar un respaldo de workspace
 -- -----------------------------------------------------------------------------
@@ -5724,6 +6077,8 @@ revoke all on function public.crm_write_audit() from public, anon, authenticated
 revoke all on function public.crm_block_audit_mutation() from public, anon, authenticated;
 revoke all on function public.crm_lock_workspace_mutation() from public, anon, authenticated;
 revoke all on function public.crm_import_historical_sales(jsonb, jsonb) from public, anon, authenticated;
+revoke all on function public.crm_update_historical_contact(jsonb) from public, anon, authenticated;
+revoke all on function public.crm_enrich_historical_contacts(jsonb) from public, anon, authenticated;
 revoke all on function public.crm_import_workspace(jsonb) from public, anon, authenticated;
 revoke all on function public.crm_save_sale(jsonb, jsonb) from public, anon, authenticated;
 revoke all on function public.crm_record_payment(jsonb) from public, anon, authenticated;
@@ -5731,6 +6086,8 @@ revoke all on function public.crm_void_payment(text, text) from public, anon, au
 revoke all on function public.crm_workspace_health() from public, anon, authenticated;
 
 grant execute on function public.crm_import_historical_sales(jsonb, jsonb) to authenticated;
+grant execute on function public.crm_update_historical_contact(jsonb) to authenticated;
+grant execute on function public.crm_enrich_historical_contacts(jsonb) to authenticated;
 grant execute on function public.crm_import_workspace(jsonb) to authenticated;
 grant execute on function public.crm_save_sale(jsonb, jsonb) to authenticated;
 grant execute on function public.crm_record_payment(jsonb) to authenticated;

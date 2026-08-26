@@ -554,7 +554,9 @@ test("financial mutations use RPC contracts and preserve the UI sale status name
     crm_save_sale: deferred(),
     crm_record_payment: deferred(),
     crm_import_workspace: deferred(),
-    crm_import_historical_sales: deferred()
+    crm_import_historical_sales: deferred(),
+    crm_update_historical_contact: deferred(),
+    crm_enrich_historical_contacts: deferred()
   };
   const calls = [];
   const client = {
@@ -682,5 +684,50 @@ test("financial mutations use RPC contracts and preserve the UI sale status name
     error: null
   });
   assert.equal((await historicalPromise).imported, 1);
+
+  const updateHistoricalPromise = harness.api.updateHistoricalContact(
+    harness.realmValue({
+      id: "historical-1",
+      buyerName: "Cliente histórico",
+      buyerPhone: "829-555-0101",
+      buyerEmail: "cliente@example.com",
+      ownerId: "must-not-pass"
+    })
+  );
+  await nextTurn();
+  assert.equal(calls[4].name, "crm_update_historical_contact");
+  assert.equal(calls[4].payload.p_contact.id, "historical-1");
+  assert.equal(calls[4].payload.p_contact.buyer_phone, "829-555-0101");
+  assert.ok(!Object.hasOwn(calls[4].payload.p_contact, "owner_id"));
+  pending.crm_update_historical_contact.resolve({
+    data: harness.realmValue({
+      id: "historical-1",
+      buyer_name: "Cliente histórico",
+      buyer_phone: "829-555-0101",
+      buyer_email: "cliente@example.com"
+    }),
+    error: null
+  });
+  assert.equal((await updateHistoricalPromise).buyerPhone, "829-555-0101");
+
+  const enrichHistoricalPromise = harness.api.enrichHistoricalContacts(
+    harness.realmValue([{
+      id: "historical-1",
+      buyerPhone: "829-555-0101",
+      buyerEmail: "cliente@example.com",
+      buyerName: "must-not-pass",
+      ownerId: "must-not-pass"
+    }])
+  );
+  await nextTurn();
+  assert.equal(calls[5].name, "crm_enrich_historical_contacts");
+  assert.equal(calls[5].payload.p_rows[0].buyer_email, "cliente@example.com");
+  assert.ok(!Object.hasOwn(calls[5].payload.p_rows[0], "buyer_name"));
+  assert.ok(!Object.hasOwn(calls[5].payload.p_rows[0], "owner_id"));
+  pending.crm_enrich_historical_contacts.resolve({
+    data: harness.realmValue({ updated: 1, phones_filled: 1, emails_filled: 1 }),
+    error: null
+  });
+  assert.equal((await enrichHistoricalPromise).updated, 1);
   assert.equal(harness.storageAccesses(), 0);
 });

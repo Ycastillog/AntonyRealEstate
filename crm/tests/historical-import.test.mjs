@@ -71,6 +71,36 @@ test("historical parser rejects duplicates, unknown projects, and inconsistent d
   );
 });
 
+test("contact enrichment ignores unrelated delivery errors and keeps contact optional", () => {
+  const parser = loadParser();
+  const input = [
+    "Proyecto\tFecha\tUnidad\tPrecio\tFecha de entrega\tComprador\tCorreo\tTelefono",
+    "Riviera 1\t13/5/2025\tRRV-010-3F\tUSD 83,000\t30/10/2024\tCliente Uno\tcliente@example.com\t829-555-0101",
+    "LP11\t18/1/2023\tLP11-A\tUSD 90,000\t\tCliente Dos\t\t"
+  ].join("\n");
+
+  assert.throws(
+    () => parser.parseHistoricalFile(input, { today: "2026-08-26" }),
+    /ocurre antes de la venta/
+  );
+
+  const contacts = parser.parseHistoricalContactUpdates(input);
+  assert.equal(contacts.length, 2);
+  assert.equal(contacts[0].project, "Riviera 1");
+  assert.equal(contacts[0].buyerEmail, "cliente@example.com");
+  assert.equal(contacts[0].buyerPhone, "829-555-0101");
+  assert.equal(contacts[1].buyerEmail, "");
+  assert.equal(contacts[1].buyerPhone, "");
+
+  assert.throws(
+    () => parser.parseHistoricalContactUpdates([
+      "Proyecto\tUnidad\tCorreo",
+      "LP11\tLP11-A\tcorreo-invalido"
+    ].join("\n")),
+    /Correo inválido/
+  );
+});
+
 test("historical parser produces a stable SHA-256 fingerprint and safe summary", async () => {
   const parser = loadParser();
   const first = await parser.sha256("same-file");
