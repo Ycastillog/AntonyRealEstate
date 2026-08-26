@@ -741,6 +741,8 @@
       fetchTable('crm_sales', false, null, 'loadSales'),
       fetchTable('crm_commission_installments', true, null, 'loadInstallments'),
       fetchTable('crm_payments', false, null, 'loadPayments'),
+      fetchTable('crm_historical_import_batches', false, null, 'loadHistoricalBatches'),
+      fetchTable('crm_historical_sales', false, null, 'loadHistoricalSales'),
       fetchTable('crm_audit_log', false, MAX_AUDIT_ROWS, 'loadAuditLog', 'changed_at')
     ]);
     var clients = orderedRows(results[0], ['name', 'fullName', 'companyName', 'createdAt'], true);
@@ -751,7 +753,17 @@
     );
     var installments = orderedRows(results[2], ['dueDate', 'installmentNumber', 'createdAt'], true);
     var payments = orderedRows(results[3], ['paymentDate', 'paidAt', 'createdAt'], false);
-    var auditLog = orderedRows(results[4], ['changedAt'], false).slice(0, MAX_AUDIT_ROWS);
+    var historicalImportBatches = orderedRows(
+      results[4],
+      ['importedAt', 'createdAt'],
+      false
+    );
+    var historicalSales = orderedRows(
+      results[5],
+      ['saleDate', 'createdAt'],
+      false
+    );
+    var auditLog = orderedRows(results[6], ['changedAt'], false).slice(0, MAX_AUDIT_ROWS);
 
     deepFreeze(auditLog);
     return {
@@ -759,6 +771,8 @@
       sales: sales,
       installments: installments,
       payments: payments,
+      historicalImportBatches: historicalImportBatches,
+      historicalSales: historicalSales,
       auditLog: auditLog
     };
   }
@@ -917,7 +931,13 @@
       clients: requireArray(source.clients, 'clients'),
       sales: requireArray(source.sales, 'sales'),
       installments: requireArray(source.installments, 'installments'),
-      payments: requireArray(source.payments, 'payments')
+      payments: requireArray(source.payments, 'payments'),
+      historicalImportBatches: source.historicalImportBatches === undefined
+        ? []
+        : requireArray(source.historicalImportBatches, 'historicalImportBatches'),
+      historicalSales: source.historicalSales === undefined
+        ? []
+        : requireArray(source.historicalSales, 'historicalSales')
     };
     var request;
     var data;
@@ -932,7 +952,11 @@
           clients: mapToDatabase(importableState.clients),
           sales: importableState.sales,
           installments: mapToDatabase(importableState.installments),
-          payments: mapToDatabase(importableState.payments)
+          payments: mapToDatabase(importableState.payments),
+          historical_import_batches: mapToDatabase(
+            importableState.historicalImportBatches
+          ),
+          historical_sales: mapToDatabase(importableState.historicalSales)
         }
       });
     } catch (error) {
@@ -940,6 +964,47 @@
     }
 
     data = await executeRequest(request, 'importWorkspace', true);
+    return mapFromDatabase(data);
+  }
+
+  async function importHistoricalSales(batch, rows) {
+    var db = requireClient();
+    var sourceBatch = requireRecord(batch, 'El lote histórico');
+    var sourceRows = requireArray(rows, 'historicalSales');
+    var allowedBatch = {};
+    var allowedRows;
+    var request;
+    var data;
+
+    ['id', 'sourceName', 'sourceSha256', 'sourceRowCount'].forEach(function (key) {
+      if (Object.prototype.hasOwnProperty.call(sourceBatch, key)) {
+        allowedBatch[key] = sourceBatch[key];
+      }
+    });
+    allowedRows = sourceRows.map(function (row) {
+      var source = requireRecord(row, 'La venta histórica');
+      var allowed = {};
+      [
+        'id', 'sourceRow', 'developer', 'project', 'unit', 'saleDate', 'salePrice',
+        'saleCurrency', 'sellerName', 'buyerName', 'buyerEmail', 'buyerPhone',
+        'deliveryDate', 'saleStatus', 'commissionRate', 'commissionAmount',
+        'commissionCurrency', 'commissionPlan', 'advancePercentage',
+        'paymentsConfirmed', 'reviewStatus', 'sourceSnapshot'
+      ].forEach(function (key) {
+        if (Object.prototype.hasOwnProperty.call(source, key)) allowed[key] = source[key];
+      });
+      return allowed;
+    });
+
+    try {
+      request = db.rpc('crm_import_historical_sales', {
+        p_batch: mapToDatabase(allowedBatch),
+        p_rows: mapToDatabase(allowedRows)
+      });
+    } catch (error) {
+      throw normalizeError(error, 'importHistoricalSales');
+    }
+    data = await executeRequest(request, 'importHistoricalSales', true);
     return mapFromDatabase(data);
   }
 
@@ -961,6 +1026,7 @@
     savePayment: savePayment,
     voidPayment: voidPayment,
     importWorkspace: importWorkspace,
+    importHistoricalSales: importHistoricalSales,
     humanizeError: humanizeError
   };
 

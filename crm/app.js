@@ -1,5 +1,5 @@
 const STORAGE_KEY = "antony-crm-local-v2";
-const APP_VERSION = 7;
+const APP_VERSION = 8;
 const MAX_AUDIT_ENTRIES = 500;
 const VALID_CURRENCIES = ["USD", "DOP"];
 const VALID_CLIENT_STAGES = ["Nuevo", "Calificado", "En seguimiento", "Comprador", "Inactivo"];
@@ -54,6 +54,8 @@ const EMPTY_STATE = {
   sales: [],
   installments: [],
   payments: [],
+  historicalImportBatches: [],
+  historicalSales: [],
   auditLog: []
 };
 const QUERY = new URLSearchParams(window.location.search);
@@ -217,6 +219,8 @@ const DEMO_DATA = {
       updatedAt: "2026-08-12"
     }
   ],
+  historicalImportBatches: [],
+  historicalSales: [],
   auditLog: []
 };
 
@@ -293,7 +297,9 @@ function assertImportDates(value) {
     ["clients", ["capturedAt", "createdAt", "updatedAt"]],
     ["sales", ["saleDate", "deliveryDate", "commissionDueDate", "cancelledAt", "createdAt", "updatedAt"]],
     ["installments", ["dueDate", "createdAt", "updatedAt"]],
-    ["payments", ["paymentDate", "voidedAt", "createdAt", "updatedAt"]]
+    ["payments", ["paymentDate", "voidedAt", "createdAt", "updatedAt"]],
+    ["historicalSales", ["saleDate", "deliveryDate", "promotedAt", "createdAt", "updatedAt"]],
+    ["historicalImportBatches", ["importedAt", "createdAt"]]
   ];
   groups.forEach(([collection, fields]) => {
     const rows = Array.isArray(value?.[collection]) ? value[collection] : [];
@@ -502,11 +508,92 @@ function normalizeState(value) {
       updatedAt: dateOnly(payment.updatedAt || payment.createdAt, today())
     };
   });
+  const historicalImportBatches = (Array.isArray(value.historicalImportBatches)
+    ? value.historicalImportBatches
+    : []
+  ).map((batch, index) => ({
+    id: String(batch.id || "historical-batch-import-" + index),
+    sourceName: String(batch.sourceName || "Base histórica").trim(),
+    sourceSha256: String(batch.sourceSha256 || "").trim().toLowerCase(),
+    sourceRowCount: Math.max(Math.trunc(numberValue(batch.sourceRowCount)), 0),
+    importedAt: String(batch.importedAt || batch.createdAt || ""),
+    createdAt: String(batch.createdAt || batch.importedAt || "")
+  }));
+  const historicalSales = (Array.isArray(value.historicalSales)
+    ? value.historicalSales
+    : []
+  ).map((sale, index) => {
+    const developer = canonicalDeveloper(sale.developer || "Constructora LVP");
+    const project = canonicalProject(developer, sale.project);
+    const commissionAmount = sale.commissionAmount == null || sale.commissionAmount === ""
+      ? null
+      : Math.max(numberValue(sale.commissionAmount), 0);
+    const commissionRate = sale.commissionRate == null || sale.commissionRate === ""
+      ? null
+      : Math.max(numberValue(sale.commissionRate), 0);
+    const advancePercentage = sale.advancePercentage == null || sale.advancePercentage === ""
+      ? null
+      : Math.max(numberValue(sale.advancePercentage), 0);
+    return {
+      id: String(sale.id || "historical-import-" + index),
+      batchId: String(sale.batchId || ""),
+      sourceRow: Math.max(Math.trunc(numberValue(sale.sourceRow)), 1),
+      developer,
+      project,
+      unit: String(sale.unit || "").trim(),
+      saleDate: dateOnly(sale.saleDate, today()),
+      salePrice: Math.max(numberValue(sale.salePrice), 0),
+      saleCurrency: normalizeCurrency(sale.saleCurrency, "USD"),
+      sellerName: String(sale.sellerName || "Antony Fulgencio").trim(),
+      buyerName: String(sale.buyerName || "").trim().replace(/\s+/g, " "),
+      buyerEmail: String(sale.buyerEmail || "").trim().toLowerCase(),
+      buyerPhone: String(sale.buyerPhone || "").trim(),
+      deliveryDate: sale.deliveryDate ? dateOnly(sale.deliveryDate, "") : "",
+      saleStatus: sale.saleStatus ? canonicalSaleStatus(sale.saleStatus) : "",
+      commissionRate,
+      commissionAmount,
+      commissionCurrency: sale.commissionCurrency
+        ? normalizeCurrency(sale.commissionCurrency, "USD")
+        : "",
+      commissionPlan: String(sale.commissionPlan || "").trim(),
+      advancePercentage,
+      paymentsConfirmed: Boolean(sale.paymentsConfirmed),
+      reviewStatus: String(sale.reviewStatus || "Por completar"),
+      promotedClientId: String(sale.promotedClientId || ""),
+      promotedSaleId: String(sale.promotedSaleId || ""),
+      promotedAt: String(sale.promotedAt || ""),
+      sourceSnapshot:
+        sale.sourceSnapshot && typeof sale.sourceSnapshot === "object"
+          ? clone(sale.sourceSnapshot)
+          : {},
+      createdAt: String(sale.createdAt || ""),
+      updatedAt: String(sale.updatedAt || sale.createdAt || "")
+    };
+  });
 
   assertUniqueIds(clients, "clientes");
   assertUniqueIds(sales, "ventas");
   assertUniqueIds(installments, "cuotas");
   assertUniqueIds(payments, "cobros");
+  assertUniqueIds(historicalImportBatches, "lotes históricos");
+  assertUniqueIds(historicalSales, "ventas históricas");
+  const historicalBatchFingerprints = new Set();
+  if (
+    historicalImportBatches.some((batch) => {
+      const duplicateFingerprint = historicalBatchFingerprints.has(batch.sourceSha256);
+      historicalBatchFingerprints.add(batch.sourceSha256);
+      return (
+        !batch.id ||
+        !batch.sourceName ||
+        !/^[0-9a-f]{64}$/.test(batch.sourceSha256) ||
+        batch.sourceRowCount < 1 ||
+        batch.sourceRowCount > 5000 ||
+        duplicateFingerprint
+      );
+    })
+  ) {
+    throw new Error("Hay lotes históricos con identidad, huella o cantidad inválida.");
+  }
   const clientIds = new Set(clients.map((client) => client.id));
   const saleIds = new Set(sales.map((sale) => sale.id));
   if (sales.some((sale) => !clientIds.has(sale.clientId))) {
@@ -518,6 +605,80 @@ function normalizeState(value) {
   if (installments.some((installment) => !saleIds.has(installment.saleId))) {
     throw new Error("Una cuota apunta a una venta inexistente.");
   }
+  const historicalBatchIds = new Set(historicalImportBatches.map((batch) => batch.id));
+  if (
+    historicalSales.some(
+      (sale) => !sale.batchId || !historicalBatchIds.has(sale.batchId)
+    )
+  ) {
+    throw new Error("Una venta histórica apunta a un lote inexistente.");
+  }
+  const historicalRowsByBatch = new Map();
+  const historicalSourceRows = new Set();
+  historicalSales.forEach((sale) => {
+    const sourceIdentity = sale.batchId + "::" + sale.sourceRow;
+    if (historicalSourceRows.has(sourceIdentity)) {
+      throw new Error("Un lote histórico contiene filas de origen duplicadas.");
+    }
+    historicalSourceRows.add(sourceIdentity);
+    historicalRowsByBatch.set(
+      sale.batchId,
+      (historicalRowsByBatch.get(sale.batchId) || 0) + 1
+    );
+  });
+  if (
+    historicalImportBatches.some(
+      (batch) => historicalRowsByBatch.get(batch.id) !== batch.sourceRowCount
+    )
+  ) {
+    throw new Error("La cantidad de ventas no coincide con su lote histórico.");
+  }
+  if (
+    historicalSales.some(
+      (sale) =>
+        sale.developer !== "Constructora LVP" ||
+        !DEVELOPER_PROJECTS["Constructora LVP"].includes(sale.project) ||
+        !sale.project ||
+        !sale.unit ||
+        !sale.buyerName ||
+        sale.salePrice <= 0 ||
+        !isValidIsoDate(sale.saleDate) ||
+        sale.saleDate > today() ||
+        (sale.deliveryDate &&
+          (!isValidIsoDate(sale.deliveryDate) || sale.deliveryDate < sale.saleDate)) ||
+        (sale.buyerEmail && !/^\S+@\S+\.\S+$/.test(sale.buyerEmail)) ||
+        (sale.buyerPhone && sale.buyerPhone.replace(/\D/g, "").length < 7) ||
+        !["Por completar", "Lista para convertir", "Convertida"].includes(
+          sale.reviewStatus
+        ) ||
+        (sale.saleStatus && !VALID_SALE_STATUSES.includes(sale.saleStatus)) ||
+        (sale.commissionAmount != null && sale.commissionAmount <= 0) ||
+        (sale.commissionRate != null &&
+          (sale.commissionRate < 0 || sale.commissionRate > 100)) ||
+        (sale.commissionPlan && !["single", "advance_balance"].includes(sale.commissionPlan)) ||
+        (sale.advancePercentage != null &&
+          !(sale.advancePercentage > 0 && sale.advancePercentage < 100)) ||
+        (sale.reviewStatus === "Convertida"
+          ? !sale.promotedClientId ||
+            !clientIds.has(sale.promotedClientId) ||
+            !sale.promotedSaleId ||
+            !saleIds.has(sale.promotedSaleId) ||
+            !sale.promotedAt
+          : sale.promotedClientId || sale.promotedSaleId || sale.promotedAt)
+    )
+  ) {
+    throw new Error("Hay ventas históricas con datos de origen inválidos.");
+  }
+  const historicalUnitKeys = new Set();
+  historicalSales
+    .filter((sale) => sale.reviewStatus !== "Convertida")
+    .forEach((sale) => {
+      const key = normalizeText(sale.project) + "::" + normalizeText(sale.unit);
+      if (historicalUnitKeys.has(key)) {
+        throw new Error("Hay ventas históricas duplicadas para el mismo proyecto y unidad.");
+      }
+      historicalUnitKeys.add(key);
+    });
   const installmentsById = new Map(
     installments.map((installment) => [installment.id, installment])
   );
@@ -620,6 +781,14 @@ function normalizeState(value) {
     }
     activeUnits.add(unitKey);
   });
+  historicalSales
+    .filter((sale) => sale.reviewStatus !== "Convertida")
+    .forEach((sale) => {
+      const unitKey = normalizeText(sale.project) + "::" + normalizeText(sale.unit);
+      if (activeUnits.has(unitKey)) {
+        throw new Error("Una venta histórica duplica una operación activa.");
+      }
+    });
   if (
     payments.some((payment) => {
       const sale = salesById.get(payment.saleId);
@@ -697,6 +866,8 @@ function normalizeState(value) {
     sales,
     installments,
     payments,
+    historicalImportBatches,
+    historicalSales,
     auditLog: Array.isArray(value.auditLog)
       ? value.auditLog.slice(0, MAX_AUDIT_ENTRIES)
       : []
@@ -887,6 +1058,58 @@ function clientById(id) {
 
 function saleById(id) {
   return state.sales.find((sale) => sale.id === id);
+}
+
+function historicalSaleById(id) {
+  return state.historicalSales.find((sale) => sale.id === id);
+}
+
+function activeHistoricalSales() {
+  return state.historicalSales.filter((sale) => sale.reviewStatus !== "Convertida");
+}
+
+function historicalMissingFields(sale) {
+  const missing = [];
+  if (!sale.buyerPhone || !sale.buyerEmail) missing.push("Contacto");
+  if (!sale.saleStatus) missing.push("Estatus");
+  if (!sale.deliveryDate) missing.push("Entrega");
+  if (!(sale.commissionAmount > 0) || !sale.commissionPlan) missing.push("Comisión");
+  if (!sale.paymentsConfirmed) missing.push("Cobros");
+  return missing;
+}
+
+function historicalAnalyticsSale(sale) {
+  return {
+    ...sale,
+    recordType: "historical",
+    buyerName: sale.buyerName,
+    commissionStatus: "Por completar"
+  };
+}
+
+function operationalAnalyticsSale(sale) {
+  return {
+    ...sale,
+    recordType: "operational",
+    buyerName: clientName(sale.clientId),
+    commissionStatus: statusForSale(sale).label
+  };
+}
+
+function analyticsSales() {
+  return [
+    ...state.sales.filter(isClosedSale).map(operationalAnalyticsSale),
+    ...activeHistoricalSales().map(historicalAnalyticsSale)
+  ];
+}
+
+function reportableSales() {
+  return [
+    ...state.sales
+      .filter((sale) => isClosedSale(sale) || isCancelledSale(sale))
+      .map(operationalAnalyticsSale),
+    ...activeHistoricalSales().map(historicalAnalyticsSale)
+  ];
 }
 
 function installmentById(id) {
@@ -1314,6 +1537,7 @@ const VIEW_HASHES = {
   dashboard: "resumen",
   clients: "clientes",
   sales: "ventas",
+  historical: "historico",
   payments: "cobros",
   reports: "reportes"
 };
@@ -1322,6 +1546,7 @@ const VIEW_TITLES = {
   dashboard: "Resumen",
   clients: "Clientes",
   sales: "Ventas",
+  historical: "Histórico",
   payments: "Cobros",
   reports: "Reportes"
 };
@@ -1366,6 +1591,7 @@ function switchView(view, addHistory, moveFocus) {
     else button.removeAttribute("aria-current");
   });
   if (nextView === "reports") renderReports();
+  if (nextView === "historical") renderHistoricalSales();
   if (addHistory && location.hash !== "#" + VIEW_HASHES[nextView]) {
     history.pushState({ view: nextView }, "", "#" + VIEW_HASHES[nextView]);
   }
@@ -1482,8 +1708,11 @@ function renderDashboard() {
   const year = String(new Date().getFullYear());
   const activeSales = state.sales.filter((sale) => !isCancelledSale(sale));
   const closedSales = activeSales.filter(isClosedSale);
-  const yearSales = closedSales.filter((sale) => yearOf(sale.saleDate) === year);
-  const volume = aggregate(activeSales, "salePrice", "saleCurrency");
+  const historicalSales = activeHistoricalSales().map(historicalAnalyticsSale);
+  const documentedSales = [...activeSales.map(operationalAnalyticsSale), ...historicalSales];
+  const documentedClosings = [...closedSales.map(operationalAnalyticsSale), ...historicalSales];
+  const yearSales = documentedClosings.filter((sale) => yearOf(sale.saleDate) === year);
+  const volume = aggregate(documentedSales, "salePrice", "saleCurrency");
   const yearVolume = aggregate(yearSales, "salePrice", "saleCurrency");
   const received = aggregate(
     state.payments.filter(
@@ -1561,9 +1790,13 @@ function renderDashboard() {
         (dueSoon.length === 1
           ? " cobro previsto para los próximos 7 días."
           : " cobros previstos para los próximos 7 días.")
-      : "La cartera está al día y no hay cobros urgentes para esta semana.";
+      : historicalSales.length
+        ? "La cartera está al día. Hay " +
+          historicalSales.length +
+          " ventas históricas documentadas pendientes de completar."
+        : "La cartera está al día y no hay cobros urgentes para esta semana.";
 
-  document.querySelector("#metricSalesCount").textContent = activeSales.length;
+  document.querySelector("#metricSalesCount").textContent = documentedSales.length;
   document.querySelector("#metricSalesVolume").textContent = pairMoney(volume);
   document.querySelector("#metricYearSales").textContent = yearSales.length;
   document.querySelector("#metricYearVolume").textContent = pairMoney(yearVolume);
@@ -1584,20 +1817,21 @@ function renderDashboard() {
   document.querySelector("#metricOverdue").textContent =
     overdue.length + (overdue.length === 1 ? " vencida" : " vencidas");
 
-  const recent = [...state.sales]
+  const recent = [...state.sales.map(operationalAnalyticsSale), ...historicalSales]
     .sort((a, b) => String(b.saleDate).localeCompare(String(a.saleDate)))
     .slice(0, 5);
   document.querySelector("#recentSalesBody").innerHTML = recent
     .map(
       (sale) =>
         '<tr class="record-row ' +
-        (isCancelledSale(sale) ? "muted-row" : "") +
-        '" data-view-sale="' +
+        (sale.recordType === "operational" && isCancelledSale(sale) ? "muted-row" : "") +
+        '" ' +
+        (sale.recordType === "historical" ? 'data-view-history="' : 'data-view-sale="') +
         escapeHtml(sale.id) +
         '" tabindex="0" aria-label="Abrir dossier de ' +
         escapeHtml(saleLabel(sale)) +
         '"><td><span class="primary-cell">' +
-        escapeHtml(clientName(sale.clientId)) +
+        escapeHtml(sale.buyerName) +
         '</span><span class="secondary-cell">' +
         escapeHtml(sale.project) +
         " · " +
@@ -1605,9 +1839,15 @@ function renderDashboard() {
         " · " +
         escapeHtml(formatDate(sale.saleDate)) +
         "</span></td><td>" +
-        escapeHtml(money(sale.commissionAmount, sale.commissionCurrency)) +
+        escapeHtml(
+          sale.recordType === "historical"
+            ? "Sin confirmar"
+            : money(sale.commissionAmount, sale.commissionCurrency)
+        ) +
         "</td><td>" +
-        statusBadge(sale) +
+        (sale.recordType === "historical"
+          ? '<span class="status-pill status-historical">Por completar</span>'
+          : statusBadge(sale)) +
         "</td></tr>"
     )
     .join("");
@@ -1655,7 +1895,7 @@ function renderDashboard() {
     )
     .join("");
   document.querySelector("#pendingEmpty").hidden = pendingSales.length !== 0;
-  renderMonthlyChart(closedSales);
+  renderMonthlyChart(documentedClosings);
   renderCollectionAlerts(closedSales);
 }
 
@@ -2113,6 +2353,7 @@ function renderSales() {
   document.querySelector("#saleOverviewDelivered").textContent = state.sales.filter(
     (sale) => sale.saleStatus === "Entregado"
   ).length;
+  document.querySelector("#saleOverviewHistorical").textContent = activeHistoricalSales().length;
   document.querySelector("#salesBody").innerHTML = sales
     .map((sale) => {
       const totalCents = toCents(sale.commissionAmount);
@@ -2195,6 +2436,156 @@ function renderSales() {
     .join("");
   document.querySelector("#salesEmpty").hidden = sales.length !== 0;
   refreshIcons();
+}
+
+function populateHistoricalFilters() {
+  const yearSelect = document.querySelector("#historicalYearFilter");
+  const projectSelect = document.querySelector("#historicalProjectFilter");
+  const selectedYear = yearSelect.value;
+  const selectedProject = projectSelect.value;
+  const source = activeHistoricalSales();
+  const years = [...new Set(source.map((sale) => yearOf(sale.saleDate)).filter(Boolean))]
+    .sort((a, b) => b.localeCompare(a));
+  const projects = [...new Set(source.map((sale) => sale.project).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "es"));
+  yearSelect.innerHTML =
+    '<option value="">Todos los años</option>' +
+    years.map((year) => '<option value="' + escapeHtml(year) + '">' + escapeHtml(year) + "</option>").join("");
+  projectSelect.innerHTML =
+    '<option value="">Todos los proyectos</option>' +
+    projects.map((project) => '<option value="' + escapeHtml(project) + '">' + escapeHtml(project) + "</option>").join("");
+  yearSelect.value = years.includes(selectedYear) ? selectedYear : "";
+  projectSelect.value = projects.includes(selectedProject) ? selectedProject : "";
+}
+
+function filteredHistoricalSales() {
+  const query = normalizeText(document.querySelector("#historicalSearch").value);
+  const year = document.querySelector("#historicalYearFilter").value;
+  const project = document.querySelector("#historicalProjectFilter").value;
+  return activeHistoricalSales()
+    .filter(
+      (sale) =>
+        (!year || yearOf(sale.saleDate) === year) &&
+        (!project || sale.project === project) &&
+        (!query ||
+          normalizeText(
+            [sale.buyerName, sale.buyerEmail, sale.buyerPhone, sale.project, sale.unit, sale.sellerName]
+              .join(" ")
+          ).includes(query))
+    )
+    .sort((a, b) => String(b.saleDate).localeCompare(String(a.saleDate)));
+}
+
+function historicalPendingHtml(sale) {
+  return (
+    '<span class="historical-pending-list">' +
+    historicalMissingFields(sale)
+      .map(
+        (label) =>
+          '<span class="historical-pending-item">' + escapeHtml(label) + "</span>"
+      )
+      .join("") +
+    "</span>"
+  );
+}
+
+function renderHistoricalSales() {
+  populateHistoricalFilters();
+  const all = activeHistoricalSales();
+  const filtered = filteredHistoricalSales();
+  const volume = aggregate(all, "salePrice", "saleCurrency");
+  const buyers = new Set(all.map((sale) => normalizeText(sale.buyerName)).filter(Boolean));
+  const incomplete = all.filter((sale) => historicalMissingFields(sale).length).length;
+  const filtersActive =
+    document.querySelector("#historicalSearch").value ||
+    document.querySelector("#historicalYearFilter").value ||
+    document.querySelector("#historicalProjectFilter").value;
+
+  document.querySelector("#historicalOverviewTotal").textContent = all.length;
+  document.querySelector("#historicalOverviewVolume").textContent =
+    volume.DOP ? pairMoney(volume) : moneyFromCents(volume.USD, "USD");
+  document.querySelector("#historicalOverviewBuyers").textContent = buyers.size;
+  document.querySelector("#historicalOverviewIncomplete").textContent = incomplete;
+  document.querySelector("#historicalCount").textContent = filtersActive
+    ? filtered.length + " / " + all.length
+    : all.length;
+  document.querySelector("#historicalBody").innerHTML = filtered
+    .map(
+      (sale) =>
+        '<tr><td><span class="primary-cell">' +
+        escapeHtml(sale.buyerName) +
+        '</span><span class="secondary-cell">' +
+        escapeHtml(formatDate(sale.saleDate)) +
+        '</span></td><td><span class="primary-cell">' +
+        escapeHtml(sale.project) +
+        '</span><span class="secondary-cell">' +
+        escapeHtml(sale.unit + " · " + sale.developer) +
+        '</span></td><td class="money-cell">' +
+        escapeHtml(money(sale.salePrice, sale.saleCurrency)) +
+        "</td><td>" +
+        historicalPendingHtml(sale) +
+        '</td><td><span class="status-pill status-historical">Vendida · por completar</span></td></tr>'
+    )
+    .join("");
+  document.querySelector("#historicalMobileList").innerHTML = filtered
+    .map(
+      (sale) =>
+        '<article class="mobile-record-card"><div class="mobile-record-head"><strong>' +
+        escapeHtml(sale.buyerName) +
+        '</strong><span class="status-pill status-historical">Vendida</span></div><div class="mobile-record-main">' +
+        escapeHtml(sale.project + " · " + sale.unit) +
+        '</div><div class="mobile-record-meta"><span>' +
+        escapeHtml(formatDate(sale.saleDate)) +
+        '</span><span class="mobile-record-amount">' +
+        escapeHtml(money(sale.salePrice, sale.saleCurrency)) +
+        '</span></div><div>' +
+        historicalPendingHtml(sale) +
+        "</div></article>"
+    )
+    .join("");
+  document.querySelector("#historicalEmpty").hidden = filtered.length !== 0;
+  document.querySelector("#exportHistoricalButton").disabled = all.length === 0;
+  refreshIcons();
+}
+
+function exportHistoricalCompletionCsv() {
+  const rows = [[
+    "ID interno", "Constructora", "Proyecto", "Unidad", "Fecha de venta", "Precio",
+    "Moneda", "Comprador", "Teléfono", "Correo", "Estatus confirmado",
+    "Fecha de entrega", "Tasa de comisión (%)", "Comisión total",
+    "Moneda comisión", "Modalidad (single/advance_balance)", "Avance (%)",
+    "Cobros confirmados (Sí/No)"
+  ]];
+  activeHistoricalSales()
+    .sort((a, b) => String(a.saleDate).localeCompare(String(b.saleDate)))
+    .forEach((sale) => {
+      rows.push([
+        sale.id,
+        sale.developer,
+        sale.project,
+        sale.unit,
+        sale.saleDate,
+        sale.salePrice,
+        sale.saleCurrency,
+        sale.buyerName,
+        sale.buyerPhone,
+        sale.buyerEmail,
+        sale.saleStatus,
+        sale.deliveryDate,
+        sale.commissionRate ?? "",
+        sale.commissionAmount ?? "",
+        sale.commissionCurrency,
+        sale.commissionPlan,
+        sale.advancePercentage ?? "",
+        sale.paymentsConfirmed ? "Sí" : "No"
+      ]);
+    });
+  const csv = rows.map((row) => row.map(safeCsvCell).join(",")).join("\n");
+  downloadBlob(
+    new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }),
+    "antony-crm-historico-por-completar-" + today() + ".csv"
+  );
+  showToast(rows.length - 1 + " ventas históricas exportadas para completar");
 }
 
 function collectionActionHtml(sale, installment) {
@@ -2637,10 +3028,11 @@ function populateReportFilters() {
     ? yearSelect.value
     : String(new Date().getFullYear());
   const selectedProject = projectSelect.value;
+  const reportSource = reportableSales();
   const years = [
     ...new Set([
       String(new Date().getFullYear()),
-      ...state.sales.map((sale) => yearOf(sale.saleDate))
+      ...reportSource.map((sale) => yearOf(sale.saleDate))
     ])
   ]
     .filter(Boolean)
@@ -2661,7 +3053,7 @@ function populateReportFilters() {
     selectedYear === "" || years.includes(selectedYear) ? selectedYear : years[0] || "";
 
   const projects = [
-    ...new Set(state.sales.map((sale) => sale.project).filter(Boolean))
+    ...new Set(reportSource.map((sale) => sale.project).filter(Boolean))
   ].sort((a, b) => a.localeCompare(b, "es"));
   projectSelect.innerHTML =
     '<option value="">Todos los proyectos</option>' +
@@ -2683,27 +3075,32 @@ function filteredReportSales() {
   const project = document.querySelector("#reportProject").value;
   const saleStatus = document.querySelector("#reportSaleStatus").value;
   const commissionStatus = document.querySelector("#reportCommissionStatus").value;
-  return state.sales.filter(
+  return reportableSales().filter(
     (sale) =>
       (!year || yearOf(sale.saleDate) === year) &&
       (!project || sale.project === project) &&
       (saleStatus
         ? sale.saleStatus === saleStatus
         : commissionStatus === "Anulada"
-          ? isCancelledSale(sale)
-          : isClosedSale(sale)) &&
-      (!commissionStatus || statusForSale(sale).label === commissionStatus)
+          ? sale.recordType === "operational" && isCancelledSale(sale)
+          : sale.recordType === "historical" || isClosedSale(sale)) &&
+      (!commissionStatus || sale.commissionStatus === commissionStatus)
   );
 }
 
 function renderReportAnalysis(sales) {
   const byProject = sales.reduce((groups, sale) => {
     const key = sale.project || "Sin proyecto";
-    const current = groups.get(key) || { count: 0, commissions: emptyMoneyTotals() };
+    const current = groups.get(key) || {
+      count: 0,
+      volume: emptyMoneyTotals(),
+      commissions: emptyMoneyTotals()
+    };
     current.count += 1;
-    current.commissions[sale.commissionCurrency] += toCents(
-      sale.commissionAmount
-    );
+    current.volume[sale.saleCurrency] += toCents(sale.salePrice);
+    if (sale.recordType === "operational") {
+      current.commissions[sale.commissionCurrency] += toCents(sale.commissionAmount);
+    }
     groups.set(key, current);
     return groups;
   }, new Map());
@@ -2721,7 +3118,8 @@ function renderReportAnalysis(sales) {
             value.count +
             (value.count === 1 ? " operación" : " operaciones") +
             " · " +
-            escapeHtml(pairMoney(value.commissions)) +
+            escapeHtml(pairMoney(value.volume)) +
+            " vendidos" +
             '</span></div><div class="analysis-bar"><span style="width:' +
             Math.round((value.count / maximum) * 100) +
             '%"></span></div></div>'
@@ -2729,17 +3127,17 @@ function renderReportAnalysis(sales) {
         .join("")
     : '<div class="detail-empty">No hay operaciones para estos filtros.</div>';
 
-  const statusOrder = ["Pagada", "Parcial", "Pendiente", "Vencida"];
+  const statusOrder = ["Por completar", "Pagada", "Parcial", "Pendiente", "Vencida"];
   const statusCounts = statusOrder.map((status) => ({
     status,
-    count: sales.filter((sale) => statusForSale(sale).label === status).length
+    count: sales.filter((sale) => sale.commissionStatus === status).length
   }));
   const total = Math.max(sales.length, 1);
   document.querySelector("#reportCollectionHealth").innerHTML = statusCounts
     .map(
       ({ status, count }) =>
         '<div class="health-row"><div><span class="health-dot health-' +
-        escapeHtml(normalizeText(status)) +
+            escapeHtml(normalizeText(status).replace(/\s+/g, "-")) +
         '"></span><strong>' +
         escapeHtml(status) +
         "</strong><span>" +
@@ -2751,14 +3149,34 @@ function renderReportAnalysis(sales) {
     .join("");
 }
 
+function setReportMoneyWithUnknown(primaryId, secondaryId, totals, unknownCount) {
+  const hasKnownAmount = totals.USD !== 0 || totals.DOP !== 0;
+  const primary = document.querySelector("#" + primaryId);
+  const secondary = document.querySelector("#" + secondaryId);
+  if (unknownCount && !hasKnownAmount) {
+    primary.textContent = "Sin confirmar";
+    secondary.textContent =
+      unknownCount + (unknownCount === 1 ? " venta histórica" : " ventas históricas");
+    return;
+  }
+  primary.textContent = moneyFromCents(totals.USD, "USD");
+  secondary.textContent =
+    moneyFromCents(totals.DOP, "DOP") +
+    (unknownCount
+      ? " · " + unknownCount + (unknownCount === 1 ? " sin confirmar" : " sin confirmar")
+      : "");
+}
+
 function renderReports() {
   populateReportFilters();
   const filtered = filteredReportSales();
   const active = filtered;
+  const historicalCount = active.filter((sale) => sale.recordType === "historical").length;
   const reportYear = document.querySelector("#reportYear").value;
   const volume = aggregate(active, "salePrice", "saleCurrency");
   const commissions = aggregate(active, "commissionAmount", "commissionCurrency");
   const received = active.reduce((totals, sale) => {
+    if (sale.recordType === "historical") return totals;
     totals[sale.commissionCurrency] += paymentsForSale(sale.id)
       .filter(
         (payment) =>
@@ -2769,6 +3187,7 @@ function renderReports() {
     return totals;
   }, emptyMoneyTotals());
   const pending = active.reduce((totals, sale) => {
+    if (sale.recordType === "historical") return totals;
     totals[sale.commissionCurrency] += pendingForSaleCents(sale);
     return totals;
   }, emptyMoneyTotals());
@@ -2781,29 +3200,23 @@ function renderReports() {
     volume.DOP,
     "DOP"
   );
-  document.querySelector("#reportCommission").textContent = moneyFromCents(
-    commissions.USD,
-    "USD"
+  setReportMoneyWithUnknown(
+    "reportCommission",
+    "reportCommissionDop",
+    commissions,
+    historicalCount
   );
-  document.querySelector("#reportCommissionDop").textContent = moneyFromCents(
-    commissions.DOP,
-    "DOP"
+  setReportMoneyWithUnknown(
+    "reportReceived",
+    "reportReceivedDop",
+    received,
+    historicalCount
   );
-  document.querySelector("#reportReceived").textContent = moneyFromCents(
-    received.USD,
-    "USD"
-  );
-  document.querySelector("#reportReceivedDop").textContent = moneyFromCents(
-    received.DOP,
-    "DOP"
-  );
-  document.querySelector("#reportPending").textContent = moneyFromCents(
-    pending.USD,
-    "USD"
-  );
-  document.querySelector("#reportPendingDop").textContent = moneyFromCents(
-    pending.DOP,
-    "DOP"
+  setReportMoneyWithUnknown(
+    "reportPending",
+    "reportPendingDop",
+    pending,
+    historicalCount
   );
   renderReportAnalysis(active);
   document.querySelector("#reportBody").innerHTML = [...filtered]
@@ -2811,13 +3224,14 @@ function renderReports() {
     .map(
       (sale) =>
         '<tr class="record-row ' +
-        (isCancelledSale(sale) ? "muted-row" : "") +
-        '" data-view-sale="' +
+        (sale.recordType === "operational" && isCancelledSale(sale) ? "muted-row" : "") +
+        '" ' +
+        (sale.recordType === "historical" ? 'data-view-history="' : 'data-view-sale="') +
         escapeHtml(sale.id) +
         '" tabindex="0" aria-label="Abrir dossier de ' +
         escapeHtml(saleLabel(sale)) +
         '"><td><span class="primary-cell">' +
-        escapeHtml(clientName(sale.clientId)) +
+        escapeHtml(sale.buyerName) +
         '</span><span class="secondary-cell">' +
         escapeHtml(formatDate(sale.saleDate)) +
         '</span></td><td><span class="primary-cell">' +
@@ -2825,13 +3239,21 @@ function renderReports() {
         '</span><span class="secondary-cell">' +
         escapeHtml(sale.unit + (sale.developer ? " · " + sale.developer : "")) +
         "</span></td><td>" +
-        saleStatusBadge(sale) +
+        (sale.recordType === "historical"
+          ? '<span class="sale-state">Vendida · estatus por confirmar</span>'
+          : saleStatusBadge(sale)) +
         '</td><td class="money-cell">' +
         escapeHtml(money(sale.salePrice, sale.saleCurrency)) +
         '</td><td class="money-cell">' +
-        escapeHtml(money(sale.commissionAmount, sale.commissionCurrency)) +
+        escapeHtml(
+          sale.recordType === "historical"
+            ? "Sin confirmar"
+            : money(sale.commissionAmount, sale.commissionCurrency)
+        ) +
         "</td><td>" +
-        statusBadge(sale) +
+        (sale.recordType === "historical"
+          ? '<span class="status-pill status-historical">Por completar</span>'
+          : statusBadge(sale)) +
         "</td></tr>"
     )
     .join("");
@@ -2840,15 +3262,18 @@ function renderReports() {
     .map(
       (sale) =>
         '<article class="mobile-record-card record-row' +
-        (isCancelledSale(sale) ? " muted-row" : "") +
-        '" data-view-sale="' +
+        (sale.recordType === "operational" && isCancelledSale(sale) ? " muted-row" : "") +
+        '" ' +
+        (sale.recordType === "historical" ? 'data-view-history="' : 'data-view-sale="') +
         escapeHtml(sale.id) +
         '" tabindex="0" role="button" aria-label="Abrir dossier de ' +
         escapeHtml(saleLabel(sale)) +
         '"><div class="mobile-record-head"><strong>' +
-        escapeHtml(clientName(sale.clientId)) +
+        escapeHtml(sale.buyerName) +
         "</strong>" +
-        saleStatusBadge(sale) +
+        (sale.recordType === "historical"
+          ? '<span class="sale-state">Vendida</span>'
+          : saleStatusBadge(sale)) +
         '</div><div class="mobile-record-main">' +
         escapeHtml(sale.project + " · " + sale.unit) +
         '</div><div class="mobile-record-meta"><span>' +
@@ -2856,7 +3281,11 @@ function renderReports() {
         '</span><span class="mobile-record-amount">' +
         escapeHtml(money(sale.salePrice, sale.saleCurrency)) +
         '</span></div><div class="mobile-record-meta"><span>Comisión</span><span class="mobile-record-amount">' +
-        escapeHtml(money(sale.commissionAmount, sale.commissionCurrency)) +
+        escapeHtml(
+          sale.recordType === "historical"
+            ? "Sin confirmar"
+            : money(sale.commissionAmount, sale.commissionCurrency)
+        ) +
         '</span></div><div class="mobile-record-open"><span>Ver dossier</span><i data-lucide="arrow-right" aria-hidden="true"></i></div></article>'
     )
     .join("");
@@ -2871,6 +3300,7 @@ function renderAll(persist) {
   renderDashboard();
   renderClients();
   renderSales();
+  renderHistoricalSales();
   renderCollectionQueue();
   renderPayments();
   renderReports();
@@ -3444,7 +3874,9 @@ function exportBackup() {
     clients: state.clients,
     sales: state.sales,
     installments: state.installments,
-    payments: state.payments
+    payments: state.payments,
+    historicalImportBatches: state.historicalImportBatches,
+    historicalSales: state.historicalSales
   };
   downloadBlob(
     new Blob(
@@ -3483,7 +3915,12 @@ async function importBackup(file) {
     const imported = normalizeState(importSource);
     if (
       !DEMO_MODE &&
-      (state.clients.length || state.sales.length || state.installments.length || state.payments.length)
+      (state.clients.length ||
+        state.sales.length ||
+        state.installments.length ||
+        state.payments.length ||
+        state.historicalSales.length ||
+        state.historicalImportBatches.length)
     ) {
       showToast(
         "Por seguridad, un respaldo de nube solo se restaura en un espacio vacío",
@@ -3500,11 +3937,13 @@ async function importBackup(file) {
         imported.sales.length +
         " ventas y " +
         imported.payments.length +
-        " cobros y " +
+        " cobros, " +
         imported.installments.length +
+        " cuotas y " +
+        imported.historicalSales.length +
         (DEMO_MODE
-          ? " cuotas. Los datos locales actuales serán reemplazados en una sola operación."
-          : " cuotas. Se restaurarán en este espacio vacío mediante una sola transacción."),
+          ? " ventas históricas. Los datos locales actuales serán reemplazados en una sola operación."
+          : " ventas históricas. Se restaurarán en este espacio vacío mediante una sola transacción."),
       confirmLabel: DEMO_MODE ? "Importar y reemplazar" : "Restaurar respaldo"
     });
     if (!confirmation.confirmed) return;
@@ -3532,6 +3971,101 @@ async function importBackup(file) {
   }
 }
 
+async function importHistoricalFile(file) {
+  if (!file) return;
+  if (!window.AntonyHistoricalImport) {
+    showToast("El importador histórico no está disponible", 5000);
+    return;
+  }
+  if (file.size > window.AntonyHistoricalImport.MAX_FILE_BYTES) {
+    showToast("La base histórica excede el límite de 5 MB");
+    return;
+  }
+  try {
+    const source = await file.text();
+    const rows = window.AntonyHistoricalImport.parseHistoricalFile(source, { today: today() });
+    const fingerprint = await window.AntonyHistoricalImport.sha256(source);
+    const summary = window.AntonyHistoricalImport.summarize(rows);
+    const summaryYears = Object.keys(summary.years).sort();
+    const duplicateBatch = state.historicalImportBatches.find(
+      (batch) => batch.sourceSha256 === fingerprint
+    );
+    if (duplicateBatch) {
+      showToast("Esta misma base histórica ya fue cargada; no se duplicó", 5500);
+      return;
+    }
+    const currentUnitKeys = new Set([
+      ...state.sales
+        .filter((sale) => !isCancelledSale(sale))
+        .map((sale) => normalizeText(sale.project) + "::" + normalizeText(sale.unit)),
+      ...activeHistoricalSales().map(
+        (sale) => normalizeText(sale.project) + "::" + normalizeText(sale.unit)
+      )
+    ]);
+    const conflict = rows.find((sale) =>
+      currentUnitKeys.has(normalizeText(sale.project) + "::" + normalizeText(sale.unit))
+    );
+    if (conflict) {
+      throw new Error(
+        "Ya existe la operación " + conflict.project + " · " + conflict.unit + " en el CRM."
+      );
+    }
+    const confirmation = await requestConfirmation({
+      title: "Cargar ventas históricas",
+      message:
+        "Se validaron " +
+        summary.rows +
+        " ventas cerradas de " +
+        (summaryYears.length > 1
+          ? summaryYears[0] + " a " + summaryYears.at(-1)
+          : summaryYears[0]) +
+        " por " +
+        money(summary.volume, "USD") +
+        ". Se guardarán como historial por completar y no crearán comisiones ni cobros.",
+      confirmLabel: "Cargar historial"
+    });
+    if (!confirmation.confirmed) return;
+    const batch = {
+      id: "historical-batch-" + fingerprint.slice(0, 24),
+      sourceName: String(file.name || "base-historica.txt").slice(0, 240),
+      sourceSha256: fingerprint,
+      sourceRowCount: rows.length
+    };
+    if (DEMO_MODE) {
+      const timestamp = new Date().toISOString();
+      state.historicalImportBatches.push({
+        ...batch,
+        importedAt: timestamp,
+        createdAt: timestamp
+      });
+      state.historicalSales.push(
+        ...rows.map((sale) => ({
+          ...sale,
+          batchId: batch.id,
+          promotedClientId: "",
+          promotedSaleId: "",
+          promotedAt: "",
+          createdAt: timestamp,
+          updatedAt: timestamp
+        }))
+      );
+      recordAudit("import", "historical", batch.id, rows.length + " ventas históricas");
+    } else {
+      await performCloudMutation(() => cloudBackend.importHistoricalSales(batch, rows));
+      state = normalizeState(await cloudBackend.loadWorkspace());
+    }
+    renderAll();
+    switchView("historical", true, false);
+    showToast(summary.rows + " ventas históricas cargadas sin generar cobros", 6500);
+  } catch (error) {
+    const detail =
+      !DEMO_MODE && cloudBackend?.humanizeError
+        ? cloudBackend.humanizeError(error)
+        : error.message;
+    showToast("No se pudo cargar la base histórica: " + detail, 6500);
+  }
+}
+
 function safeCsvCell(value) {
   let text = String(value == null ? "" : value);
   if (/^\s*[=+\-@]/.test(text)) text = "'" + text;
@@ -3555,21 +4089,21 @@ function exportSalesCsv() {
     rows.push([
       sale.saleDate,
       sale.deliveryDate,
-      clientName(sale.clientId),
+      sale.buyerName || clientName(sale.clientId),
       sale.project,
       sale.unit,
       sale.developer,
-      sale.sharedSale ? "Sí" : "No",
-      sale.externalAgent,
-      sale.saleStatus,
+      sale.recordType === "historical" ? "Sin confirmar" : sale.sharedSale ? "Sí" : "No",
+      sale.recordType === "historical" ? sale.sellerName : sale.externalAgent,
+      sale.saleStatus || "Vendida / estatus por confirmar",
       sale.salePrice,
       sale.saleCurrency,
-      sale.commissionAmount,
+      sale.recordType === "historical" ? "" : sale.commissionAmount,
       sale.commissionCurrency,
-      paidForSale(sale.id),
-      pendingForSale(sale),
-      statusForSale(sale).label,
-      nextCommissionDueDate(sale)
+      sale.recordType === "historical" ? "" : paidForSale(sale.id),
+      sale.recordType === "historical" ? "" : pendingForSale(sale),
+      sale.recordType === "historical" ? "Por completar" : statusForSale(sale).label,
+      sale.recordType === "historical" ? "" : nextCommissionDueDate(sale)
     ]);
   });
   const csv = rows.map((row) => row.map(safeCsvCell).join(",")).join("\n");
@@ -4314,6 +4848,20 @@ document.querySelector("#paymentForm").addEventListener("submit", async (event) 
 
 document.querySelector("#cancelPaymentEdit").addEventListener("click", () => closeDrawer());
 document.querySelector("#paymentSearch").addEventListener("input", renderPayments);
+document.querySelector("#historicalSearch").addEventListener("input", renderHistoricalSales);
+["historicalYearFilter", "historicalProjectFilter"].forEach((id) =>
+  document.querySelector("#" + id).addEventListener("change", renderHistoricalSales)
+);
+document.querySelector("#historicalImportButton").addEventListener("click", () => {
+  document.querySelector("#historicalImportInput").click();
+});
+document.querySelector("#historicalImportInput").addEventListener("change", (event) => {
+  importHistoricalFile(event.target.files?.[0]);
+  event.target.value = "";
+});
+document
+  .querySelector("#exportHistoricalButton")
+  .addEventListener("click", exportHistoricalCompletionCsv);
 document.querySelectorAll("[data-collection-filter]").forEach((button) => {
   button.addEventListener("click", () => {
     collectionFilter = button.dataset.collectionFilter;
@@ -4416,12 +4964,18 @@ document.addEventListener("keydown", (event) => {
     const target = event.target instanceof Element ? event.target : null;
     const clientRecord = target?.closest("[data-view-client]");
     const saleRecord = target?.closest("[data-view-sale]");
-    if (!clientRecord && !saleRecord) return;
+    const historicalRecord = target?.closest("[data-view-history]");
+    if (!clientRecord && !saleRecord && !historicalRecord) return;
     event.preventDefault();
     if (clientRecord) {
       openRecordDetail("client", clientRecord.dataset.viewClient, clientRecord);
-    } else {
+    } else if (saleRecord) {
       openRecordDetail("sale", saleRecord.dataset.viewSale, saleRecord);
+    } else {
+      const historical = historicalSaleById(historicalRecord.dataset.viewHistory);
+      switchView("historical", true, false);
+      document.querySelector("#historicalSearch").value = historical?.unit || "";
+      renderHistoricalSales();
     }
     return;
   }
@@ -4451,6 +5005,7 @@ document.addEventListener("click", async (event) => {
   const registerPayment = target?.closest("[data-register-payment]");
   const viewClient = target?.closest("[data-view-client]");
   const viewSale = target?.closest("[data-view-sale]");
+  const viewHistory = target?.closest("[data-view-history]");
   const editClient = target?.closest("[data-edit-client]");
   const deleteClient = target?.closest("[data-delete-client]");
   const editSale = target?.closest("[data-edit-sale]");
@@ -4475,6 +5030,13 @@ document.addEventListener("click", async (event) => {
   }
   if (viewSale) {
     openRecordDetail("sale", viewSale.dataset.viewSale, viewSale);
+    return;
+  }
+  if (viewHistory) {
+    const historical = historicalSaleById(viewHistory.dataset.viewHistory);
+    switchView("historical", true, false);
+    document.querySelector("#historicalSearch").value = historical?.unit || "";
+    renderHistoricalSales();
     return;
   }
   if (editClient) return startClientEdit(editClient.dataset.editClient, editClient);

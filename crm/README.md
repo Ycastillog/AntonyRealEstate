@@ -12,6 +12,7 @@ CRM privado para gestionar la operación comercial de Antony Real Estate: client
 - Muestra lo cobrado, lo pendiente, lo vencido y el próximo cobro.
 - Conserva los cobros anulados y el motivo; no borra la historia financiera.
 - Calcula clientes nuevos por período, ventas por año, ventas totales y comisiones por moneda.
+- Importa bases históricas CSV/TSV como ventas cerradas de referencia: cuentan en volumen, año y proyecto, pero no crean clientes, comisiones ni cobros hasta completar y convertir cada registro.
 - Exporta ventas y cobros a CSV y permite respaldos JSON validados; en nube la restauración exige un workspace vacío.
 
 ## Modos de ejecución
@@ -34,7 +35,7 @@ En `https://antonyrealestate.com/crm/` siempre se usa Supabase. Los datos comerc
 
 - GitHub Pages sirve el sitio público y la interfaz estática del CRM.
 - Supabase Auth controla las sesiones por correo y contraseña.
-- PostgreSQL guarda clientes, ventas, cuotas, cobros y auditoría.
+- PostgreSQL guarda clientes, ventas operativas, lotes históricos, cuotas, cobros y auditoría.
 - Row Level Security aísla los registros por `auth.uid()`.
 - Las ventas, planes de cuotas y cobros se escriben mediante RPC transaccionales.
 - Supabase Storage guarda material promocional público; solamente administradores autenticados pueden modificar archivos. Los adjuntos privados requieren otro bucket.
@@ -57,6 +58,8 @@ El esquema completo está en `../supabase-production-setup.sql`.
 - Un cobro contabilizado no se edita ni elimina: se anula con motivo y se registra uno nuevo.
 - Una venta con cobros activos no puede pasar a `Desistió` o `Cambio` hasta anularlos.
 - En producción, las operaciones se conservan para auditoría; se marcan como `Desistió` o `Cambio` en vez de borrarse.
+- Una venta histórica incompleta muestra `Sin confirmar` en comisión y cobros; nunca se interpreta un dato ausente como cero.
+- Cada archivo histórico se identifica por SHA-256 y se importa de forma atómica para impedir lotes parciales o duplicados.
 
 ## Puesta en producción
 
@@ -70,6 +73,7 @@ El esquema completo está en `../supabase-production-setup.sql`.
 ## Verificación local
 
 ```powershell
+node --check crm/historical.js
 node --check crm/app.js
 node --check crm/backend.js
 node --test crm/tests/*.test.mjs

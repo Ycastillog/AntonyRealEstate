@@ -35,7 +35,7 @@ http://127.0.0.1:4173
 La pagina publica funciona en GitHub Pages con el dominio `antonyrealestate.com`. El repositorio también incluye:
 
 - `/portal/`: administración autenticada de propiedades y evidencias.
-- `/crm/`: Antony Private Office para clientes, ventas, cuotas de comisión, cobros y reportes.
+- `/crm/`: Antony Private Office para clientes, ventas, histórico comercial, cuotas de comisión, cobros y reportes.
 - `supabase-production-setup.sql`: migración de PostgreSQL, Storage, RLS, auditoría y operaciones transaccionales.
 
 En localhost el CRM usa por defecto datos ficticios del navegador. El backend de producción ya está aprovisionado en Supabase; en el dominio solo entra una cuenta autorizada mediante Supabase Auth. La operación y los respaldos se rigen por `PRODUCTION-RUNBOOK.md`.
