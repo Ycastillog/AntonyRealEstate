@@ -13,12 +13,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=production-v5" />
+    <link rel="stylesheet" href="styles.css?v=production-v6" />
     <script src="../media-config.js?v=secure-auth-v3" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js" integrity="sha384-ysv13JVP3fufiEXfjML9OdCa/rRbMJvUBOWyor82wfuK8INNZAvmbxHgKIHi+oqz" crossorigin="anonymous" defer></script>
-    <script src="backend.js?v=production-v4" defer></script>
+    <script src="backend.js?v=production-v5" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" integrity="sha384-uTYyvsSSUZeaPhb5RbKlQa0zY/WpX/QHfvg2mczXyBQOpkWPEDy9lczyp+w7SKXu" crossorigin="anonymous" defer></script>
-    <script src="app.js?v=production-v6" defer></script>
+    <script src="app.js?v=production-v7" defer></script>
   </head>
   <body>
     <main class="auth-shell" id="authShell" aria-labelledby="loginTitle">
@@ -125,9 +125,10 @@
               <summary class="button button-secondary" aria-label="Configuración y respaldo" title="Configuración y respaldo"><i data-lucide="settings-2" aria-hidden="true"></i><span>Sistema</span></summary>
               <div class="data-menu-panel">
                 <button type="button" id="changePasswordButton"><i data-lucide="key-round" aria-hidden="true"></i>Cambiar contraseña</button>
-                <button type="button" id="exportBackupButton">Descargar respaldo</button>
-                <button class="file-action" type="button" id="importBackupButton">Importar respaldo</button>
+                <button type="button" id="exportBackupButton"><i data-lucide="download" aria-hidden="true"></i>Descargar respaldo (.json)</button>
+                <button class="file-action" type="button" id="importBackupButton"><i data-lucide="upload" aria-hidden="true"></i>Importar respaldo (.json)</button>
                 <input id="importBackupInput" type="file" accept="application/json,.json" hidden />
+                <p class="data-menu-help">Archivo técnico para restaurar el CRM. No es un reporte y no debe editarse.</p>
                 <button class="demo-only" type="button" id="loadDemoButton">Cargar datos de ejemplo</button>
                 <button class="demo-only danger-option" type="button" id="resetDataButton">Vaciar CRM</button>
               </div>
@@ -209,9 +210,9 @@
             <div class="drawer-heading"><div><span class="eyebrow">Contacto</span><h2 id="clientFormTitle">Agregar cliente</h2></div><button class="drawer-close" type="button" data-close-drawer aria-label="Cerrar formulario"><i data-lucide="x" aria-hidden="true"></i></button></div>
             <div class="drawer-body">
               <label>Nombre completo<input name="name" type="text" autocomplete="name" required /></label>
-              <p class="form-hint contact-requirement" id="clientContactRequirement"><i data-lucide="info" aria-hidden="true"></i><span>Teléfono o correo electrónico: completa al menos uno.</span></p>
+              <p class="form-hint contact-requirement" id="clientContactRequirement"><i data-lucide="info" aria-hidden="true"></i><span>Teléfono y correo son obligatorios para contacto y futuras notificaciones.</span></p>
               <div class="form-grid">
-                <label>Teléfono<input name="phone" type="tel" autocomplete="tel" aria-describedby="clientContactRequirement" /></label><label>Correo electrónico<input name="email" type="email" autocomplete="email" aria-describedby="clientContactRequirement" /></label>
+                <label>Teléfono<input name="phone" type="tel" autocomplete="tel" inputmode="tel" minlength="7" maxlength="40" aria-describedby="clientContactRequirement" required /></label><label>Correo electrónico<input name="email" type="email" autocomplete="email" maxlength="320" aria-describedby="clientContactRequirement" required /></label>
                 <label>Fecha de captación<input name="capturedAt" id="capturedAt" type="date" required /></label><label>Origen del contacto<select name="source"><option value="WhatsApp">WhatsApp</option><option value="Instagram">Instagram</option><option value="Referido">Referido</option><option value="Web">Página web</option><option value="Otro">Otro</option></select></label>
                 <label>Estado<select name="stage"><option value="Nuevo">Nuevo</option><option value="Calificado">Calificado</option><option value="En seguimiento">En seguimiento</option><option value="Comprador">Comprador</option><option value="Inactivo">Inactivo</option></select></label>
                 <label>Zona de interés<input name="desiredZone" type="text" /></label>
@@ -246,8 +247,10 @@
             <div class="drawer-body">
               <div class="form-section"><h3>Cliente y propiedad</h3><div class="form-grid">
                 <label>Cliente<select name="clientId" id="saleClientId" required></select></label><label>Fecha de venta<input name="saleDate" id="saleDate" type="date" required /></label>
-                <label>Proyecto<input name="project" type="text" required /></label><label>Unidad<input name="unit" type="text" required /></label>
-                <label>Desarrolladora<input name="developer" type="text" /></label><label>Etapa de la venta<select name="saleStatus"><option value="Reservada">Reservada</option><option value="Contratada">Contratada</option><option value="Entregada">Entregada</option><option value="Cancelada">Cancelada</option></select></label>
+                <label>Proyecto<input name="project" id="saleProject" type="text" list="projectCatalog" autocomplete="off" placeholder="Selecciona o escribe un proyecto" required /></label><label>Unidad<input name="unit" type="text" required /></label>
+                <label>Constructora<input name="developer" id="saleDeveloper" type="text" list="developerCatalog" autocomplete="off" placeholder="Selecciona o escribe una constructora" /></label><label>Etapa de la venta<select name="saleStatus"><option value="Reservada">Reservada</option><option value="Contratada">Contratada</option><option value="Entregada">Entregada</option><option value="Cancelada">Cancelada</option></select></label>
+                <datalist id="developerCatalog"><option value="Constructora LVP"></option></datalist>
+                <datalist id="projectCatalog"></datalist>
                 <label>Fecha estimada de entrega<input name="deliveryDate" id="deliveryDate" type="date" aria-describedby="deliveryDateHelp" /><small class="field-help" id="deliveryDateHelp">Puede completarse luego si la desarrolladora aún no la confirma.</small></label>
                 <label class="shared-sale-toggle"><span><input name="sharedSale" id="sharedSale" type="checkbox" /> Venta compartida</span><small>Actívalo cuando participa otro broker o asesor.</small></label>
                 <label class="form-grid-full" id="externalAgentWrap" hidden>Asesor o broker externo<input name="externalAgent" type="text" maxlength="200" placeholder="Nombre del asesor externo" /></label>
@@ -260,11 +263,12 @@
               </div></div>
               <section class="form-section installment-planner" id="installmentPlanner" aria-labelledby="installmentPlannerTitle">
                 <div class="installment-planner-heading">
-                  <div><span class="eyebrow">Cobranza</span><h3 id="installmentPlannerTitle">Plan de cobro de comisión</h3><p>Distribuye la comisión por porcentaje o monto; por ejemplo, 80% y 20%.</p></div>
-                  <div class="installment-planner-actions">
-                    <button class="button button-secondary" type="button" id="splitInstallmentsButton"><i data-lucide="columns-3" aria-hidden="true"></i>Dividir en cuotas</button>
-                    <button class="button button-secondary" type="button" id="addInstallmentButton"><i data-lucide="plus" aria-hidden="true"></i>Añadir cuota</button>
-                  </div>
+                  <div><span class="eyebrow">Cobranza</span><h3 id="installmentPlannerTitle">Plan de cobro de comisión</h3><p>Elige pago único o avance y saldo. Los montos se calculan automáticamente sobre la comisión total.</p></div>
+                </div>
+                <div class="commission-plan-controls">
+                  <label>Modalidad de cobro<select id="commissionPlanType"><option value="advance_balance" selected>Avance + saldo</option><option value="single">Pago único</option></select></label>
+                  <label id="advancePercentageWrap">Porcentaje de avance<input id="advancePercentage" type="number" min="1" max="99" step="0.01" inputmode="decimal" value="50" aria-describedby="advancePercentageHelp" /><small class="field-help" id="advancePercentageHelp">El saldo se completa automáticamente.</small></label>
+                  <div class="commission-plan-presets" id="commissionPlanPresets" aria-label="Porcentajes frecuentes"><span>Frecuentes</span><button class="button button-secondary active" type="button" data-advance-preset="50">50% / 50%</button><button class="button button-secondary" type="button" data-advance-preset="80">80% / 20%</button></div>
                 </div>
                 <div class="installment-rows" id="installmentRows" aria-label="Cuotas del plan de cobro de comisión"></div>
                 <p class="installment-plan-summary" id="installmentPlanSummary" aria-live="polite">Total planificado: pendiente de distribuir.</p>

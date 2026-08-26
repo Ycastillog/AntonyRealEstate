@@ -63,12 +63,15 @@ test("production schema defines every CRM table and critical business column", s
   }
 
   assert.match(sql, /create\s+table[\s\S]*?public\.crm_clients\s*\([\s\S]*?captured_at\s+timestamptz\s+not\s+null/i);
+  assert.match(sql, /public\.crm_clients\s*\([\s\S]*?phone\s+text\s+not\s+null[\s\S]*?email\s+text\s+not\s+null/i);
   assert.match(sql, /public\.crm_clients\s*\([\s\S]*?property_stage\s+text\s+not\s+null\s+default\s+'Sin definir'/i);
   assert.match(sql, /create\s+table[\s\S]*?public\.crm_sales\s*\([\s\S]*?cancel_reason\s+text/i);
   assert.match(sql, /public\.crm_sales\s*\([\s\S]*?delivery_date\s+date[\s\S]*?shared_sale\s+boolean\s+not\s+null[\s\S]*?external_agent\s+text/i);
   assert.match(sql, /public\.crm_commission_installments[\s\S]*?sale_id\s+text\s+not\s+null[\s\S]*?due_date\s+date\s+not\s+null/i);
   assert.match(sql, /public\.crm_payments[\s\S]*?installment_id\s+text[\s\S]*?void_reason\s+text/i);
   assert.match(sql, /primary\s+key\s*\(owner_id\s*,\s*id\s*\)/i);
+  assert.match(sql, /crm_clients_contact_check[\s\S]{0,220}phone[\s\S]{0,120}\band\b[\s\S]{0,120}email/i);
+  assert.match(sql, /Cada cliente del respaldo debe incluir teléfono y correo electrónico/i);
 });
 
 test("RLS policies isolate each CRM table by authenticated owner", sqlTestOptions, () => {

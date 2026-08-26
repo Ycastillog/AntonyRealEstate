@@ -118,17 +118,28 @@ h1[tabindex="-1"]:focus { outline: none; }
   z-index: 45;
 }
 .data-menu-panel button, .data-menu-panel .file-action {
+  align-items: center;
   background: transparent;
   border: 0;
   border-radius: var(--r-control);
   color: var(--text);
   cursor: pointer;
-  display: block;
+  display: flex;
   font-size: 13px;
   font-weight: 600;
+  gap: 9px;
   padding: 10px 12px;
   text-align: left;
   width: 100%;
+}
+.data-menu-panel button svg { flex: 0 0 auto; height: 16px; width: 16px; }
+.data-menu-help {
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.45;
+  margin: 4px 4px 0;
+  padding: 10px 8px 4px;
 }
 .data-menu-panel button:hover, .data-menu-panel .file-action:hover { background: #f2f4f7; }
 .data-menu-panel .danger-option { color: var(--danger); }
@@ -1360,13 +1371,47 @@ body[data-environment="local"] .demo-only,
 .installment-planner-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .installment-planner-actions .button { font-size: 11px; gap: 6px; height: 40px; min-height: 40px; padding-inline: 11px; }
 .installment-planner-actions svg { height: 14px; width: 14px; }
+.commission-plan-controls {
+  align-items: end;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 1fr) minmax(170px, .8fr) minmax(220px, 1.2fr);
+  padding: 13px;
+}
+.commission-plan-presets {
+  align-items: center;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: auto 1fr 1fr;
+}
+.commission-plan-presets > span {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.commission-plan-presets .button {
+  font-size: 11px;
+  height: 44px;
+  min-height: 44px;
+  padding-inline: 9px;
+}
+.commission-plan-presets .button.active,
+.commission-plan-presets .button[aria-pressed="true"] {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
 .installment-rows { display: grid; gap: 10px; }
 .installment-rows:empty::before {
   background: rgba(255, 255, 255, .7);
   border: 1px dashed #c7b98f;
   border-radius: 10px;
   color: var(--text-secondary);
-  content: "Añade una cuota o divide la comisión para crear el plan.";
+  content: "Indica la comisión para calcular el plan de cobro.";
   font-size: 11px;
   line-height: 1.5;
   padding: 18px;
@@ -1381,13 +1426,20 @@ body[data-environment="local"] .demo-only,
   border-radius: 10px;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(125px, 1.2fr) minmax(92px, .62fr) minmax(120px, .85fr) minmax(135px, 1fr) auto;
+  grid-template-columns: minmax(125px, 1.15fr) minmax(92px, .62fr) minmax(130px, .9fr) minmax(145px, 1fr);
   padding: 12px;
 }
 .installment-row label,
 #installmentRows > div label { min-width: 0; }
 .installment-row input,
 #installmentRows > div input { font-variant-numeric: tabular-nums; }
+.installment-row input[readonly],
+#installmentRows > div input[readonly] {
+  background: #f4f2ed;
+  color: var(--navy);
+  cursor: default;
+  font-weight: 700;
+}
 .installment-row button,
 #installmentRows > div > button,
 .remove-installment-button,
@@ -1460,6 +1512,8 @@ body[data-environment="local"] .demo-only,
   .logout-button { flex: 0 0 auto; padding: 0; width: 40px; }
 
   .installment-planner-heading { align-items: stretch; flex-direction: column; }
+  .commission-plan-controls { grid-template-columns: 1fr 1fr; }
+  .commission-plan-presets { grid-column: 1 / -1; }
   .installment-planner-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .installment-planner-actions .button { width: 100%; }
   .installment-row,
@@ -1501,6 +1555,9 @@ body[data-environment="local"] .demo-only,
   #view-payments .page-heading > .button { max-width: none; width: 100%; }
 
   .form-section.installment-planner { padding: 13px; }
+  .commission-plan-controls { grid-template-columns: 1fr; padding: 10px; }
+  .commission-plan-presets { grid-column: auto; grid-template-columns: 1fr 1fr; }
+  .commission-plan-presets > span { grid-column: 1 / -1; }
   .installment-planner-actions { grid-template-columns: 1fr; }
   .installment-row,
   #installmentRows > [data-installment-row],

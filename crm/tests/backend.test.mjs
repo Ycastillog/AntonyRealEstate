@@ -434,6 +434,7 @@ test("saveClient waits for a confirmed row, maps it, and strips dangerous keys",
       "name": "Borrador",
       "phone": "",
       "desiredZone": "",
+      "propertyStage": "En planos",
       "capturedAt": "2026-08-20",
       "createdAt": "2026-08-19",
       "updatedAt": "2026-08-20",
@@ -464,6 +465,7 @@ test("saveClient waits for a confirmed row, maps it, and strips dangerous keys",
   assert.equal(capturedPayload.captured_at, "2026-08-20");
   assert.equal(capturedPayload.phone, null);
   assert.equal(capturedPayload.desired_zone, null);
+  assert.equal(capturedPayload.property_stage, "En planos");
   assert.ok(!Object.hasOwn(capturedPayload, "created_at"));
   assert.ok(!Object.hasOwn(capturedPayload, "updated_at"));
   assert.ok(!Object.hasOwn(capturedPayload, "contact_meta"));

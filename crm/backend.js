@@ -794,7 +794,7 @@
     // An allowlist also prevents __proto__/constructor assignment while keeping
     // ownership and timestamps entirely server-controlled.
     [
-      'id', 'name', 'phone', 'email', 'source', 'stage', 'desiredZone',
+      'id', 'name', 'phone', 'email', 'source', 'stage', 'desiredZone', 'propertyStage',
       'budget', 'budgetCurrency', 'capturedAt', 'notes'
     ].forEach(function (key) {
       if (Object.prototype.hasOwnProperty.call(source, key)) {
@@ -802,8 +802,9 @@
       }
     });
 
-    // Empty optional fields use NULL so PostgreSQL constraints can distinguish
-    // "not provided" from an actual text value.
+    // Empty text fields use NULL so PostgreSQL constraints can distinguish
+    // "not provided" from an actual text value. Phone and email are rejected
+    // by the database when absent, even if a caller bypasses the form.
     ['phone', 'email', 'source', 'desiredZone', 'notes'].forEach(function (key) {
       if (typeof client[key] === 'string' && !client[key].trim()) {
         client[key] = null;

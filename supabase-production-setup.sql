@@ -419,8 +419,8 @@ create table if not exists public.crm_clients (
   owner_id uuid not null default auth.uid(),
   id text not null,
   name text not null,
-  phone text,
-  email text,
+  phone text not null,
+  email text not null,
   source text,
   stage text not null default 'Nuevo',
   desired_zone text,
@@ -460,7 +460,7 @@ create table if not exists public.crm_clients (
   ),
   constraint crm_clients_contact_check check (
     nullif(btrim(coalesce(phone, '')), '') is not null
-    or nullif(btrim(coalesce(email, '')), '') is not null
+    and nullif(btrim(coalesce(email, '')), '') is not null
   ),
   constraint crm_clients_source_check check (
     source is null or char_length(btrim(source)) between 1 and 120
@@ -609,6 +609,45 @@ alter table public.crm_sales
 alter table public.crm_sales
   add column if not exists external_agent text;
 
+-- Catálogo inicial confirmado por el cliente. Se normaliza únicamente la
+-- constructora de proyectos identificados como LVP; las demás quedan intactas.
+update public.crm_sales
+set developer = 'Constructora LVP'
+where lower(btrim(project)) = any (array[
+  'altos del este', 'riviera 1', 'riviera 2', 'riviera 3', 'riviera 4',
+  'vistas del limonal', 'epic moon', 'epic river', 'doña carmen',
+  'las margaritas', 'lp12', 'lp11', 'lp11 abey', 'east town'
+])
+and developer is distinct from 'Constructora LVP';
+
+-- Teléfono y correo son parte obligatoria del expediente del cliente. La
+-- migración falla de forma explícita si una instalación anterior necesita ser
+-- completada antes de activar el nuevo contrato, en vez de inventar contactos.
+do $crm_required_client_contacts$
+begin
+  if exists (
+    select 1
+    from public.crm_clients
+    where nullif(btrim(coalesce(phone, '')), '') is null
+       or nullif(btrim(coalesce(email, '')), '') is null
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'Complete teléfono y correo de todos los clientes antes de aplicar esta versión';
+  end if;
+end
+$crm_required_client_contacts$;
+
+alter table public.crm_clients
+  drop constraint if exists crm_clients_contact_check;
+alter table public.crm_clients alter column phone set not null;
+alter table public.crm_clients alter column email set not null;
+alter table public.crm_clients
+  add constraint crm_clients_contact_check check (
+    nullif(btrim(phone), '') is not null
+    and nullif(btrim(email), '') is not null
+  );
+
 create table if not exists public.crm_commission_installments (
   owner_id uuid not null default auth.uid(),
   id text not null,
@@ -677,6 +716,25 @@ begin
   end if;
 end
 $crm_installment_sequence_constraint$;
+
+-- Normaliza únicamente los conceptos genéricos creados por versiones previas.
+-- Los conceptos personalizados se respetan. Los montos y fechas no cambian.
+with crm_plan_shapes as (
+  select owner_id, sale_id, count(*) as payment_count
+  from public.crm_commission_installments
+  group by owner_id, sale_id
+)
+update public.crm_commission_installments as installment
+set label = case
+  when shape.payment_count = 1 then 'Pago único'
+  when installment.sequence = 1 then 'Avance'
+  else 'Saldo'
+end
+from crm_plan_shapes as shape
+where shape.owner_id = installment.owner_id
+  and shape.sale_id = installment.sale_id
+  and shape.payment_count in (1, 2)
+  and lower(btrim(installment.label)) like 'cuota%';
 
 create table if not exists public.crm_payments (
   owner_id uuid not null default auth.uid(),
@@ -1836,6 +1894,17 @@ begin
       errcode = '55000',
       message = 'crm_import_workspace solo restaura en un workspace completamente vacio',
       hint = 'No se permite merge: existen datos o auditoria para auth.uid().';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_clients) as x(value)
+    where nullif(btrim(x.value ->> 'phone'), '') is null
+       or nullif(btrim(x.value ->> 'email'), '') is null
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'Cada cliente del respaldo debe incluir teléfono y correo electrónico';
   end if;
 
   if exists (

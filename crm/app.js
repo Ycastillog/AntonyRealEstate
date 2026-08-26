@@ -1,5 +1,5 @@
 const STORAGE_KEY = "antony-crm-local-v1";
-const APP_VERSION = 4;
+const APP_VERSION = 5;
 const MAX_AUDIT_ENTRIES = 500;
 const VALID_CURRENCIES = ["USD", "DOP"];
 const VALID_CLIENT_STAGES = ["Nuevo", "Calificado", "En seguimiento", "Comprador", "Inactivo"];
@@ -8,6 +8,24 @@ const VALID_SALE_STATUSES = ["Reservada", "Contratada", "Entregada", "Cancelada"
 const CLOSED_SALE_STATUSES = ["Contratada", "Entregada"];
 const VALID_PAYMENT_METHODS = ["Transferencia", "Efectivo", "Cheque", "Otro"];
 const VALID_PAYMENT_STATUSES = ["Contabilizado", "Anulado", "Revertido"];
+const DEVELOPER_PROJECTS = Object.freeze({
+  "Constructora LVP": Object.freeze([
+    "Altos del Este",
+    "Riviera 1",
+    "Riviera 2",
+    "Riviera 3",
+    "Riviera 4",
+    "Vistas del Limonal",
+    "Epic Moon",
+    "Epic River",
+    "Doña Carmen",
+    "Las Margaritas",
+    "LP12",
+    "LP11",
+    "LP11 ABEY",
+    "East Town"
+  ])
+});
 const EMPTY_STATE = {
   clients: [],
   sales: [],
@@ -124,7 +142,7 @@ const DEMO_DATA = {
       id: "installment-2a",
       saleId: "sale-2",
       sequence: 1,
-      label: "Cuota 1 de 2",
+      label: "Avance",
       amount: 142500,
       dueDate: "2026-08-30",
       notes: "",
@@ -135,7 +153,7 @@ const DEMO_DATA = {
       id: "installment-2b",
       saleId: "sale-2",
       sequence: 2,
-      label: "Cuota 2 de 2",
+      label: "Saldo",
       amount: 142500,
       dueDate: "2026-09-30",
       notes: "",
@@ -408,7 +426,8 @@ function normalizeState(value) {
     clients.some(
       (client) =>
         !client.name ||
-        (!client.phone && !client.email) ||
+        !client.phone ||
+        !client.email ||
         !VALID_CLIENT_STAGES.includes(client.stage) ||
         !VALID_PROPERTY_STAGES.includes(client.propertyStage) ||
         !isValidIsoDate(client.capturedAt) ||
@@ -418,7 +437,7 @@ function normalizeState(value) {
         (client.email && !/^\S+@\S+\.\S+$/.test(client.email))
     )
   ) {
-    throw new Error("Hay clientes con nombre, etapa, correo o fechas inválidas.");
+    throw new Error("Hay clientes sin teléfono, correo o con datos inválidos.");
   }
   if (
     sales.some(
@@ -1217,7 +1236,7 @@ function renderDashboard() {
     "amount",
     "currency"
   );
-  const pending = closedSales.reduce((totals, sale) => {
+  const pending = activeSales.reduce((totals, sale) => {
     totals[sale.commissionCurrency] += pendingForSaleCents(sale);
     return totals;
   }, emptyMoneyTotals());
@@ -1329,7 +1348,7 @@ function renderDashboard() {
     .join("");
   document.querySelector("#recentSalesEmpty").hidden = recent.length !== 0;
 
-  const pendingSales = closedSales
+  const pendingSales = activeSales
     .filter((sale) => {
       const dueDate = nextCommissionDueDate(sale);
       if (pendingForSaleCents(sale) <= 0 || !dueDate) return false;
@@ -1354,8 +1373,11 @@ function renderDashboard() {
         escapeHtml(sale.project + " · " + sale.unit) +
         '</small><span class="pending-status">' +
         escapeHtml(
-          (isCommissionOverdue(sale) ? "Venció " : "Vence ") +
-            formatDate(nextCommissionDueDate(sale))
+          (isClosedSale(sale)
+            ? (isCommissionOverdue(sale) ? "Venció " : "Vence ") +
+              formatDate(nextCommissionDueDate(sale))
+            : "Programada " + formatDate(nextCommissionDueDate(sale)) +
+              " · disponible al contratar")
         ) +
         '</span></div><span class="pending-amount">' +
         escapeHtml(
@@ -1866,7 +1888,8 @@ function renderSales() {
         '</div><div class="mobile-record-meta"><span>' +
         escapeHtml(
           nextCommissionDueDate(sale)
-            ? "Vence " + formatDate(nextCommissionDueDate(sale))
+            ? (isClosedSale(sale) ? "Vence " : "Programada ") +
+              formatDate(nextCommissionDueDate(sale))
             : formatDate(sale.saleDate)
         ) +
         '</span><span class="mobile-record-amount">' +
@@ -1918,9 +1941,10 @@ function renderCollectionQueue() {
   );
   const pendingSales = collectionItems.filter((item) => item.pendingCents > 0);
   const overdueSales = pendingSales.filter(
-    (item) => Boolean(item.dueDate) && item.dueDate < today()
+    (item) => isClosedSale(item.sale) && Boolean(item.dueDate) && item.dueDate < today()
   );
   const nextSales = pendingSales.filter((item) => {
+    if (!isClosedSale(item.sale)) return false;
     const remaining = item.dueDate ? daysBetween(today(), item.dueDate) : 9999;
     return remaining >= 0 && remaining <= 7;
   });
@@ -2001,6 +2025,7 @@ function renderCollectionQueue() {
   const timingForSale = (item) => {
     if (item.pendingCents === 0) return "Cuota completada";
     if (!item.dueDate) return "Sin fecha definida";
+    if (!isClosedSale(item.sale)) return "Programada para " + formatDate(item.dueDate);
     const remaining = daysBetween(today(), item.dueDate);
     if (remaining < 0) return Math.abs(remaining) + " días vencido";
     if (remaining === 0) return "Vence hoy";
@@ -2009,11 +2034,14 @@ function renderCollectionQueue() {
   const rowClassForSale = (item) =>
     item.pendingCents === 0
       ? "collection-row-paid"
-      : item.dueDate && item.dueDate < today()
+      : isClosedSale(item.sale) && item.dueDate && item.dueDate < today()
         ? "collection-row-overdue"
         : "collection-row-upcoming";
   const installmentStatusBadge = (item) => {
     if (item.pendingCents === 0) return '<span class="status-pill status-paid">Pagada</span>';
+    if (!isClosedSale(item.sale)) {
+      return '<span class="status-pill status-pending">Programada</span>';
+    }
     if (item.dueDate && item.dueDate < today()) {
       return '<span class="status-pill status-overdue">Vencida</span>';
     }
@@ -2052,7 +2080,7 @@ function renderCollectionQueue() {
       const mobileClass =
         item.pendingCents === 0
           ? " mobile-record-paid"
-          : item.dueDate && item.dueDate < today()
+          : isClosedSale(item.sale) && item.dueDate && item.dueDate < today()
             ? " mobile-record-overdue"
             : " mobile-record-upcoming";
       return (
@@ -2543,6 +2571,42 @@ function setFormValue(form, name, value) {
   if (field) field.value = value == null ? "" : String(value);
 }
 
+function canonicalDeveloper(value) {
+  const key = normalizeText(value).replace(/^constructora\s+/, "");
+  return Object.keys(DEVELOPER_PROJECTS).find(
+    (developer) => normalizeText(developer).replace(/^constructora\s+/, "") === key
+  ) || "";
+}
+
+function developerForProject(value) {
+  const projectKey = normalizeText(value);
+  return Object.entries(DEVELOPER_PROJECTS).find(([, projects]) =>
+    projects.some((project) => normalizeText(project) === projectKey)
+  )?.[0] || "";
+}
+
+function updateProjectCatalog() {
+  const developerInput = document.querySelector("#saleDeveloper");
+  const catalog = document.querySelector("#projectCatalog");
+  if (!developerInput || !catalog) return;
+  const selectedDeveloper = canonicalDeveloper(developerInput.value);
+  const projects = selectedDeveloper
+    ? DEVELOPER_PROJECTS[selectedDeveloper]
+    : Object.values(DEVELOPER_PROJECTS).flat();
+  catalog.innerHTML = projects
+    .map((project) => '<option value="' + escapeHtml(project) + '"></option>')
+    .join("");
+}
+
+function updateDeveloperFromProject() {
+  const developerInput = document.querySelector("#saleDeveloper");
+  const projectInput = document.querySelector("#saleProject");
+  if (!developerInput || !projectInput) return;
+  const matchedDeveloper = developerForProject(projectInput.value);
+  if (matchedDeveloper) developerInput.value = matchedDeveloper;
+  updateProjectCatalog();
+}
+
 function addMonthsToDate(value, months) {
   const parsed = parseLocalDate(value || today());
   if (!parsed) return today();
@@ -2575,36 +2639,6 @@ function syncInstallmentPercentageForRow(row) {
   );
 }
 
-function syncInstallmentAmountFromPercentage(row) {
-  const percentage = numberValue(
-    row?.querySelector("[data-installment-percentage]")?.value
-  );
-  const amount = row?.querySelector("[data-installment-amount]");
-  const commissionCents = toCents(document.querySelector("#commissionAmount")?.value);
-  if (!amount) return;
-  const amountCents = Math.round((commissionCents * percentage) / 100);
-  amount.value = percentage > 0 && commissionCents > 0
-    ? fromCents(amountCents).toFixed(2)
-    : "";
-}
-
-function syncAllInstallmentPercentages() {
-  installmentRowsFromForm().forEach(syncInstallmentPercentageForRow);
-}
-
-function relabelInstallmentRows() {
-  const rows = installmentRowsFromForm();
-  rows.forEach((row, index) => {
-    const label = row.querySelector("[data-installment-label]");
-    if (!label) return;
-    if (/^Cuota(?: única| \d+(?: de \d+)?)$/.test(label.value)) {
-      label.value = rows.length === 1
-        ? "Cuota única"
-        : "Cuota " + (index + 1) + " de " + rows.length;
-    }
-  });
-}
-
 function createInstallmentRow(installment) {
   const container = document.querySelector("#installmentRows");
   if (!container) return;
@@ -2612,19 +2646,24 @@ function createInstallmentRow(installment) {
   row.className = "installment-row";
   row.dataset.installmentId = installment?.id || "";
   row.innerHTML =
-    '<label>Concepto<input type="text" data-installment-label maxlength="120" required /></label>' +
-    '<label>Porcentaje<input type="number" data-installment-percentage min="0.0001" max="100" step="0.0001" inputmode="decimal" aria-label="Porcentaje de la comisión" required /></label>' +
-    '<label>Monto<input type="number" data-installment-amount min="0.01" step="0.01" required /></label>' +
-    '<label>Vencimiento<input type="date" data-installment-due-date required /></label>' +
-    '<button class="installment-remove" type="button" data-remove-installment aria-label="Eliminar cuota"><i data-lucide="trash-2" aria-hidden="true"></i></button>';
-  row.querySelector("[data-installment-label]").value = installment?.label || "Cuota";
+    '<label>Concepto<input type="text" data-installment-label maxlength="120" readonly aria-readonly="true" required /></label>' +
+    '<label>Porcentaje<input type="number" data-installment-percentage min="0.0001" max="100" step="0.0001" inputmode="decimal" aria-label="Porcentaje de la comisión" readonly aria-readonly="true" required /></label>' +
+    '<label>Monto calculado<input type="number" data-installment-amount min="0.01" step="0.01" readonly aria-readonly="true" required /></label>' +
+    '<label>Fecha de cobro<input type="date" data-installment-due-date required /></label>';
+  row.querySelector("[data-installment-label]").value = installment?.label || "Pago";
   row.querySelector("[data-installment-amount]").value = numberValue(installment?.amount)
     ? numberValue(installment.amount).toFixed(2)
     : "";
   row.querySelector("[data-installment-due-date]").value =
     installment?.dueDate || document.querySelector("#saleDate")?.value || today();
   container.appendChild(row);
-  syncInstallmentPercentageForRow(row);
+  if (numberValue(installment?.percentage) > 0) {
+    row.querySelector("[data-installment-percentage]").value = String(
+      numberValue(installment.percentage)
+    );
+  } else {
+    syncInstallmentPercentageForRow(row);
+  }
   refreshIcons();
 }
 
@@ -2640,36 +2679,110 @@ function applyInstallmentPlanLock() {
   document.querySelector("#installmentPlanner")?.classList.toggle("plan-locked", locked);
   installmentRowsFromForm().forEach((row) => {
     row.querySelectorAll("input").forEach((input) => {
-      input.readOnly = locked;
-      input.setAttribute("aria-readonly", String(locked));
+      const calculated = input.matches(
+        "[data-installment-label], [data-installment-percentage], [data-installment-amount]"
+      );
+      input.readOnly = calculated || locked;
+      input.setAttribute("aria-readonly", String(calculated || locked));
     });
-    const remove = row.querySelector("[data-remove-installment]");
-    if (remove) remove.disabled = locked;
   });
-  document.querySelector("#splitInstallmentsButton").disabled = locked;
-  document.querySelector("#addInstallmentButton").disabled = locked;
+  document.querySelector("#commissionPlanType").disabled = locked;
+  document.querySelector("#advancePercentage").disabled = locked;
+  document.querySelectorAll("[data-advance-preset]").forEach((button) => {
+    button.disabled = locked;
+  });
   form.elements.commissionRate.readOnly = locked;
   form.elements.commissionAmount.readOnly = locked;
   form.elements.commissionCurrency.disabled = locked;
   form.elements.saleDate.readOnly = locked;
 }
 
-function renderInstallmentEditor(installments) {
+function currentInstallmentDrafts() {
+  return installmentRowsFromForm().map((row) => ({
+    id: row.dataset.installmentId || "",
+    label: String(row.querySelector("[data-installment-label]")?.value || ""),
+    amount: numberValue(row.querySelector("[data-installment-amount]")?.value),
+    dueDate: String(row.querySelector("[data-installment-due-date]")?.value || "")
+  }));
+}
+
+function updateCommissionPlanControls() {
+  const mode = document.querySelector("#commissionPlanType")?.value || "advance_balance";
+  const advanceWrap = document.querySelector("#advancePercentageWrap");
+  const presets = document.querySelector("#commissionPlanPresets");
+  if (advanceWrap) advanceWrap.hidden = mode === "single";
+  if (presets) presets.hidden = mode === "single";
+  const percentage = numberValue(document.querySelector("#advancePercentage")?.value);
+  document.querySelectorAll("[data-advance-preset]").forEach((button) => {
+    const active = mode !== "single" && numberValue(button.dataset.advancePreset) === percentage;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function renderSelectedCommissionPlan(existing) {
   const container = document.querySelector("#installmentRows");
   if (!container) return;
+  const form = document.querySelector("#saleForm");
+  const mode = document.querySelector("#commissionPlanType")?.value || "advance_balance";
+  const source = Array.isArray(existing) ? existing : currentInstallmentDrafts();
+  const commissionCents = toCents(form.elements.commissionAmount.value);
+  const saleDate = form.elements.saleDate.value || today();
+  const firstDate = source[0]?.dueDate || saleDate;
+  const plan = [];
+
+  if (mode === "single") {
+    plan.push({
+      id: source[0]?.id || "",
+      label: "Pago único",
+      percentage: 100,
+      amount: fromCents(commissionCents),
+      dueDate: firstDate
+    });
+  } else {
+    const percentageField = document.querySelector("#advancePercentage");
+    let advancePercentage = numberValue(percentageField?.value);
+    if (!(advancePercentage > 0 && advancePercentage < 100)) {
+      advancePercentage = 50;
+      if (percentageField) percentageField.value = "50";
+    }
+    const advanceCents = Math.round((commissionCents * advancePercentage) / 100);
+    plan.push(
+      {
+        id: source[0]?.id || "",
+        label: "Avance",
+        percentage: advancePercentage,
+        amount: fromCents(advanceCents),
+        dueDate: firstDate
+      },
+      {
+        id: source[1]?.id || "",
+        label: "Saldo",
+        percentage: Number((100 - advancePercentage).toFixed(4)),
+        amount: fromCents(commissionCents - advanceCents),
+        dueDate: source[1]?.dueDate || addMonthsToDate(firstDate, 1)
+      }
+    );
+  }
+
   container.textContent = "";
-  const items = installments?.length
-    ? installments
-    : [
-        {
-          label: "Cuota única",
-          amount: numberValue(document.querySelector("#commissionAmount")?.value),
-          dueDate: document.querySelector("#saleDate")?.value || today()
-        }
-      ];
-  items.forEach(createInstallmentRow);
+  plan.forEach(createInstallmentRow);
+  updateCommissionPlanControls();
   applyInstallmentPlanLock();
   updateInstallmentPlanSummary();
+}
+
+function renderInstallmentEditor(installments) {
+  const items = Array.isArray(installments) ? installments : [];
+  const mode = items.length === 1 ? "single" : "advance_balance";
+  const commissionCents = toCents(document.querySelector("#commissionAmount")?.value);
+  const firstAmountCents = toCents(items[0]?.amount);
+  const percentage = mode === "advance_balance" && commissionCents > 0 && firstAmountCents > 0
+    ? installmentPercentageText(firstAmountCents, commissionCents)
+    : "50";
+  document.querySelector("#commissionPlanType").value = mode;
+  document.querySelector("#advancePercentage").value = percentage || "50";
+  renderSelectedCommissionPlan(items);
 }
 
 function installmentRowsFromForm() {
@@ -2687,10 +2800,18 @@ function updateInstallmentPlanSummary() {
   const commissionCents = toCents(document.querySelector("#commissionAmount")?.value);
   const difference = commissionCents - scheduledCents;
   const scheduledPercentage = installmentPercentageText(scheduledCents, commissionCents) || "0";
+  const paymentBreakdown = rows
+    .map((row) => {
+      const label = String(row.querySelector("[data-installment-label]")?.value || "Pago");
+      const percentage = String(
+        row.querySelector("[data-installment-percentage]")?.value || "0"
+      );
+      return label + " " + percentage + "%";
+    })
+    .join(" · ");
   summary.textContent =
-    rows.length +
-    (rows.length === 1 ? " cuota" : " cuotas") +
-    " · Programado " +
+    paymentBreakdown +
+    " · Total " +
     moneyFromCents(scheduledCents, document.querySelector('#saleForm [name="commissionCurrency"]')?.value) +
     " (" +
     scheduledPercentage +
@@ -2749,32 +2870,6 @@ function readInstallmentPlan(saleId, saleDate, commissionAmount) {
   return plan;
 }
 
-function splitCommissionIntoInstallments(count) {
-  const form = document.querySelector("#saleForm");
-  const totalCents = toCents(form.elements.commissionAmount.value);
-  if (totalCents <= 0) {
-    showFieldError(form, "commissionAmount", "Indica primero la comisión total");
-    return;
-  }
-  const installmentCount = Math.min(Math.max(Math.trunc(count || 2), 1), 24);
-  const firstDate =
-    installmentRowsFromForm()[0]?.querySelector("[data-installment-due-date]")?.value ||
-    form.elements.saleDate.value ||
-    today();
-  const baseCents = Math.floor(totalCents / installmentCount);
-  let assigned = 0;
-  const plan = Array.from({ length: installmentCount }, (_, index) => {
-    const cents = index === installmentCount - 1 ? totalCents - assigned : baseCents;
-    assigned += cents;
-    return {
-      label: installmentCount === 1 ? "Cuota única" : "Cuota " + (index + 1) + " de " + installmentCount,
-      amount: fromCents(cents),
-      dueDate: addMonthsToDate(firstDate, index)
-    };
-  });
-  renderInstallmentEditor(plan);
-}
-
 function guardInstallmentStructureChange() {
   if (!installmentPlanLocked()) return false;
   showToast(
@@ -2825,6 +2920,7 @@ function resetSaleForm() {
   setFormValue(form, "id", "");
   setFormValue(form, "saleDate", today());
   setFormValue(form, "cancelReason", "");
+  updateProjectCatalog();
   renderInstallmentEditor([]);
   updateCancelReasonVisibility();
   updateSharedSaleVisibility();
@@ -2871,6 +2967,7 @@ function startSaleEdit(id, trigger) {
     "commissionRate", "commissionAmount", "commissionCurrency", "cancelReason", "notes"
   ].forEach((name) => setFormValue(form, name, sale[name]));
   form.elements.sharedSale.checked = Boolean(sale.sharedSale);
+  updateProjectCatalog();
   renderInstallmentEditor(installmentsForSale(sale.id));
   updateCancelReasonVisibility();
   updateSharedSaleVisibility();
@@ -2923,17 +3020,29 @@ function hasDuplicateActiveUnit(project, unit, excludedId) {
 }
 
 function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
+  const downloadableBlob = new Blob([blob], { type: "application/octet-stream" });
+  const url = URL.createObjectURL(downloadableBlob);
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
+  link.target = "_self";
+  link.rel = "noopener";
+  link.style.display = "none";
   document.body.appendChild(link);
   link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  setTimeout(() => {
+    link.remove();
+    URL.revokeObjectURL(url);
+  }, 30000);
 }
 
 function exportBackup() {
+  const backupData = {
+    clients: state.clients,
+    sales: state.sales,
+    installments: state.installments,
+    payments: state.payments
+  };
   downloadBlob(
     new Blob(
       [
@@ -2942,17 +3051,17 @@ function exportBackup() {
             app: "Antony CRM",
             version: APP_VERSION,
             exportedAt: new Date().toISOString(),
-            data: state
+            data: backupData
           },
           null,
           2
         )
       ],
-      { type: "application/json;charset=utf-8" }
+      { type: "application/octet-stream" }
     ),
     "antony-crm-respaldo-" + today() + ".json"
   );
-  showToast("Respaldo completo descargado");
+  showToast("Archivo de respaldo descargado. Guárdalo sin editar para restaurar el CRM.", 6000);
 }
 
 async function importBackup(file) {
@@ -3113,13 +3222,7 @@ function updateCommissionFromRate() {
     form.elements.commissionAmount.value = fromCents(
       Math.round((price * rate) / 100)
     ).toFixed(2);
-    const rows = installmentRowsFromForm();
-    if (rows.length === 1) {
-      rows[0].querySelector("[data-installment-amount]").value =
-        form.elements.commissionAmount.value;
-    }
-    syncAllInstallmentPercentages();
-    updateInstallmentPlanSummary();
+    renderSelectedCommissionPlan(currentInstallmentDrafts());
   }
 }
 
@@ -3206,8 +3309,17 @@ document.querySelector("#clientForm").addEventListener("submit", async (event) =
   const email = String(data.get("email") || "").trim();
   const capturedAt = String(data.get("capturedAt") || today());
   const propertyStage = String(data.get("propertyStage") || "Sin definir");
-  if (!phone && !email) {
-    return showFieldError(formElement, "phone", "Indica un teléfono o un correo");
+  if (!phone) {
+    return showFieldError(formElement, "phone", "El teléfono es obligatorio");
+  }
+  if (phone.replace(/\D/g, "").length < 7) {
+    return showFieldError(formElement, "phone", "Indica un teléfono válido");
+  }
+  if (!email) {
+    return showFieldError(formElement, "email", "El correo electrónico es obligatorio");
+  }
+  if (!/^\S+@\S+\.\S+$/.test(email)) {
+    return showFieldError(formElement, "email", "Indica un correo electrónico válido");
   }
   if (!isValidIsoDate(capturedAt) || capturedAt > today()) {
     return showFieldError(formElement, "capturedAt", "Indica una fecha de captación válida");
@@ -3266,6 +3378,9 @@ document.querySelector("#clientForm").addEventListener("submit", async (event) =
 document.querySelector("#cancelClientEdit").addEventListener("click", () => closeDrawer());
 document.querySelector("#clientSearch").addEventListener("input", renderClients);
 document.querySelector("#clientStageFilter").addEventListener("change", renderClients);
+document.querySelector("#saleDeveloper").addEventListener("input", updateProjectCatalog);
+document.querySelector("#saleProject").addEventListener("input", updateDeveloperFromProject);
+document.querySelector("#saleProject").addEventListener("change", updateDeveloperFromProject);
 document.querySelector("#salePrice").addEventListener("input", updateCommissionFromRate);
 document.querySelector("#commissionRate").addEventListener("input", updateCommissionFromRate);
 document
@@ -3281,13 +3396,7 @@ document
     updateCommissionFromRate();
   });
 document.querySelector("#commissionAmount").addEventListener("input", () => {
-  const rows = installmentRowsFromForm();
-  if (rows.length === 1) {
-    rows[0].querySelector("[data-installment-amount]").value =
-      document.querySelector("#commissionAmount").value;
-  }
-  syncAllInstallmentPercentages();
-  updateInstallmentPlanSummary();
+  renderSelectedCommissionPlan(currentInstallmentDrafts());
 });
 document.querySelector('#saleForm [name="saleStatus"]').addEventListener("change", updateCancelReasonVisibility);
 document.querySelector("#sharedSale").addEventListener("change", updateSharedSaleVisibility);
@@ -3306,48 +3415,41 @@ document.querySelector("#saleDate").addEventListener("change", () => {
   updateInstallmentPlanSummary();
 });
 document.querySelector("#installmentRows").addEventListener("input", (event) => {
-  const row = event.target.closest(".installment-row");
-  if (row && event.target.matches("[data-installment-percentage]")) {
-    syncInstallmentAmountFromPercentage(row);
-  } else if (row && event.target.matches("[data-installment-amount]")) {
-    syncInstallmentPercentageForRow(row);
+  if (event.target.matches("[data-installment-due-date]")) {
+    updateInstallmentPlanSummary();
   }
-  updateInstallmentPlanSummary();
 });
-document.querySelector("#installmentRows").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-remove-installment]");
-  if (!button) return;
-  if (guardInstallmentStructureChange()) return;
-  const rows = installmentRowsFromForm();
-  if (rows.length === 1) {
-    showToast("El plan debe conservar al menos una cuota");
+document.querySelector("#commissionPlanType").addEventListener("change", () => {
+  if (guardInstallmentStructureChange()) {
+    document.querySelector("#commissionPlanType").value =
+      installmentRowsFromForm().length === 1 ? "single" : "advance_balance";
+    updateCommissionPlanControls();
     return;
   }
-  button.closest(".installment-row").remove();
-  relabelInstallmentRows();
-  updateInstallmentPlanSummary();
+  renderSelectedCommissionPlan(currentInstallmentDrafts());
 });
-document.querySelector("#splitInstallmentsButton").addEventListener("click", () => {
-  if (guardInstallmentStructureChange()) return;
-  const currentCount = installmentRowsFromForm().length;
-  splitCommissionIntoInstallments(currentCount <= 1 ? 2 : currentCount);
+document.querySelector("#advancePercentage").addEventListener("input", (event) => {
+  if (installmentPlanLocked()) return;
+  const percentage = numberValue(event.target.value);
+  if (!(percentage > 0 && percentage < 100)) {
+    updateCommissionPlanControls();
+    return;
+  }
+  renderSelectedCommissionPlan(currentInstallmentDrafts());
 });
-document.querySelector("#addInstallmentButton").addEventListener("click", () => {
-  if (guardInstallmentStructureChange()) return;
-  const rows = installmentRowsFromForm();
-  const totalCents = toCents(document.querySelector("#commissionAmount").value);
-  const assignedCents = rows.reduce(
-    (total, row) => total + toCents(row.querySelector("[data-installment-amount]").value),
-    0
-  );
-  const lastDate = rows.at(-1)?.querySelector("[data-installment-due-date]").value || today();
-  createInstallmentRow({
-    label: "Cuota " + (rows.length + 1),
-    amount: fromCents(Math.max(totalCents - assignedCents, 0)),
-    dueDate: addMonthsToDate(lastDate, 1)
-  });
-  relabelInstallmentRows();
-  updateInstallmentPlanSummary();
+document.querySelector("#advancePercentage").addEventListener("change", (event) => {
+  const percentage = numberValue(event.target.value);
+  if (!(percentage > 0 && percentage < 100)) {
+    event.target.value = "50";
+    showToast("El avance debe ser mayor que 0% y menor que 100%");
+  }
+  renderSelectedCommissionPlan(currentInstallmentDrafts());
+});
+document.querySelector("#commissionPlanPresets").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-advance-preset]");
+  if (!button || guardInstallmentStructureChange()) return;
+  document.querySelector("#advancePercentage").value = button.dataset.advancePreset;
+  renderSelectedCommissionPlan(currentInstallmentDrafts());
 });
 
 document.querySelector("#saleForm").addEventListener("submit", async (event) => {
