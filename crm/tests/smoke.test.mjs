@@ -59,12 +59,17 @@ test("Collection inbox exposes every pending balance category", () => {
   assert.match(app, /aria-pressed/);
 });
 
-test("mobile forms expose shared sales and percentage-based installments", () => {
+test("mobile forms expose shared sales and the advance/balance commission plan", () => {
   assert.match(html, /id="sharedSale"[^>]+type="checkbox"/);
   assert.match(html, /id="externalAgentWrap"[^>]+hidden/);
+  assert.match(html, /id="commissionPlanType"/);
+  assert.match(html, /id="advancePercentage"/);
   assert.match(app, /data-installment-percentage/);
+  assert.match(app, /label: "Avance"/);
+  assert.match(app, /label: "Saldo"/);
   assert.match(css, /\.shared-sale-toggle/);
-  assert.match(css, /grid-template-columns:\s*minmax\(125px,\s*1\.2fr\)/);
+  assert.match(css, /\.commission-plan-controls/);
+  assert.match(css, /grid-template-columns:\s*minmax\(125px,\s*1\.15fr\)/);
 });
 
 test("Financial values are protected from silent truncation", () => {

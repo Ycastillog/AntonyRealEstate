@@ -62,6 +62,7 @@ set local role authenticated;
 insert into public.crm_clients (
   id,
   name,
+  phone,
   email,
   source,
   stage,
@@ -75,6 +76,7 @@ insert into public.crm_clients (
 values (
   'qa-e2e-client',
   'Cliente QA transaccional',
+  '8095550199',
   'qa-antony@example.test',
   'Prueba de produccion',
   'Nuevo',

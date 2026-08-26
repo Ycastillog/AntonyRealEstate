@@ -275,8 +275,10 @@ test("production workflows retain capture date, cancellation reason, installment
 
   assert.ok(tagWithId(html, "section", "installmentPlanner"));
   assert.ok(tagWithId(html, "div", "installmentRows"));
-  assert.ok(tagWithId(html, "button", "splitInstallmentsButton"));
-  assert.ok(tagWithId(html, "button", "addInstallmentButton"));
+  assert.ok(tagWithId(html, "select", "commissionPlanType"));
+  assert.ok(tagWithId(html, "input", "advancePercentage"));
+  assert.match(html, /data-advance-preset="50"/);
+  assert.match(html, /data-advance-preset="80"/);
   assert.ok(tagWithId(html, "label", "cancelReasonWrap"));
   assert.ok(tagWithId(html, "button", "exportPaymentsButton"));
 
@@ -285,6 +287,10 @@ test("production workflows retain capture date, cancellation reason, installment
   assert.match(app, /saleStatus === "Cancelada" && !cancelReason/);
   assert.match(app, /form\.elements\.cancelReason\.required = cancelled/);
   assert.match(app, /function readInstallmentPlan\(/);
+  assert.match(app, /function renderSelectedCommissionPlan\(/);
+  assert.match(app, /label: "Avance"/);
+  assert.match(app, /label: "Saldo"/);
+  assert.match(app, /label: "Pago único"/);
   assert.match(app, /scheduledCents !== toCents\(commissionAmount\)/);
   assert.match(app, /cloudBackend\.saveSale\(sale, installments\)/);
   assert.match(app, /function exportPaymentsCsv\(\)/);
@@ -307,11 +313,30 @@ test("client feedback fields and collection visibility remain wired end to end",
   assert.match(app, /state\.sales\.filter\(\(sale\) => !isCancelledSale\(sale\)\)/);
   assert.match(app, /relatedOperations[\s\S]{0,220}sale\.project[\s\S]{0,100}sale\.unit/);
   assert.match(app, /data-installment-percentage/);
-  assert.match(app, /syncInstallmentAmountFromPercentage/);
+  assert.match(app, /commissionCents \* advancePercentage/);
   assert.match(app, /scheduledPercentage/);
   assert.match(app, /sharedSale && !externalAgent/);
   assert.match(app, /deliveryDate < saleDate/);
   assert.match(app, /externalAgent: sharedSale \? externalAgent : ""/);
+});
+
+test("required contacts, LVP catalog, safe backup, and reserved receivables stay enforced", () => {
+  assert.ok(tagWithId(html, "form", "clientForm"));
+  assert.match(html, /name="phone"[^>]+required/);
+  assert.match(html, /name="email"[^>]+required/);
+  assert.match(html, /id="developerCatalog"[\s\S]{0,120}Constructora LVP/);
+  assert.match(app, /"Altos del Este"/);
+  assert.match(app, /"Riviera 4"/);
+  assert.match(app, /"LP11 ABEY"/);
+  assert.match(app, /"East Town"/);
+  assert.match(app, /const pending = activeSales\.reduce/);
+  assert.match(app, /const pendingSales = activeSales/);
+  assert.match(app, /const backupData = \{[\s\S]{0,180}payments: state\.payments/);
+  assert.doesNotMatch(
+    app.match(/function exportBackup\(\)[\s\S]*?\n\}/)?.[0] || "",
+    /auditLog/
+  );
+  assert.match(backend, /'desiredZone', 'propertyStage'/);
 });
 
 test("local demo and cloud production paths stay separated", () => {
