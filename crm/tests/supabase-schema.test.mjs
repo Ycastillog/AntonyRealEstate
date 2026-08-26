@@ -369,6 +369,10 @@ test("installment_kind is structural, immutable, migrated safely, and totals 100
   );
   assert.match(
     installmentTrigger,
+    /tg_op\s*=\s*'INSERT'\s+and\s+exists[\s\S]{0,220}existing\.id\s*=\s*new\.id[\s\S]{0,120}return\s+new/i
+  );
+  assert.match(
+    installmentTrigger,
     /new\.label\s*:=\s*case\s+new\.installment_kind[\s\S]{0,100}'advance'\s+then\s+'Avance'[\s\S]{0,100}'balance'\s+then\s+'Saldo'[\s\S]{0,100}'single'\s+then\s+'Pago único'/i
   );
   assert.match(
