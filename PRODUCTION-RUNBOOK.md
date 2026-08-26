@@ -16,7 +16,7 @@ Este documento cubre la publicación del sitio público, el portal de contenido 
 
 1. Crear un proyecto nuevo y guardar la contraseña de base de datos en un gestor de contraseñas.
 2. En SQL Editor, ejecutar `supabase-production-setup.sql` como una sola migración.
-3. Confirmar que existen las tablas `crm_clients`, `crm_sales`, `crm_commission_installments`, `crm_payments` y `crm_audit_log`.
+3. Confirmar que existen las tablas `crm_clients`, `crm_sales`, `crm_historical_import_batches`, `crm_historical_sales`, `crm_commission_installments`, `crm_payments` y `crm_audit_log`.
 4. Confirmar que RLS está activa y que `anon` no tiene permisos de escritura.
 5. En Authentication, desactivar nuevos registros públicos y crear el usuario de Antony.
 6. En SQL Editor, concederle el rol de portal sustituyendo el correo del ejemplo:
@@ -46,6 +46,7 @@ La aplicación rechaza claves privadas y proyectos con URL no válida. Después 
 ```powershell
 node --check media-config.js
 node --check admin.js
+node --check crm/historical.js
 node --check crm/backend.js
 node --check crm/app.js
 node --test crm/tests/*.test.mjs
@@ -67,8 +68,10 @@ Usar un usuario y datos ficticios:
 9. Anula el cobro con motivo; debe quedar visible pero salir de los totales.
 10. Confirma que otro usuario autenticado no puede leer ni cambiar esos registros.
 11. Exporta CSV y un respaldo JSON; restaura el respaldo en un workspace vacío de prueba.
-12. Ejecuta también `crm/tests/supabase-acceptance.sql` en SQL Editor. El resultado final debe ser `{"status":"passed","qa_rows_remaining":0}`.
-13. Prueba teclado y diseño en 390 px, 768 px y escritorio.
+12. Importa un CSV histórico ficticio, confirma que suma al volumen y a las ventas por año, y comprueba que no altera clientes, comisiones, cuotas, vencidos ni cobros.
+13. Repite el archivo histórico y confirma que la huella SHA-256 impide duplicarlo; una fila inválida debe revertir el lote completo.
+14. Ejecuta también `crm/tests/supabase-acceptance.sql` en SQL Editor. El resultado final debe ser `{"status":"passed","qa_rows_remaining":0}`.
+15. Prueba teclado y diseño en 390 px, 768 px y escritorio.
 
 ## 5. Publicación
 
@@ -88,6 +91,7 @@ Usar un usuario y datos ficticios:
 - La cuenta autenticada puede cambiar su contraseña desde **Sistema → Cambiar contraseña** sin depender de un enlace de invitación.
 - Para corregir un cobro, anularlo con motivo y registrar uno nuevo; nunca editar la base directamente.
 - Un respaldo de nube solo se restaura en un workspace vacío; nunca se usa para sobrescribir movimientos financieros existentes.
+- Las bases históricas con nombres, teléfonos o correos son datos privados: no se guardan en Git ni se publican como activos del sitio. Se cargan únicamente desde la sesión autenticada del CRM.
 - Antes de restaurar, probar el respaldo en un proyecto separado y documentar fecha, responsable y resultado.
 
 ## 7. Criterio de listo

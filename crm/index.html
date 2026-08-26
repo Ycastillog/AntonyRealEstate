@@ -13,12 +13,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=production-v6" />
+    <link rel="stylesheet" href="styles.css?v=production-v8" />
     <script src="../media-config.js?v=secure-auth-v3" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js" integrity="sha384-ysv13JVP3fufiEXfjML9OdCa/rRbMJvUBOWyor82wfuK8INNZAvmbxHgKIHi+oqz" crossorigin="anonymous" defer></script>
-    <script src="backend.js?v=production-v5" defer></script>
+    <script src="historical.js?v=production-v8" defer></script>
+    <script src="backend.js?v=production-v8" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" integrity="sha384-uTYyvsSSUZeaPhb5RbKlQa0zY/WpX/QHfvg2mczXyBQOpkWPEDy9lczyp+w7SKXu" crossorigin="anonymous" defer></script>
-    <script src="app.js?v=production-v7" defer></script>
+    <script src="app.js?v=production-v8" defer></script>
   </head>
   <body>
     <main class="auth-shell" id="authShell" aria-labelledby="loginTitle">
@@ -95,6 +96,7 @@
           <button class="nav-item active" type="button" data-view-target="dashboard" aria-label="Resumen" title="Resumen"><span class="nav-icon" aria-hidden="true"><i data-lucide="layout-dashboard"></i></span><span>Resumen</span></button>
           <button class="nav-item" type="button" data-view-target="clients" aria-label="Clientes" title="Clientes"><span class="nav-icon" aria-hidden="true"><i data-lucide="contact-round"></i></span><span>Clientes</span></button>
           <button class="nav-item" type="button" data-view-target="sales" aria-label="Ventas" title="Ventas"><span class="nav-icon" aria-hidden="true"><i data-lucide="building-2"></i></span><span>Ventas</span></button>
+          <button class="nav-item" type="button" data-view-target="historical" aria-label="Histórico" title="Histórico"><span class="nav-icon" aria-hidden="true"><i data-lucide="archive"></i></span><span>Histórico</span></button>
           <button class="nav-item" type="button" data-view-target="payments" aria-label="Cobros de comisión" title="Cobros de comisión"><span class="nav-icon" aria-hidden="true"><i data-lucide="badge-dollar-sign"></i></span><span>Cobros de comisión</span></button>
           <button class="nav-item" type="button" data-view-target="reports" aria-label="Reportes" title="Reportes"><span class="nav-icon" aria-hidden="true"><i data-lucide="chart-no-axes-combined"></i></span><span>Reportes</span></button>
         </nav>
@@ -161,7 +163,7 @@
             <button class="button button-primary" type="button" data-open-drawer="saleForm"><i data-lucide="plus" aria-hidden="true"></i>Registrar venta</button>
           </div>
           <div class="metric-grid">
-            <article class="metric-card"><div class="metric-card-head"><span class="metric-icon"><i data-lucide="building-2"></i></span><span>Operaciones activas</span></div><strong id="metricSalesCount">0</strong><small id="metricSalesVolume">US$0 · RD$0</small></article>
+            <article class="metric-card"><div class="metric-card-head"><span class="metric-icon"><i data-lucide="building-2"></i></span><span>Ventas registradas</span></div><strong id="metricSalesCount">0</strong><small id="metricSalesVolume">US$0 · RD$0</small></article>
             <article class="metric-card"><div class="metric-card-head"><span class="metric-icon"><i data-lucide="calendar-check-2"></i></span><span>Cierres del año</span></div><strong id="metricYearSales">0</strong><small id="metricYearVolume">US$0 · RD$0</small></article>
             <article class="metric-card metric-card-success"><div class="metric-card-head"><span class="metric-icon"><i data-lucide="landmark"></i></span><span>Comisiones cobradas</span></div><strong id="metricReceived">US$0</strong><small id="metricReceivedDop">RD$0</small></article>
             <article class="metric-card metric-card-attention"><div class="metric-card-head"><span class="metric-icon"><i data-lucide="clock-3"></i></span><span>Por cobrar</span></div><strong id="metricPending">US$0</strong><small id="metricPendingDop">RD$0 por cobrar</small><small class="metric-alert" id="metricOverdue">0 vencidas</small></article>
@@ -235,6 +237,7 @@
             <article><span>Reservadas</span><strong id="saleOverviewReserved">0</strong><small>En proceso</small></article>
             <article><span>Opciones firmadas</span><strong id="saleOverviewContracted">0</strong><small>Avance habilitado</small></article>
             <article><span>Entregados</span><strong id="saleOverviewDelivered">0</strong><small>Saldo habilitado</small></article>
+            <article><span>Históricas</span><strong id="saleOverviewHistorical">0</strong><small>Vendidas por completar</small></article>
           </div>
           <article class="card records-card">
             <div class="card-heading records-heading"><div><h2>Operaciones</h2><span class="records-count"><span id="salesCount">0</span> ventas</span></div><div class="heading-tools"><input class="compact-input search-input" id="saleSearch" type="search" placeholder="Buscar nombre, teléfono, correo, proyecto o unidad…" aria-label="Buscar venta por nombre, teléfono, correo, proyecto o unidad" /><select class="compact-input" id="saleStatusFilter" aria-label="Filtrar por estado"><option value="">Todas las etapas</option><option value="Reservada">Reservada</option><option value="Opción a compra firmada">Opción a compra firmada</option><option value="Entregado">Entregado</option><option value="Desistió">Desistió</option><option value="Cambio">Cambio</option></select></div></div>
@@ -277,6 +280,29 @@
           </form>
         </section>
 
+        <section class="view" id="view-historical" data-view="historical">
+          <div class="page-heading">
+            <div><span class="eyebrow">Base inicial LVP</span><h1>Ventas históricas</h1><p>Consulta las ventas cerradas desde 2023 y completa sus datos sin generar cobros ficticios.</p></div>
+            <button class="button button-primary" type="button" id="historicalImportButton"><i data-lucide="file-up" aria-hidden="true"></i>Cargar base</button>
+            <input id="historicalImportInput" type="file" accept="text/csv,text/tab-separated-values,.csv,.tsv,.txt" hidden />
+          </div>
+          <article class="historical-guidance" role="note">
+            <span class="historical-guidance-icon" aria-hidden="true"><i data-lucide="shield-check"></i></span>
+            <div><strong>Ventas confirmadas, finanzas por validar</strong><p>Estas operaciones cuentan en ventas, años, proyectos y volumen. Teléfono, correo, entrega, comisión y cobros permanecen como “Sin confirmar” hasta contar con el dato real.</p></div>
+          </article>
+          <div class="module-overview" aria-label="Resumen de ventas históricas">
+            <article><span>Ventas documentadas</span><strong id="historicalOverviewTotal">0</strong><small>Operaciones vendidas</small></article>
+            <article><span>Volumen documentado</span><strong id="historicalOverviewVolume">US$0</strong><small>Sin estimaciones</small></article>
+            <article><span>Compradores</span><strong id="historicalOverviewBuyers">0</strong><small>Nombres distintos</small></article>
+            <article><span>Por completar</span><strong id="historicalOverviewIncomplete">0</strong><small>Contacto, entrega o comisión</small></article>
+          </div>
+          <article class="card records-card historical-records-card">
+            <div class="card-heading records-heading"><div><span class="eyebrow">Archivo privado</span><h2>Operaciones documentadas</h2><span class="records-count"><span id="historicalCount">0</span> ventas</span></div><div class="heading-tools historical-tools"><button class="button button-secondary" id="exportHistoricalButton" type="button"><i data-lucide="download" aria-hidden="true"></i>Hoja para completar</button><input class="compact-input search-input" id="historicalSearch" type="search" placeholder="Buscar comprador, proyecto o unidad…" aria-label="Buscar venta histórica" /><select class="compact-input" id="historicalYearFilter" aria-label="Filtrar histórico por año"><option value="">Todos los años</option></select><select class="compact-input" id="historicalProjectFilter" aria-label="Filtrar histórico por proyecto"><option value="">Todos los proyectos</option></select></div></div>
+            <div class="table-wrap desktop-table"><table class="crm-table historical-table"><caption class="visually-hidden">Ventas históricas documentadas</caption><thead><tr><th scope="col">Comprador / fecha</th><th scope="col">Operación</th><th scope="col">Precio</th><th scope="col">Datos pendientes</th><th scope="col">Estado</th></tr></thead><tbody id="historicalBody"></tbody></table></div>
+            <div class="mobile-record-list" id="historicalMobileList"></div><div class="empty-state" id="historicalEmpty" hidden>Aún no hay ventas históricas cargadas.</div>
+          </article>
+        </section>
+
         <section class="view" id="view-payments" data-view="payments">
           <div class="page-heading"><div><span class="eyebrow">Mesa de cobros de comisión</span><h1>Cobros de comisión</h1><p>Prioriza las cuotas vencidas y registra cada abono con su contexto.</p></div><button class="button button-primary" type="button" data-open-drawer="paymentForm"><i data-lucide="circle-dollar-sign" aria-hidden="true"></i>Registrar cobro de comisión</button></div>
           <div class="collection-metric-grid">
@@ -313,12 +339,12 @@
           <article class="card report-filters">
             <label>Año<select id="reportYear"></select></label><label>Proyecto<select id="reportProject"></select></label>
             <label>Etapa de la venta<select id="reportSaleStatus"><option value="">Todas las etapas</option><option value="Reservada">Reservada</option><option value="Opción a compra firmada">Opción a compra firmada</option><option value="Entregado">Entregado</option><option value="Desistió">Desistió</option><option value="Cambio">Cambio</option></select></label>
-            <label>Estado de comisión<select id="reportCommissionStatus"><option value="">Todas las comisiones</option><option value="Pendiente">Pendientes</option><option value="Parcial">Parciales</option><option value="Pagada">Pagadas</option><option value="Vencida">Vencidas</option><option value="Anulada">Anuladas</option></select></label>
+            <label>Estado de comisión<select id="reportCommissionStatus"><option value="">Todas las comisiones</option><option value="Por completar">Por completar</option><option value="Pendiente">Pendientes</option><option value="Parcial">Parciales</option><option value="Pagada">Pagadas</option><option value="Vencida">Vencidas</option><option value="Anulada">Anuladas</option></select></label>
           </article>
           <div class="report-summary">
             <article class="metric-card report-card"><span>Ventas filtradas</span><strong id="reportSalesCount">0</strong></article>
             <article class="metric-card report-card"><span>Volumen vendido</span><strong id="reportSalesVolume">US$0</strong><small id="reportSalesVolumeDop">RD$0</small></article>
-            <article class="metric-card report-card metric-card-attention"><span>Comisión generada</span><strong id="reportCommission">US$0</strong><small id="reportCommissionDop">RD$0</small></article>
+            <article class="metric-card report-card metric-card-attention"><span>Comisión confirmada</span><strong id="reportCommission">US$0</strong><small id="reportCommissionDop">RD$0</small></article>
             <article class="metric-card report-card"><span>Comisión cobrada</span><strong id="reportReceived">US$0</strong><small id="reportReceivedDop">RD$0</small></article>
             <article class="metric-card report-card metric-card-attention"><span>Comisión pendiente</span><strong id="reportPending">US$0</strong><small id="reportPendingDop">RD$0</small></article>
           </div>

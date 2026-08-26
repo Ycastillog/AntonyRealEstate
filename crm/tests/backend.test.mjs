@@ -256,6 +256,8 @@ test("loadWorkspace starts every table read in parallel and maps snake_case deep
     "crm_sales",
     "crm_commission_installments",
     "crm_payments",
+    "crm_historical_import_batches",
+    "crm_historical_sales",
     "crm_audit_log"
   ];
   const pendingByTable = new Map(tables.map((table) => [table, deferred()]));
@@ -345,6 +347,29 @@ test("loadWorkspace starts every table read in parallel and maps snake_case deep
     crm_payments: [
       { id: "payment-1", payment_date: "2026-08-10", sale_id: "sale-new" }
     ],
+    crm_historical_import_batches: [
+      {
+        id: "batch-1",
+        source_name: "base.tsv",
+        source_sha256: "a".repeat(64),
+        source_row_count: 1,
+        imported_at: "2026-08-25T12:00:00Z"
+      }
+    ],
+    crm_historical_sales: [
+      {
+        id: "historical-1",
+        batch_id: "batch-1",
+        source_row: 2,
+        project: "LP11",
+        unit: "LP11-A",
+        buyer_name: "Cliente histórico",
+        sale_date: "2023-01-18",
+        sale_price: 90000,
+        sale_currency: "USD",
+        review_status: "Por completar"
+      }
+    ],
     crm_audit_log: [
       {
         id: "audit-old",
@@ -389,6 +414,9 @@ test("loadWorkspace starts every table read in parallel and maps snake_case deep
     Array.from(workspace.auditLog, (entry) => entry.id),
     ["audit-new", "audit-old"]
   );
+  assert.equal(workspace.historicalImportBatches[0].sourceRowCount, 1);
+  assert.equal(workspace.historicalSales[0].buyerName, "Cliente histórico");
+  assert.equal(workspace.historicalSales[0].batchId, "batch-1");
   assert.equal(workspace.auditLog[0].afterData.desiredZone, "Naco");
   assert.ok(Object.isFrozen(workspace.auditLog));
   assert.ok(Object.isFrozen(workspace.auditLog[0]));
@@ -525,7 +553,8 @@ test("financial mutations use RPC contracts and preserve the UI sale status name
   const pending = {
     crm_save_sale: deferred(),
     crm_record_payment: deferred(),
-    crm_import_workspace: deferred()
+    crm_import_workspace: deferred(),
+    crm_import_historical_sales: deferred()
   };
   const calls = [];
   const client = {
@@ -616,5 +645,42 @@ test("financial mutations use RPC contracts and preserve the UI sale status name
     error: null
   });
   assert.equal((await importPromise).salesUpserted, 1);
+
+  const historicalPromise = harness.api.importHistoricalSales(
+    harness.realmValue({
+      id: "batch-1",
+      sourceName: "base.tsv",
+      sourceSha256: "a".repeat(64),
+      sourceRowCount: 1,
+      ownerId: "must-not-pass"
+    }),
+    harness.realmValue([
+      {
+        id: "historical-1",
+        sourceRow: 2,
+        developer: "Constructora LVP",
+        project: "LP11",
+        unit: "LP11-A",
+        saleDate: "2023-01-18",
+        salePrice: 90_000,
+        saleCurrency: "USD",
+        sellerName: "Antony Fulgencio",
+        buyerName: "Cliente histórico",
+        sourceSnapshot: { Proyecto: "LP11" },
+        ownerId: "must-not-pass"
+      }
+    ])
+  );
+  await nextTurn();
+  assert.equal(calls[3].name, "crm_import_historical_sales");
+  assert.equal(calls[3].payload.p_batch.source_name, "base.tsv");
+  assert.ok(!Object.hasOwn(calls[3].payload.p_batch, "owner_id"));
+  assert.equal(calls[3].payload.p_rows[0].buyer_name, "Cliente histórico");
+  assert.ok(!Object.hasOwn(calls[3].payload.p_rows[0], "owner_id"));
+  pending.crm_import_historical_sales.resolve({
+    data: harness.realmValue({ imported: 1, already_imported: false }),
+    error: null
+  });
+  assert.equal((await historicalPromise).imported, 1);
   assert.equal(harness.storageAccesses(), 0);
 });

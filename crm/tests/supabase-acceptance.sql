@@ -59,6 +59,106 @@ select set_config(
 
 set local role authenticated;
 
+do $qa_historical_import$
+declare
+  v_first jsonb;
+  v_second jsonb;
+  v_rejected boolean := false;
+  v_batch jsonb := jsonb_build_object(
+    'id', 'qa-client-supplied-batch-id-is-ignored',
+    'source_name', 'qa-historical-source.tsv',
+    'source_sha256', repeat('a', 64),
+    'source_row_count', 1
+  );
+  v_rows jsonb := jsonb_build_array(
+    jsonb_build_object(
+      'id', 'qa-client-supplied-row-id-is-ignored',
+      'source_row', 1,
+      'developer', '  CONSTRUCTORA   lvp ',
+      'project', '  rIVIera   3 ',
+      'unit', ' QA-HIST-01 ',
+      'sale_date', (current_date - 100)::text,
+      'sale_price', 100000,
+      'sale_currency', 'usd',
+      'seller_name', 'Vendedor QA',
+      'buyer_name', 'Comprador histórico QA',
+      'review_status', 'Por completar',
+      'source_snapshot', jsonb_build_object(
+        'project', 'rIVIera   3',
+        'unit', 'QA-HIST-01'
+      )
+    )
+  );
+begin
+  v_first := public.crm_import_historical_sales(v_batch, v_rows);
+  v_second := public.crm_import_historical_sales(v_batch, v_rows);
+
+  if (v_first ->> 'imported')::integer <> 1
+     or (v_first ->> 'alreadyImported')::boolean
+     or (v_second ->> 'imported')::integer <> 0
+     or (v_second ->> 'skipped')::integer <> 1
+     or not (v_second ->> 'alreadyImported')::boolean
+     or (v_first ->> 'batchId') is distinct from (v_second ->> 'batchId') then
+    raise exception 'QA fallo: la importación histórica no fue idempotente';
+  end if;
+
+  if not exists (
+    select 1
+    from public.crm_historical_sales
+    where batch_id = (v_first ->> 'batchId')
+      and project = 'Riviera 3'
+      and developer = 'Constructora LVP'
+      and unit = 'QA-HIST-01'
+      and sale_currency = 'USD'
+      and review_status = 'Por completar'
+      and buyer_phone is null
+      and buyer_email is null
+      and delivery_date is null
+      and commission_amount is null
+      and payments_confirmed is false
+  ) then
+    raise exception 'QA fallo: staging histórico inventó datos o no canonizó LVP';
+  end if;
+
+  begin
+    perform public.crm_import_historical_sales(
+      jsonb_build_object(
+        'source_name', 'qa-historical-duplicate.tsv',
+        'source_sha256', repeat('b', 64),
+        'source_row_count', 1
+      ),
+      v_rows
+    );
+  exception when unique_violation then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'QA fallo: se aceptó un duplicado de staging histórico';
+  end if;
+  if exists (
+    select 1
+    from public.crm_historical_import_batches
+    where source_sha256 = repeat('b', 64)
+  ) then
+    raise exception 'QA fallo: el lote duplicado no se revirtió atómicamente';
+  end if;
+
+  v_rejected := false;
+  begin
+    insert into public.crm_historical_import_batches (
+      id, source_name, source_sha256, source_row_count
+    ) values (
+      'qa-direct-historical-batch', 'qa-direct.tsv', repeat('d', 64), 1
+    );
+  exception when insufficient_privilege then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'QA fallo: authenticated pudo escribir directamente en staging histórico';
+  end if;
+end
+$qa_historical_import$;
+
 insert into public.crm_clients (
   id,
   name,
@@ -232,6 +332,48 @@ select public.crm_save_sale(
     )
   )
 );
+
+do $qa_historical_active_duplicate$
+declare
+  v_rejected boolean := false;
+begin
+  begin
+    perform public.crm_import_historical_sales(
+      jsonb_build_object(
+        'source_name', 'qa-historical-active-duplicate.tsv',
+        'source_sha256', repeat('c', 64),
+        'source_row_count', 1
+      ),
+      jsonb_build_array(
+        jsonb_build_object(
+          'source_row', 1,
+          'developer', 'Constructora LVP',
+          'project', 'Riviera 2',
+          'unit', 'QA-01',
+          'sale_date', current_date::text,
+          'sale_price', 3000000,
+          'sale_currency', 'DOP',
+          'seller_name', 'Vendedor QA',
+          'buyer_name', 'Comprador QA',
+          'source_snapshot', jsonb_build_object('unit', 'QA-01')
+        )
+      )
+    );
+  exception when unique_violation then
+    v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'QA fallo: se aceptó un duplicado contra venta operativa';
+  end if;
+  if exists (
+    select 1
+    from public.crm_historical_import_batches
+    where source_sha256 = repeat('c', 64)
+  ) then
+    raise exception 'QA fallo: el lote contra venta activa no se revirtió';
+  end if;
+end
+$qa_historical_active_duplicate$;
 
 select public.crm_record_payment(
   jsonb_build_object(
@@ -787,6 +929,12 @@ begin
     raise exception 'QA fallo: RLS expuso el cliente a otro usuario';
   end if;
 
+  if exists (
+    select 1 from public.crm_historical_sales where unit = 'QA-HIST-01'
+  ) then
+    raise exception 'QA fallo: RLS expuso staging histórico a otro usuario';
+  end if;
+
   begin
     insert into public.evidence_items (
       id, title, category, media_type, media_url, is_published
@@ -848,6 +996,18 @@ begin
   ) < 5 then
     raise exception 'QA fallo: la bitacora no registro todos los cambios';
   end if;
+
+  if not exists (
+    select 1
+    from public.crm_audit_log
+    where table_name = 'crm_historical_import_batches'
+  ) or not exists (
+    select 1
+    from public.crm_audit_log
+    where table_name = 'crm_historical_sales'
+  ) then
+    raise exception 'QA fallo: staging histórico no quedó auditado';
+  end if;
 end
 $qa_final_contracts$;
 
@@ -884,6 +1044,8 @@ select jsonb_build_object(
     select
       (select count(*) from public.crm_clients where id like 'qa-%')
       + (select count(*) from public.crm_sales where id like 'qa-%')
+      + (select count(*) from public.crm_historical_import_batches where source_name like 'qa-%')
+      + (select count(*) from public.crm_historical_sales where unit like 'QA-%')
       + (select count(*) from public.crm_payments where id like 'qa-%')
       + (select count(*) from public.evidence_items where id like 'qa-%')
   )

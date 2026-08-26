@@ -711,6 +711,242 @@ alter table public.crm_clients
     and nullif(btrim(email), '') is not null
   );
 
+-- Staging histórico: conserva ventas verificables aunque todavía falten datos
+-- operativos. Nada de este módulo crea clientes, ventas, cuotas o cobros reales.
+create table if not exists public.crm_historical_import_batches (
+  owner_id uuid not null default auth.uid(),
+  id text not null default gen_random_uuid()::text,
+  source_name text not null,
+  source_sha256 text not null,
+  source_row_count integer not null,
+  created_at timestamptz not null default clock_timestamp(),
+  imported_at timestamptz not null default clock_timestamp(),
+  updated_at timestamptz not null default clock_timestamp(),
+
+  constraint crm_historical_import_batches_pkey primary key (owner_id, id),
+  constraint crm_historical_import_batches_owner_fk
+    foreign key (owner_id) references auth.users(id) on delete restrict,
+  constraint crm_historical_import_batches_owner_sha_key
+    unique (owner_id, source_sha256),
+  constraint crm_historical_import_batches_id_check check (
+    id = btrim(id)
+    and char_length(id) between 1 and 128
+    and id !~ '[[:cntrl:]]'
+  ),
+  constraint crm_historical_import_batches_source_name_check check (
+    char_length(btrim(source_name)) between 1 and 255
+    and source_name !~ '[[:cntrl:]]'
+  ),
+  constraint crm_historical_import_batches_sha_check check (
+    source_sha256 = lower(source_sha256)
+    and source_sha256 ~ '^[0-9a-f]{64}$'
+  ),
+  constraint crm_historical_import_batches_row_count_check check (
+    source_row_count between 1 and 5000
+  ),
+  constraint crm_historical_import_batches_timestamps_check check (
+    imported_at >= created_at and updated_at >= created_at
+  )
+);
+
+comment on table public.crm_historical_import_batches is
+  'Lotes idempotentes de staging histórico; toda escritura se realiza por RPC.';
+
+create table if not exists public.crm_historical_sales (
+  owner_id uuid not null default auth.uid(),
+  id text not null default gen_random_uuid()::text,
+  batch_id text not null,
+  source_row integer not null,
+  developer text not null,
+  project text not null,
+  unit text not null,
+  sale_date date not null,
+  sale_price numeric(18,2) not null,
+  sale_currency text not null,
+  seller_name text not null,
+  buyer_name text not null,
+  buyer_phone text,
+  buyer_email text,
+  delivery_date date,
+  sale_status text,
+  commission_rate numeric(7,4),
+  commission_amount numeric(18,2),
+  commission_currency text,
+  commission_plan text,
+  advance_percentage numeric(7,4),
+  payments_confirmed boolean not null default false,
+  review_status text not null default 'Por completar',
+  promoted_client_id text,
+  promoted_sale_id text,
+  promoted_at timestamptz,
+  source_snapshot jsonb not null,
+  created_at timestamptz not null default clock_timestamp(),
+  updated_at timestamptz not null default clock_timestamp(),
+
+  constraint crm_historical_sales_pkey primary key (owner_id, id),
+  constraint crm_historical_sales_owner_fk
+    foreign key (owner_id) references auth.users(id) on delete restrict,
+  constraint crm_historical_sales_batch_fk
+    foreign key (owner_id, batch_id)
+    references public.crm_historical_import_batches(owner_id, id)
+    on delete restrict,
+  constraint crm_historical_sales_promoted_client_fk
+    foreign key (owner_id, promoted_client_id)
+    references public.crm_clients(owner_id, id)
+    on delete restrict,
+  constraint crm_historical_sales_promoted_sale_fk
+    foreign key (owner_id, promoted_sale_id)
+    references public.crm_sales(owner_id, id)
+    on delete restrict,
+  constraint crm_historical_sales_batch_row_key
+    unique (owner_id, batch_id, source_row),
+  constraint crm_historical_sales_id_check check (
+    id = btrim(id)
+    and char_length(id) between 1 and 128
+    and id !~ '[[:cntrl:]]'
+  ),
+  constraint crm_historical_sales_batch_id_check check (
+    batch_id = btrim(batch_id) and char_length(batch_id) between 1 and 128
+  ),
+  constraint crm_historical_sales_source_row_check check (source_row > 0),
+  constraint crm_historical_sales_developer_project_check check (
+    developer = 'Constructora LVP'
+    and project in (
+      'Altos del este', 'Riviera 1', 'Riviera 2', 'Riviera 3',
+      'Riviera 4', 'Vistas del limonal', 'Epic Moon', 'Epic River',
+      'Doña Carmen', 'Las Margaritas', 'LP12', 'LP11', 'LP11 ABEY',
+      'East Town'
+    )
+  ),
+  constraint crm_historical_sales_unit_check check (
+    char_length(btrim(unit)) between 1 and 120 and unit !~ '[[:cntrl:]]'
+  ),
+  constraint crm_historical_sales_price_check check (
+    sale_price > 0
+    and sale_price::text not in ('NaN', 'Infinity', '-Infinity')
+  ),
+  constraint crm_historical_sales_currency_check check (
+    sale_currency in ('USD', 'DOP')
+  ),
+  constraint crm_historical_sales_seller_check check (
+    char_length(btrim(seller_name)) between 1 and 200
+    and seller_name !~ '[[:cntrl:]]'
+  ),
+  constraint crm_historical_sales_buyer_check check (
+    char_length(btrim(buyer_name)) between 1 and 300
+    and buyer_name !~ '[[:cntrl:]]'
+  ),
+  constraint crm_historical_sales_phone_check check (
+    buyer_phone is null
+    or (
+      char_length(btrim(buyer_phone)) between 7 and 40
+      and buyer_phone !~ '[[:cntrl:]]'
+    )
+  ),
+  constraint crm_historical_sales_email_check check (
+    buyer_email is null
+    or (
+      char_length(buyer_email) <= 320
+      and btrim(buyer_email) ~* '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+    )
+  ),
+  constraint crm_historical_sales_delivery_check check (
+    delivery_date is null or delivery_date >= sale_date
+  ),
+  constraint crm_historical_sales_status_check check (
+    sale_status is null
+    or sale_status in (
+      'Reservada', 'Opción a compra firmada', 'Entregado', 'Desistió', 'Cambio'
+    )
+  ),
+  constraint crm_historical_sales_delivered_check check (
+    sale_status is distinct from 'Entregado' or delivery_date is not null
+  ),
+  constraint crm_historical_sales_commission_rate_check check (
+    commission_rate is null
+    or (
+      commission_rate >= 0
+      and commission_rate <= 100
+      and commission_rate::text not in ('NaN', 'Infinity', '-Infinity')
+    )
+  ),
+  constraint crm_historical_sales_commission_amount_check check (
+    commission_amount is null
+    or (
+      commission_amount > 0
+      and commission_amount::text not in ('NaN', 'Infinity', '-Infinity')
+    )
+  ),
+  constraint crm_historical_sales_commission_currency_check check (
+    commission_currency is null or commission_currency in ('USD', 'DOP')
+  ),
+  constraint crm_historical_sales_commission_pair_check check (
+    commission_amount is null or commission_currency is not null
+  ),
+  constraint crm_historical_sales_commission_plan_check check (
+    commission_plan is null or commission_plan in ('single', 'advance_balance')
+  ),
+  constraint crm_historical_sales_advance_check check (
+    (
+      commission_plan = 'advance_balance'
+      and advance_percentage is not null
+      and advance_percentage > 0
+      and advance_percentage < 100
+      and advance_percentage::text not in ('NaN', 'Infinity', '-Infinity')
+    )
+    or (
+      commission_plan is distinct from 'advance_balance'
+      and advance_percentage is null
+    )
+  ),
+  constraint crm_historical_sales_review_status_check check (
+    review_status in ('Por completar', 'Lista para convertir', 'Convertida')
+  ),
+  constraint crm_historical_sales_ready_check check (
+    review_status <> 'Lista para convertir'
+    or (
+      buyer_phone is not null
+      and buyer_email is not null
+      and sale_status is not null
+      and sale_status in ('Reservada', 'Opción a compra firmada', 'Entregado')
+      and commission_amount is not null
+      and commission_currency is not null
+      and commission_plan is not null
+      and (
+        commission_plan = 'single'
+        or (
+          commission_plan = 'advance_balance'
+          and advance_percentage is not null
+        )
+      )
+      and payments_confirmed
+      and (sale_status <> 'Entregado' or delivery_date is not null)
+    )
+  ),
+  constraint crm_historical_sales_promotion_check check (
+    (
+      review_status = 'Convertida'
+      and promoted_client_id is not null
+      and promoted_sale_id is not null
+      and promoted_at is not null
+    )
+    or (
+      review_status <> 'Convertida'
+      and promoted_client_id is null
+      and promoted_sale_id is null
+      and promoted_at is null
+    )
+  ),
+  constraint crm_historical_sales_snapshot_check check (
+    jsonb_typeof(source_snapshot) = 'object'
+    and octet_length(source_snapshot::text) <= 65536
+  ),
+  constraint crm_historical_sales_timestamps_check check (updated_at >= created_at)
+);
+
+comment on table public.crm_historical_sales is
+  'Ventas históricas incompletas; no participan en clientes, comisiones ni cobros hasta su conversión explícita.';
+
 create table if not exists public.crm_commission_installments (
   owner_id uuid not null default auth.uid(),
   id text not null,
@@ -900,6 +1136,8 @@ create table if not exists public.crm_audit_log (
     table_name in (
       'crm_clients',
       'crm_sales',
+      'crm_historical_import_batches',
+      'crm_historical_sales',
       'crm_commission_installments',
       'crm_payments'
     )
@@ -921,6 +1159,21 @@ comment on table public.crm_audit_log is
   'Bitacora inmutable generada por triggers; no acepta escrituras directas del cliente.';
 comment on column public.crm_audit_log.owner_id is
   'No usa FK a auth.users para conservar la auditoria si la identidad deja de existir.';
+
+-- IF NOT EXISTS no reemplaza restricciones de instalaciones previas.
+alter table public.crm_audit_log
+  drop constraint if exists crm_audit_log_table_check;
+alter table public.crm_audit_log
+  add constraint crm_audit_log_table_check check (
+    table_name in (
+      'crm_clients',
+      'crm_sales',
+      'crm_historical_import_batches',
+      'crm_historical_sales',
+      'crm_commission_installments',
+      'crm_payments'
+    )
+  );
 
 -- Endurecimiento reejecutable para instalaciones creadas por una version previa.
 -- Si existieran monedas fuera del dominio soportado, la migracion falla y exige
@@ -1158,6 +1411,20 @@ create index if not exists crm_sales_owner_client_idx
   on public.crm_sales(owner_id, client_id);
 create index if not exists crm_sales_owner_date_idx
   on public.crm_sales(owner_id, sale_date desc);
+
+create index if not exists crm_historical_batches_owner_imported_idx
+  on public.crm_historical_import_batches(owner_id, imported_at desc);
+create index if not exists crm_historical_sales_owner_review_idx
+  on public.crm_historical_sales(owner_id, review_status, sale_date desc);
+create index if not exists crm_historical_sales_owner_batch_idx
+  on public.crm_historical_sales(owner_id, batch_id, source_row);
+create unique index if not exists crm_historical_sales_open_project_unit_uidx
+  on public.crm_historical_sales(
+    owner_id,
+    lower(regexp_replace(btrim(project), '[[:space:]]+', ' ', 'g')),
+    lower(regexp_replace(btrim(unit), '[[:space:]]+', ' ', 'g'))
+  )
+  where review_status <> 'Convertida';
 
 create index if not exists crm_installments_owner_sale_due_idx
   on public.crm_commission_installments(owner_id, sale_id, due_date);
@@ -1966,6 +2233,54 @@ create trigger crm_sales_audit_aiud
 after insert or update or delete on public.crm_sales
 for each row execute function public.crm_write_audit();
 
+drop trigger if exists crm_historical_batches_workspace_lock_bs
+  on public.crm_historical_import_batches;
+create trigger crm_historical_batches_workspace_lock_bs
+before insert or update or delete on public.crm_historical_import_batches
+for each statement execute function public.crm_lock_workspace_mutation();
+
+drop trigger if exists crm_historical_batches_identity_bu
+  on public.crm_historical_import_batches;
+create trigger crm_historical_batches_identity_bu
+before update on public.crm_historical_import_batches
+for each row execute function public.crm_enforce_immutable_identity();
+
+drop trigger if exists crm_historical_batches_touch_bu
+  on public.crm_historical_import_batches;
+create trigger crm_historical_batches_touch_bu
+before update on public.crm_historical_import_batches
+for each row execute function public.crm_touch_updated_at();
+
+drop trigger if exists crm_historical_batches_audit_aiud
+  on public.crm_historical_import_batches;
+create trigger crm_historical_batches_audit_aiud
+after insert or update or delete on public.crm_historical_import_batches
+for each row execute function public.crm_write_audit();
+
+drop trigger if exists crm_historical_sales_workspace_lock_bs
+  on public.crm_historical_sales;
+create trigger crm_historical_sales_workspace_lock_bs
+before insert or update or delete on public.crm_historical_sales
+for each statement execute function public.crm_lock_workspace_mutation();
+
+drop trigger if exists crm_historical_sales_identity_bu
+  on public.crm_historical_sales;
+create trigger crm_historical_sales_identity_bu
+before update on public.crm_historical_sales
+for each row execute function public.crm_enforce_immutable_identity();
+
+drop trigger if exists crm_historical_sales_touch_bu
+  on public.crm_historical_sales;
+create trigger crm_historical_sales_touch_bu
+before update on public.crm_historical_sales
+for each row execute function public.crm_touch_updated_at();
+
+drop trigger if exists crm_historical_sales_audit_aiud
+  on public.crm_historical_sales;
+create trigger crm_historical_sales_audit_aiud
+after insert or update or delete on public.crm_historical_sales
+for each row execute function public.crm_write_audit();
+
 drop trigger if exists crm_installments_identity_bu
   on public.crm_commission_installments;
 drop trigger if exists crm_installments_workspace_lock_bs
@@ -2314,6 +2629,8 @@ begin
   foreach v_table in array array[
     'crm_clients',
     'crm_sales',
+    'crm_historical_import_batches',
+    'crm_historical_sales',
     'crm_commission_installments',
     'crm_payments',
     'crm_audit_log'
@@ -2380,7 +2697,563 @@ end
 $crm_rls$;
 
 -- -----------------------------------------------------------------------------
--- 7. RPC atomica para importar un respaldo de workspace
+-- 7. RPC atomica para importar staging histórico
+-- -----------------------------------------------------------------------------
+
+drop function if exists public.crm_import_historical_sales(jsonb, jsonb);
+
+create function public.crm_import_historical_sales(
+  p_batch jsonb,
+  p_rows jsonb
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, pg_temp
+as $function$
+declare
+  v_owner uuid := auth.uid();
+  v_batch_keys constant text[] := array[
+    'id', 'source_name', 'source_sha256', 'source_row_count'
+  ];
+  v_row_keys constant text[] := array[
+    'id', 'source_row', 'developer', 'project', 'unit', 'sale_date', 'sale_price',
+    'sale_currency', 'seller_name', 'buyer_name', 'buyer_phone', 'buyer_email',
+    'delivery_date', 'sale_status', 'commission_rate', 'commission_amount',
+    'commission_currency', 'commission_plan', 'advance_percentage',
+    'payments_confirmed', 'review_status', 'source_snapshot'
+  ];
+  v_required_keys constant text[] := array[
+    'source_row', 'developer', 'project', 'unit', 'sale_date', 'sale_price',
+    'sale_currency', 'seller_name', 'buyer_name', 'source_snapshot'
+  ];
+  v_unknown_key text;
+  v_required_key text;
+  v_source_name text;
+  v_source_sha256 text;
+  v_source_row_count integer;
+  v_row_count integer;
+  v_payload_bytes integer;
+  v_batch_id text;
+  v_existing_batch_id text;
+  v_existing_row_count integer;
+  v_row jsonb;
+  v_position bigint;
+  v_source_row integer;
+  v_project_key text;
+  v_project text;
+  v_unit text;
+  v_sale_date date;
+  v_sale_price numeric(18,2);
+  v_sale_currency text;
+  v_seller_name text;
+  v_buyer_name text;
+  v_buyer_phone text;
+  v_buyer_email text;
+  v_delivery_date date;
+  v_sale_status text;
+  v_commission_rate numeric(7,4);
+  v_commission_amount numeric(18,2);
+  v_commission_currency text;
+  v_commission_plan text;
+  v_advance_percentage numeric(7,4);
+  v_payments_confirmed boolean;
+  v_review_status text;
+  v_source_snapshot jsonb;
+begin
+  if v_owner is null then
+    raise exception using
+      errcode = '42501',
+      message = 'crm_import_historical_sales requiere una sesion authenticated';
+  end if;
+
+  if jsonb_typeof(p_batch) is distinct from 'object' then
+    raise exception using
+      errcode = '22023',
+      message = 'p_batch debe ser un objeto JSON';
+  end if;
+
+  if jsonb_typeof(p_rows) is distinct from 'array' then
+    raise exception using
+      errcode = '22023',
+      message = 'p_rows debe ser un arreglo JSON';
+  end if;
+
+  v_payload_bytes := octet_length(p_batch::text) + octet_length(p_rows::text);
+  if v_payload_bytes > 10485760 then
+    raise exception using
+      errcode = '54000',
+      message = 'La importacion historica excede el limite de 10 MiB';
+  end if;
+
+  select keys.key
+    into v_unknown_key
+  from jsonb_object_keys(p_batch) as keys(key)
+  where not (keys.key = any (v_batch_keys))
+  limit 1;
+
+  if v_unknown_key is not null then
+    raise exception using
+      errcode = '22023',
+      message = format('p_batch contiene la clave no autorizada: %s', v_unknown_key);
+  end if;
+
+  if jsonb_typeof(p_batch -> 'source_name') is distinct from 'string'
+     or jsonb_typeof(p_batch -> 'source_sha256') is distinct from 'string'
+     or jsonb_typeof(p_batch -> 'source_row_count') is distinct from 'number'
+     or (p_batch ->> 'source_row_count') !~ '^[0-9]+$' then
+    raise exception using
+      errcode = '22023',
+      message = 'p_batch requiere source_name, source_sha256 y source_row_count entero';
+  end if;
+
+  if p_batch ? 'id'
+     and jsonb_typeof(p_batch -> 'id') not in ('string', 'null') then
+    raise exception using
+      errcode = '22023',
+      message = 'p_batch.id debe ser texto o null; la identidad final es server-side';
+  end if;
+
+  v_source_name := btrim(p_batch ->> 'source_name');
+  v_source_sha256 := lower(btrim(p_batch ->> 'source_sha256'));
+  v_source_row_count := (p_batch ->> 'source_row_count')::integer;
+  v_row_count := jsonb_array_length(p_rows);
+
+  if char_length(v_source_name) not between 1 and 255
+     or v_source_name ~ '[[:cntrl:]]' then
+    raise exception using
+      errcode = '22023',
+      message = 'source_name debe contener entre 1 y 255 caracteres válidos';
+  end if;
+
+  if v_source_sha256 !~ '^[0-9a-f]{64}$' then
+    raise exception using
+      errcode = '22023',
+      message = 'source_sha256 debe contener exactamente 64 caracteres hexadecimales';
+  end if;
+
+  if v_row_count < 1 or v_row_count > 5000 then
+    raise exception using
+      errcode = '22023',
+      message = 'p_rows debe contener entre 1 y 5000 filas';
+  end if;
+
+  if v_source_row_count <> v_row_count then
+    raise exception using
+      errcode = '22023',
+      message = format(
+        'source_row_count (%) no coincide con p_rows (%)',
+        v_source_row_count,
+        v_row_count
+      );
+  end if;
+
+  -- Serializa importaciones y mutaciones operativas del mismo owner. Los triggers
+  -- de tablas toman el mismo advisory lock en modo compartido.
+  perform pg_advisory_xact_lock(
+    hashtextextended('crm_workspace:' || v_owner::text, 0)
+  );
+
+  select b.id, b.source_row_count
+    into v_existing_batch_id, v_existing_row_count
+  from public.crm_historical_import_batches as b
+  where b.owner_id = v_owner
+    and b.source_sha256 = v_source_sha256
+  limit 1;
+
+  if v_existing_batch_id is not null then
+    return jsonb_build_object(
+      'batchId', v_existing_batch_id,
+      'imported', 0,
+      'skipped', v_existing_row_count,
+      'alreadyImported', true
+    );
+  end if;
+
+  v_batch_id := gen_random_uuid()::text;
+
+  insert into public.crm_historical_import_batches (
+    owner_id, id, source_name, source_sha256, source_row_count
+  ) values (
+    v_owner, v_batch_id, v_source_name, v_source_sha256, v_source_row_count
+  );
+
+  for v_row, v_position in
+    select item.value, item.ordinality
+    from jsonb_array_elements(p_rows) with ordinality as item(value, ordinality)
+  loop
+    if jsonb_typeof(v_row) is distinct from 'object' then
+      raise exception using
+        errcode = '22023',
+        message = format('La fila %s debe ser un objeto JSON', v_position);
+    end if;
+
+    v_unknown_key := null;
+    select keys.key
+      into v_unknown_key
+    from jsonb_object_keys(v_row) as keys(key)
+    where not (keys.key = any (v_row_keys))
+    limit 1;
+
+    if v_unknown_key is not null then
+      raise exception using
+        errcode = '22023',
+        message = format(
+          'La fila %s contiene la clave no autorizada: %s',
+          v_position,
+          v_unknown_key
+        );
+    end if;
+
+    foreach v_required_key in array v_required_keys
+    loop
+      if not (v_row ? v_required_key)
+         or jsonb_typeof(v_row -> v_required_key) = 'null' then
+        raise exception using
+          errcode = '22023',
+          message = format(
+            'La fila %s requiere la clave %s',
+            v_position,
+            v_required_key
+          );
+      end if;
+    end loop;
+
+    if jsonb_typeof(v_row -> 'source_row') <> 'number'
+       or (v_row ->> 'source_row') !~ '^[1-9][0-9]*$'
+       or jsonb_typeof(v_row -> 'sale_price') <> 'number' then
+      raise exception using
+        errcode = '22023',
+        message = format('La fila %s tiene source_row o sale_price inválido', v_position);
+    end if;
+
+    foreach v_required_key in array array[
+      'developer', 'project', 'unit', 'sale_date', 'sale_currency',
+      'seller_name', 'buyer_name'
+    ]
+    loop
+      if jsonb_typeof(v_row -> v_required_key) <> 'string' then
+        raise exception using
+          errcode = '22023',
+          message = format(
+            'La fila %s requiere %s como texto',
+            v_position,
+            v_required_key
+          );
+      end if;
+    end loop;
+
+    if jsonb_typeof(v_row -> 'source_snapshot') <> 'object'
+       or octet_length((v_row -> 'source_snapshot')::text) > 65536 then
+      raise exception using
+        errcode = '22023',
+        message = format('La fila %s requiere source_snapshot objeto de hasta 64 KiB', v_position);
+    end if;
+
+    foreach v_required_key in array array[
+      'buyer_phone', 'buyer_email', 'delivery_date', 'sale_status',
+      'commission_currency', 'commission_plan'
+    ]
+    loop
+      if v_row ? v_required_key
+         and jsonb_typeof(v_row -> v_required_key) not in ('string', 'null') then
+        raise exception using
+          errcode = '22023',
+          message = format(
+            'La fila %s requiere %s como texto o null',
+            v_position,
+            v_required_key
+          );
+      end if;
+    end loop;
+
+    foreach v_required_key in array array[
+      'commission_rate', 'commission_amount', 'advance_percentage'
+    ]
+    loop
+      if v_row ? v_required_key
+         and jsonb_typeof(v_row -> v_required_key) not in ('number', 'null') then
+        raise exception using
+          errcode = '22023',
+          message = format(
+            'La fila %s requiere %s numérico o null',
+            v_position,
+            v_required_key
+          );
+      end if;
+    end loop;
+
+    if v_row ? 'payments_confirmed'
+       and jsonb_typeof(v_row -> 'payments_confirmed') not in ('boolean', 'null') then
+      raise exception using
+        errcode = '22023',
+        message = format('La fila %s requiere payments_confirmed booleano', v_position);
+    end if;
+
+    if v_row ? 'id'
+       and jsonb_typeof(v_row -> 'id') not in ('string', 'null') then
+      raise exception using
+        errcode = '22023',
+        message = format('La fila %s requiere id como texto o null', v_position);
+    end if;
+
+    if v_row ? 'review_status'
+       and (
+         jsonb_typeof(v_row -> 'review_status') not in ('string', 'null')
+         or coalesce(nullif(btrim(v_row ->> 'review_status'), ''), 'Por completar')
+           <> 'Por completar'
+       ) then
+      raise exception using
+        errcode = '22023',
+        message = format(
+          'La fila %s no puede declarar review_status distinto de Por completar',
+          v_position
+        );
+    end if;
+
+    if lower(regexp_replace(btrim(v_row ->> 'developer'), '[[:space:]]+', ' ', 'g'))
+       <> 'constructora lvp' then
+      raise exception using
+        errcode = '22023',
+        message = format('La fila %s no pertenece a Constructora LVP', v_position);
+    end if;
+
+    v_project_key := lower(
+      regexp_replace(btrim(v_row ->> 'project'), '[[:space:]]+', ' ', 'g')
+    );
+    v_project := case v_project_key
+      when 'altos del este' then 'Altos del este'
+      when 'riviera 1' then 'Riviera 1'
+      when 'riviera 2' then 'Riviera 2'
+      when 'riviera 3' then 'Riviera 3'
+      when 'riviera 4' then 'Riviera 4'
+      when 'vistas del limonal' then 'Vistas del limonal'
+      when 'epic moon' then 'Epic Moon'
+      when 'epic river' then 'Epic River'
+      when 'doña carmen' then 'Doña Carmen'
+      when 'las margaritas' then 'Las Margaritas'
+      when 'lp12' then 'LP12'
+      when 'lp11' then 'LP11'
+      when 'lp11 abey' then 'LP11 ABEY'
+      when 'east town' then 'East Town'
+      else null
+    end;
+
+    if v_project is null then
+      raise exception using
+        errcode = '22023',
+        message = format(
+          'Constructora LVP requiere proyecto autorizado; fila %s no coincide',
+          v_position
+        );
+    end if;
+
+    v_source_row := (v_row ->> 'source_row')::integer;
+    v_unit := regexp_replace(btrim(v_row ->> 'unit'), '[[:space:]]+', ' ', 'g');
+    v_sale_currency := upper(btrim(v_row ->> 'sale_currency'));
+    v_seller_name := btrim(v_row ->> 'seller_name');
+    v_buyer_name := btrim(v_row ->> 'buyer_name');
+    v_buyer_phone := nullif(btrim(v_row ->> 'buyer_phone'), '');
+    v_buyer_email := nullif(lower(btrim(v_row ->> 'buyer_email')), '');
+    v_sale_status := nullif(btrim(v_row ->> 'sale_status'), '');
+    v_commission_currency := nullif(upper(btrim(v_row ->> 'commission_currency')), '');
+    v_commission_plan := nullif(btrim(v_row ->> 'commission_plan'), '');
+    v_payments_confirmed := coalesce(
+      (v_row ->> 'payments_confirmed')::boolean,
+      false
+    );
+    v_source_snapshot := v_row -> 'source_snapshot';
+
+    if (v_row ->> 'sale_date') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then
+      raise exception using
+        errcode = '22023',
+        message = format('La fila %s requiere sale_date ISO YYYY-MM-DD', v_position);
+    end if;
+
+    begin
+      v_sale_date := (v_row ->> 'sale_date')::date;
+    exception when others then
+      raise exception using
+        errcode = '22023',
+        message = format('La fila %s contiene sale_date inválida', v_position);
+    end;
+
+    if v_sale_date > current_date then
+      raise exception using
+        errcode = '22023',
+        message = format('La fila %s contiene sale_date futura', v_position);
+    end if;
+
+    v_delivery_date := null;
+    if nullif(btrim(v_row ->> 'delivery_date'), '') is not null then
+      if (v_row ->> 'delivery_date') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then
+        raise exception using
+          errcode = '22023',
+          message = format('La fila %s requiere delivery_date ISO YYYY-MM-DD', v_position);
+      end if;
+      begin
+        v_delivery_date := (v_row ->> 'delivery_date')::date;
+      exception when others then
+        raise exception using
+          errcode = '22023',
+          message = format('La fila %s contiene delivery_date inválida', v_position);
+      end;
+    end if;
+
+    if v_delivery_date is not null and v_delivery_date < v_sale_date then
+      raise exception using
+        errcode = '22023',
+        message = format('La fila %s tiene entrega anterior a la venta', v_position);
+    end if;
+
+    if v_sale_status = 'Entregado'
+       and (v_delivery_date is null or v_delivery_date > current_date) then
+      raise exception using
+        errcode = '22023',
+        message = format(
+          'La fila %s marcada Entregado requiere delivery_date no futura',
+          v_position
+        );
+    end if;
+
+    v_sale_price := (v_row ->> 'sale_price')::numeric;
+    v_commission_rate := case
+      when jsonb_typeof(v_row -> 'commission_rate') = 'number'
+        then (v_row ->> 'commission_rate')::numeric
+    end;
+    v_commission_amount := case
+      when jsonb_typeof(v_row -> 'commission_amount') = 'number'
+        then (v_row ->> 'commission_amount')::numeric
+    end;
+    v_advance_percentage := case
+      when jsonb_typeof(v_row -> 'advance_percentage') = 'number'
+        then (v_row ->> 'advance_percentage')::numeric
+    end;
+
+    if exists (
+      select 1
+      from public.crm_historical_sales as hs
+      where hs.owner_id = v_owner
+        and hs.review_status <> 'Convertida'
+        and lower(regexp_replace(btrim(hs.project), '[[:space:]]+', ' ', 'g'))
+          = lower(v_project)
+        and lower(regexp_replace(btrim(hs.unit), '[[:space:]]+', ' ', 'g'))
+          = lower(v_unit)
+    ) then
+      raise exception using
+        errcode = '23505',
+        message = format(
+          'La fila %s duplica proyecto y unidad en staging histórico no convertido',
+          v_position
+        );
+    end if;
+
+    if exists (
+      select 1
+      from public.crm_sales as s
+      where s.owner_id = v_owner
+        and s.status not in ('Desistió', 'Cambio')
+        and lower(regexp_replace(btrim(s.project), '[[:space:]]+', ' ', 'g'))
+          = lower(v_project)
+        and lower(regexp_replace(btrim(s.unit), '[[:space:]]+', ' ', 'g'))
+          = lower(v_unit)
+    ) then
+      raise exception using
+        errcode = '23505',
+        message = format(
+          'La fila %s duplica proyecto y unidad de una venta operativa activa',
+          v_position
+        );
+    end if;
+
+    v_review_status := case
+      when v_buyer_phone is not null
+       and v_buyer_email is not null
+       and v_sale_status in ('Reservada', 'Opción a compra firmada', 'Entregado')
+       and v_commission_amount is not null
+       and v_commission_currency is not null
+       and v_commission_plan is not null
+       and (
+         v_commission_plan = 'single'
+         or (
+           v_commission_plan = 'advance_balance'
+           and v_advance_percentage is not null
+         )
+       )
+       and v_payments_confirmed
+       and (v_sale_status <> 'Entregado' or v_delivery_date is not null)
+      then 'Lista para convertir'
+      else 'Por completar'
+    end;
+
+    insert into public.crm_historical_sales (
+      owner_id,
+      id,
+      batch_id,
+      source_row,
+      developer,
+      project,
+      unit,
+      sale_date,
+      sale_price,
+      sale_currency,
+      seller_name,
+      buyer_name,
+      buyer_phone,
+      buyer_email,
+      delivery_date,
+      sale_status,
+      commission_rate,
+      commission_amount,
+      commission_currency,
+      commission_plan,
+      advance_percentage,
+      payments_confirmed,
+      review_status,
+      source_snapshot
+    ) values (
+      v_owner,
+      gen_random_uuid()::text,
+      v_batch_id,
+      v_source_row,
+      'Constructora LVP',
+      v_project,
+      v_unit,
+      v_sale_date,
+      v_sale_price,
+      v_sale_currency,
+      v_seller_name,
+      v_buyer_name,
+      v_buyer_phone,
+      v_buyer_email,
+      v_delivery_date,
+      v_sale_status,
+      v_commission_rate,
+      v_commission_amount,
+      v_commission_currency,
+      v_commission_plan,
+      v_advance_percentage,
+      v_payments_confirmed,
+      v_review_status,
+      v_source_snapshot
+    );
+  end loop;
+
+  return jsonb_build_object(
+    'batchId', v_batch_id,
+    'imported', v_row_count,
+    'skipped', 0,
+    'alreadyImported', false
+  );
+end
+$function$;
+
+comment on function public.crm_import_historical_sales(jsonb, jsonb) is
+  'Importa staging histórico LVP de forma atómica, idempotente y aislada por owner.';
+
+-- -----------------------------------------------------------------------------
+-- 8. RPC atomica para importar un respaldo de workspace
 -- -----------------------------------------------------------------------------
 
 -- PostgreSQL conserva los nombres de parametros al reemplazar funciones. Se
@@ -2400,6 +3273,8 @@ declare
   v_sales jsonb;
   v_installments jsonb;
   v_payments jsonb;
+  v_historical_batches jsonb;
+  v_historical_sales jsonb;
   v_item jsonb;
   v_unknown text;
   v_total integer;
@@ -2407,6 +3282,8 @@ declare
   v_sale_count integer := 0;
   v_installment_count integer := 0;
   v_payment_count integer := 0;
+  v_historical_batch_count integer := 0;
+  v_historical_sale_count integer := 0;
   v_sale_id text;
   v_rows integer;
   v_bad_sale_id text;
@@ -2441,7 +3318,9 @@ begin
       'sales',
       'commission_installments',
       'installments',
-      'payments'
+      'payments',
+      'historical_import_batches',
+      'historical_sales'
     ])
   );
 
@@ -2482,20 +3361,29 @@ begin
     '[]'::jsonb
   );
   v_payments := coalesce(p_state -> 'payments', '[]'::jsonb);
+  v_historical_batches := coalesce(
+    p_state -> 'historical_import_batches',
+    '[]'::jsonb
+  );
+  v_historical_sales := coalesce(p_state -> 'historical_sales', '[]'::jsonb);
 
   if jsonb_typeof(v_clients) <> 'array'
      or jsonb_typeof(v_sales) <> 'array'
      or jsonb_typeof(v_installments) <> 'array'
-     or jsonb_typeof(v_payments) <> 'array' then
+     or jsonb_typeof(v_payments) <> 'array'
+     or jsonb_typeof(v_historical_batches) <> 'array'
+     or jsonb_typeof(v_historical_sales) <> 'array' then
     raise exception using
       errcode = '22023',
-      message = 'clients, sales, installments y payments deben ser arrays JSON';
+      message = 'Las colecciones operativas e históricas deben ser arrays JSON';
   end if;
 
   v_total := jsonb_array_length(v_clients)
     + jsonb_array_length(v_sales)
     + jsonb_array_length(v_installments)
-    + jsonb_array_length(v_payments);
+    + jsonb_array_length(v_payments)
+    + jsonb_array_length(v_historical_batches)
+    + jsonb_array_length(v_historical_sales);
 
   if v_total > 100000 then
     raise exception using
@@ -2513,6 +3401,10 @@ begin
     select value from jsonb_array_elements(v_installments)
     union all
     select value from jsonb_array_elements(v_payments)
+    union all
+    select value from jsonb_array_elements(v_historical_batches)
+    union all
+    select value from jsonb_array_elements(v_historical_sales)
   loop
     if jsonb_typeof(v_item) <> 'object' then
       raise exception using
@@ -2536,6 +3428,44 @@ begin
       end if;
     end if;
   end loop;
+
+  select string_agg(distinct keys.key, ', ' order by keys.key)
+    into v_unknown
+  from jsonb_array_elements(v_historical_batches) as item(value)
+  cross join lateral jsonb_object_keys(item.value) as keys(key)
+  where not (keys.key = any (array[
+    'owner_id', 'id', 'source_name', 'source_sha256', 'source_row_count',
+    'imported_at', 'created_at', 'updated_at'
+  ]));
+
+  if v_unknown is not null then
+    raise exception using
+      errcode = '22023',
+      message = format(
+        'Claves no reconocidas en historical_import_batches: %s',
+        v_unknown
+      );
+  end if;
+
+  select string_agg(distinct keys.key, ', ' order by keys.key)
+    into v_unknown
+  from jsonb_array_elements(v_historical_sales) as item(value)
+  cross join lateral jsonb_object_keys(item.value) as keys(key)
+  where not (keys.key = any (array[
+    'owner_id', 'id', 'batch_id', 'source_row', 'developer', 'project', 'unit',
+    'sale_date', 'sale_price', 'sale_currency', 'seller_name', 'buyer_name',
+    'buyer_phone', 'buyer_email', 'delivery_date', 'sale_status',
+    'commission_rate', 'commission_amount', 'commission_currency',
+    'commission_plan', 'advance_percentage', 'payments_confirmed',
+    'review_status', 'promoted_client_id', 'promoted_sale_id', 'promoted_at',
+    'source_snapshot', 'created_at', 'updated_at'
+  ]));
+
+  if v_unknown is not null then
+    raise exception using
+      errcode = '22023',
+      message = format('Claves no reconocidas en historical_sales: %s', v_unknown);
+  end if;
 
   -- La aplicación exporta installmentKind (camelCase); la base persiste
   -- installment_kind. Se aceptan respaldos SQL previos con snake_case, pero
@@ -2664,6 +3594,49 @@ begin
     into v_sales
   from jsonb_array_elements(v_sales) with ordinality as x(value, ordinality);
 
+  select coalesce(
+    jsonb_agg(
+      x.value || jsonb_build_object(
+        'project', case lower(
+          regexp_replace(btrim(x.value ->> 'project'), '[[:space:]]+', ' ', 'g')
+        )
+          when 'altos del este' then 'Altos del este'
+          when 'riviera 1' then 'Riviera 1'
+          when 'riviera 2' then 'Riviera 2'
+          when 'riviera 3' then 'Riviera 3'
+          when 'riviera 4' then 'Riviera 4'
+          when 'vistas del limonal' then 'Vistas del limonal'
+          when 'epic moon' then 'Epic Moon'
+          when 'epic river' then 'Epic River'
+          when 'doña carmen' then 'Doña Carmen'
+          when 'las margaritas' then 'Las Margaritas'
+          when 'lp12' then 'LP12'
+          when 'lp11' then 'LP11'
+          when 'lp11 abey' then 'LP11 ABEY'
+          when 'east town' then 'East Town'
+          else nullif(btrim(x.value ->> 'project'), '')
+        end,
+        'developer', case lower(
+          regexp_replace(btrim(x.value ->> 'developer'), '[[:space:]]+', ' ', 'g')
+        )
+          when 'constructora lvp' then 'Constructora LVP'
+          else nullif(btrim(x.value ->> 'developer'), '')
+        end,
+        'unit', regexp_replace(
+          btrim(x.value ->> 'unit'),
+          '[[:space:]]+',
+          ' ',
+          'g'
+        )
+      )
+      order by x.ordinality
+    ),
+    '[]'::jsonb
+  )
+    into v_historical_sales
+  from jsonb_array_elements(v_historical_sales) with ordinality
+    as x(value, ordinality);
+
   if exists (
     select 1
     from jsonb_array_elements(v_clients) as x(value)
@@ -2771,6 +3744,176 @@ begin
       message = 'Una venta Desistió o Cambio no puede importar cobros Contabilizados';
   end if;
 
+  if exists (
+    select 1
+    from jsonb_array_elements(v_historical_batches) as x(value)
+    where nullif(btrim(x.value ->> 'id'), '') is null
+       or nullif(btrim(x.value ->> 'source_name'), '') is null
+       or (x.value ->> 'source_sha256') !~* '^[0-9a-f]{64}$'
+       or jsonb_typeof(x.value -> 'source_row_count') is distinct from 'number'
+       or (x.value ->> 'source_row_count') !~ '^[1-9][0-9]*$'
+       or (x.value ->> 'source_row_count')::integer > 5000
+  ) then
+    raise exception using
+      errcode = '22023',
+      message = 'Cada lote histórico requiere id, nombre, SHA-256 y conteo válido';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_historical_sales) as x(value)
+    where nullif(btrim(x.value ->> 'id'), '') is null
+       or nullif(btrim(x.value ->> 'batch_id'), '') is null
+       or jsonb_typeof(x.value -> 'source_row') is distinct from 'number'
+       or (x.value ->> 'source_row') !~ '^[1-9][0-9]*$'
+       or nullif(btrim(x.value ->> 'developer'), '') is null
+       or nullif(btrim(x.value ->> 'project'), '') is null
+       or nullif(btrim(x.value ->> 'unit'), '') is null
+       or nullif(btrim(x.value ->> 'sale_date'), '') is null
+       or jsonb_typeof(x.value -> 'sale_price') is distinct from 'number'
+       or nullif(btrim(x.value ->> 'sale_currency'), '') is null
+       or nullif(btrim(x.value ->> 'seller_name'), '') is null
+       or nullif(btrim(x.value ->> 'buyer_name'), '') is null
+       or jsonb_typeof(x.value -> 'source_snapshot') is distinct from 'object'
+       or octet_length((x.value -> 'source_snapshot')::text) > 65536
+  ) then
+    raise exception using
+      errcode = '22023',
+      message = 'Una fila histórica no contiene todos sus campos estructurales válidos';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_historical_sales) as x(value)
+    where (
+        x.value ? 'payments_confirmed'
+        and jsonb_typeof(x.value -> 'payments_confirmed')
+          not in ('boolean', 'null')
+      )
+       or (
+        x.value ? 'commission_rate'
+        and jsonb_typeof(x.value -> 'commission_rate')
+          not in ('number', 'null')
+      )
+       or (
+        x.value ? 'commission_amount'
+        and jsonb_typeof(x.value -> 'commission_amount')
+          not in ('number', 'null')
+      )
+       or (
+        x.value ? 'advance_percentage'
+        and jsonb_typeof(x.value -> 'advance_percentage')
+          not in ('number', 'null')
+      )
+  ) then
+    raise exception using
+      errcode = '22023',
+      message = 'Los campos financieros históricos deben conservar sus tipos JSON';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_historical_sales) as x(value)
+    where (x.value ->> 'developer') is distinct from 'Constructora LVP'
+       or (x.value ->> 'project') not in (
+        'Altos del este', 'Riviera 1', 'Riviera 2', 'Riviera 3',
+        'Riviera 4', 'Vistas del limonal', 'Epic Moon', 'Epic River',
+        'Doña Carmen', 'Las Margaritas', 'LP12', 'LP11', 'LP11 ABEY',
+        'East Town'
+      )
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'El histórico solo admite Constructora LVP y proyectos autorizados';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_historical_sales) as x(value)
+    where nullif(btrim(x.value ->> 'sale_status'), '') is not null
+      and btrim(x.value ->> 'sale_status') not in (
+        'Reservada', 'Opción a compra firmada', 'Entregado', 'Desistió', 'Cambio'
+      )
+  ) then
+    raise exception 'El histórico contiene un sale_status no permitido'
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_historical_sales) as x(value)
+    where nullif(btrim(x.value ->> 'commission_plan'), '') is not null
+      and btrim(x.value ->> 'commission_plan') not in ('single', 'advance_balance')
+  ) then
+    raise exception 'El histórico contiene un commission_plan no permitido'
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_historical_sales) as hs(value)
+    where not exists (
+      select 1
+      from jsonb_array_elements(v_historical_batches) as hb(value)
+      where btrim(hb.value ->> 'id') = btrim(hs.value ->> 'batch_id')
+    )
+  ) then
+    raise exception 'Una fila histórica referencia un lote inexistente'
+      using errcode = '23503';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_historical_batches) as hb(value)
+    left join lateral (
+      select count(*) as row_count
+      from jsonb_array_elements(v_historical_sales) as hs(value)
+      where btrim(hs.value ->> 'batch_id') = btrim(hb.value ->> 'id')
+    ) as rows on true
+    where (hb.value ->> 'source_row_count')::integer <> rows.row_count
+  ) then
+    raise exception 'source_row_count histórico no coincide con sus filas'
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_historical_sales) as hs(value)
+    where coalesce(
+      nullif(btrim(hs.value ->> 'review_status'), ''),
+      'Por completar'
+    ) = 'Convertida'
+      and not exists (
+        select 1
+        from jsonb_array_elements(v_sales) as s(value)
+        where btrim(s.value ->> 'id') = btrim(hs.value ->> 'promoted_sale_id')
+          and btrim(s.value ->> 'client_id')
+            = btrim(hs.value ->> 'promoted_client_id')
+      )
+  ) then
+    raise exception 'Una histórica Convertida no coincide con su venta y cliente promovidos'
+      using errcode = '23503';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(v_historical_sales) as hs(value)
+    join jsonb_array_elements(v_sales) as s(value)
+      on lower(regexp_replace(btrim(s.value ->> 'project'), '[[:space:]]+', ' ', 'g'))
+        = lower(regexp_replace(btrim(hs.value ->> 'project'), '[[:space:]]+', ' ', 'g'))
+     and lower(regexp_replace(btrim(s.value ->> 'unit'), '[[:space:]]+', ' ', 'g'))
+        = lower(regexp_replace(btrim(hs.value ->> 'unit'), '[[:space:]]+', ' ', 'g'))
+    where coalesce(
+      nullif(btrim(hs.value ->> 'review_status'), ''),
+      'Por completar'
+    ) <> 'Convertida'
+      and coalesce(nullif(btrim(s.value ->> 'status'), ''), 'Reservada')
+        not in ('Desistió', 'Cambio')
+  ) then
+    raise exception 'Una histórica no convertida duplica una venta operativa activa'
+      using errcode = '23505';
+  end if;
+
   -- Contrato restore-only. El lock exclusivo se coordina con los triggers por
   -- sentencia de todas las mutaciones CRM y elimina la carrera entre esta prueba
   -- y la primera insercion. Se incluye la auditoria: un workspace utilizado antes
@@ -2785,6 +3928,10 @@ begin
        select 1 from public.crm_commission_installments where owner_id = v_owner
      )
      or exists (select 1 from public.crm_payments where owner_id = v_owner)
+     or exists (
+       select 1 from public.crm_historical_import_batches where owner_id = v_owner
+     )
+     or exists (select 1 from public.crm_historical_sales where owner_id = v_owner)
      or exists (select 1 from public.crm_audit_log where owner_id = v_owner) then
     raise exception using
       errcode = '55000',
@@ -3004,6 +4151,28 @@ begin
 
   -- Solo INSERT. Cualquier error revierte toda la llamada, incluidas las filas y
   -- sus entradas de auditoria; no existe ninguna ruta de merge con datos previos.
+  insert into public.crm_historical_import_batches (
+    owner_id,
+    id,
+    source_name,
+    source_sha256,
+    source_row_count,
+    created_at,
+    imported_at,
+    updated_at
+  )
+  select
+    v_owner,
+    btrim(x.value ->> 'id'),
+    btrim(x.value ->> 'source_name'),
+    lower(btrim(x.value ->> 'source_sha256')),
+    (x.value ->> 'source_row_count')::integer,
+    coalesce((x.value ->> 'created_at')::timestamptz, statement_timestamp()),
+    coalesce((x.value ->> 'imported_at')::timestamptz, statement_timestamp()),
+    coalesce((x.value ->> 'updated_at')::timestamptz, statement_timestamp())
+  from jsonb_array_elements(v_historical_batches) as x(value);
+  get diagnostics v_historical_batch_count = row_count;
+
   insert into public.crm_clients (
       owner_id, id, name, phone, email, source, stage, desired_zone, property_stage,
       budget, budget_currency, captured_at, notes, created_at, updated_at
@@ -3287,6 +4456,72 @@ begin
       message = 'La restauracion no puede dejar cobros Contabilizados en ventas Desistió/Cambio';
   end if;
 
+  -- Las filas históricas van al final: una Convertida puede referenciar al cliente
+  -- y a la venta operativa que acaban de restaurarse en esta misma transacción.
+  insert into public.crm_historical_sales (
+    owner_id,
+    id,
+    batch_id,
+    source_row,
+    developer,
+    project,
+    unit,
+    sale_date,
+    sale_price,
+    sale_currency,
+    seller_name,
+    buyer_name,
+    buyer_phone,
+    buyer_email,
+    delivery_date,
+    sale_status,
+    commission_rate,
+    commission_amount,
+    commission_currency,
+    commission_plan,
+    advance_percentage,
+    payments_confirmed,
+    review_status,
+    promoted_client_id,
+    promoted_sale_id,
+    promoted_at,
+    source_snapshot,
+    created_at,
+    updated_at
+  )
+  select
+    v_owner,
+    btrim(x.value ->> 'id'),
+    btrim(x.value ->> 'batch_id'),
+    (x.value ->> 'source_row')::integer,
+    btrim(x.value ->> 'developer'),
+    btrim(x.value ->> 'project'),
+    btrim(x.value ->> 'unit'),
+    (x.value ->> 'sale_date')::date,
+    (x.value ->> 'sale_price')::numeric,
+    upper(btrim(x.value ->> 'sale_currency')),
+    btrim(x.value ->> 'seller_name'),
+    btrim(x.value ->> 'buyer_name'),
+    nullif(btrim(x.value ->> 'buyer_phone'), ''),
+    lower(nullif(btrim(x.value ->> 'buyer_email'), '')),
+    (x.value ->> 'delivery_date')::date,
+    nullif(btrim(x.value ->> 'sale_status'), ''),
+    (x.value ->> 'commission_rate')::numeric,
+    (x.value ->> 'commission_amount')::numeric,
+    upper(nullif(btrim(x.value ->> 'commission_currency'), '')),
+    nullif(btrim(x.value ->> 'commission_plan'), ''),
+    (x.value ->> 'advance_percentage')::numeric,
+    coalesce((x.value ->> 'payments_confirmed')::boolean, false),
+    coalesce(nullif(btrim(x.value ->> 'review_status'), ''), 'Por completar'),
+    nullif(btrim(x.value ->> 'promoted_client_id'), ''),
+    nullif(btrim(x.value ->> 'promoted_sale_id'), ''),
+    (x.value ->> 'promoted_at')::timestamptz,
+    x.value -> 'source_snapshot',
+    coalesce((x.value ->> 'created_at')::timestamptz, clock_timestamp()),
+    coalesce((x.value ->> 'updated_at')::timestamptz, clock_timestamp())
+  from jsonb_array_elements(v_historical_sales) as x(value);
+  get diagnostics v_historical_sale_count = row_count;
+
   -- Se conservan estos nombres de contadores por compatibilidad del consumidor;
   -- en esta version todos representan filas insertadas, nunca actualizadas.
   return jsonb_build_object(
@@ -3294,7 +4529,9 @@ begin
     'clients_upserted', v_client_count,
     'sales_upserted', v_sale_count,
     'installments_upserted', v_installment_count,
-    'payments_upserted', v_payment_count
+    'payments_upserted', v_payment_count,
+    'historical_batches_upserted', v_historical_batch_count,
+    'historical_sales_upserted', v_historical_sale_count
   );
 end
 $function$;
@@ -3388,6 +4625,12 @@ begin
       errcode = '54000',
       message = 'crm_save_sale excede el limite de 5 MiB';
   end if;
+
+  -- Se coordina con crm_import_historical_sales para que la comprobación
+  -- proyecto+unidad no tenga una carrera entre staging y venta operativa.
+  perform pg_advisory_xact_lock_shared(
+    hashtextextended('crm_workspace:' || v_owner::text, 0)
+  );
 
   -- Contrato frontend -> PostgreSQL: installmentKind se normaliza a la columna
   -- installment_kind. snake_case se conserva para clientes SQL existentes.
@@ -3531,6 +4774,21 @@ begin
     'Reservada', 'Opción a compra firmada', 'Entregado', 'Desistió', 'Cambio'
   ) then
     raise exception 'Status de venta no valido: %', v_status;
+  end if;
+
+  if v_status not in ('Desistió', 'Cambio') and exists (
+    select 1
+    from public.crm_historical_sales as hs
+    where hs.owner_id = v_owner
+      and hs.review_status <> 'Convertida'
+      and lower(regexp_replace(btrim(hs.project), '[[:space:]]+', ' ', 'g'))
+        = lower(regexp_replace(v_project, '[[:space:]]+', ' ', 'g'))
+      and lower(regexp_replace(btrim(hs.unit), '[[:space:]]+', ' ', 'g'))
+        = lower(regexp_replace(v_unit, '[[:space:]]+', ' ', 'g'))
+  ) then
+    raise exception using
+      errcode = '23505',
+      message = 'La venta duplica proyecto y unidad de un histórico no convertido';
   end if;
 
   if v_sale_price is null or v_sale_price <= 0
@@ -4465,12 +5723,14 @@ revoke all on function public.crm_validate_payment_financials() from public, ano
 revoke all on function public.crm_write_audit() from public, anon, authenticated;
 revoke all on function public.crm_block_audit_mutation() from public, anon, authenticated;
 revoke all on function public.crm_lock_workspace_mutation() from public, anon, authenticated;
+revoke all on function public.crm_import_historical_sales(jsonb, jsonb) from public, anon, authenticated;
 revoke all on function public.crm_import_workspace(jsonb) from public, anon, authenticated;
 revoke all on function public.crm_save_sale(jsonb, jsonb) from public, anon, authenticated;
 revoke all on function public.crm_record_payment(jsonb) from public, anon, authenticated;
 revoke all on function public.crm_void_payment(text, text) from public, anon, authenticated;
 revoke all on function public.crm_workspace_health() from public, anon, authenticated;
 
+grant execute on function public.crm_import_historical_sales(jsonb, jsonb) to authenticated;
 grant execute on function public.crm_import_workspace(jsonb) to authenticated;
 grant execute on function public.crm_save_sale(jsonb, jsonb) to authenticated;
 grant execute on function public.crm_record_payment(jsonb) to authenticated;

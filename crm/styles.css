@@ -612,6 +612,76 @@ label { color: #344054; display: grid; font-size: 12px; font-weight: 700; gap: 6
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
 
+/* Historical sales staging */
+.historical-guidance {
+  align-items: flex-start;
+  background: #f8f6f0;
+  border: 1px solid #ded3b8;
+  border-radius: 12px;
+  display: flex;
+  gap: 13px;
+  margin-bottom: 18px;
+  padding: 15px 17px;
+}
+.historical-guidance-icon {
+  align-items: center;
+  background: var(--navy);
+  border-radius: 9px;
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+.historical-guidance-icon svg { height: 18px; width: 18px; }
+.historical-guidance strong { color: var(--navy); display: block; font-size: 13px; }
+.historical-guidance p { color: var(--text-secondary); font-size: 12px; line-height: 1.55; margin: 4px 0 0; }
+.historical-tools { flex: 1 1 620px; }
+.historical-tools .button { flex: 0 0 auto; min-height: 44px; }
+.historical-tools select { min-width: 150px; }
+.historical-table th:nth-child(3),
+.historical-table td:nth-child(3) { text-align: right; }
+#historicalOverviewVolume { font-size: clamp(20px, 2vw, 27px); }
+.historical-pending-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.historical-pending-item {
+  background: #fff7e6;
+  border: 1px solid #f0d39a;
+  border-radius: 999px;
+  color: #805b10;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 6px 8px;
+}
+.status-historical {
+  background: #f1f0ec;
+  border-color: #dedbd2;
+  color: #344054;
+}
+.historical-source-note { color: var(--text-secondary); font-size: 10px; }
+
+@media (max-width: 1180px) {
+  #view-historical .module-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .historical-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .historical-tools .search-input { min-width: 0; }
+}
+
+@media (max-width: 767px) {
+  .historical-guidance { padding: 13px; }
+  .historical-guidance p { font-size: 11px; }
+  .historical-tools { grid-template-columns: 1fr; }
+  .historical-tools .button,
+  .historical-tools select,
+  .historical-tools .search-input { min-width: 0; width: 100%; }
+}
+
+@media (max-width: 479px) {
+  #view-historical .module-overview article:nth-child(2) { grid-column: 1 / -1; }
+  #historicalOverviewVolume { font-size: 23px; }
+}
+
 /* Deal room visual direction */
 :root {
   --page-bg: #f1f0ec;

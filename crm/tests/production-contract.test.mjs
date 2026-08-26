@@ -8,14 +8,16 @@ const repoDir = fileURLToPath(new URL("../../", import.meta.url));
 const htmlPath = fileURLToPath(new URL("../index.html", import.meta.url));
 const appPath = fileURLToPath(new URL("../app.js", import.meta.url));
 const backendPath = fileURLToPath(new URL("../backend.js", import.meta.url));
+const historicalPath = fileURLToPath(new URL("../historical.js", import.meta.url));
 const mediaConfigPath = fileURLToPath(new URL("../../media-config.js", import.meta.url));
 const portalHtmlPath = fileURLToPath(new URL("../../portal/index.html", import.meta.url));
 const adminPath = fileURLToPath(new URL("../../admin.js", import.meta.url));
 
-const [html, app, backend, portalHtml, admin] = await Promise.all([
+const [html, app, backend, historical, portalHtml, admin] = await Promise.all([
   readFile(htmlPath, "utf8"),
   readFile(appPath, "utf8"),
   readFile(backendPath, "utf8"),
+  readFile(historicalPath, "utf8"),
   readFile(portalHtmlPath, "utf8"),
   readFile(adminPath, "utf8")
 ]);
@@ -58,7 +60,7 @@ function withoutComments(source) {
 }
 
 test("CRM JavaScript entry points parse without syntax errors", () => {
-  for (const path of [appPath, backendPath, mediaConfigPath]) {
+  for (const path of [appPath, backendPath, historicalPath, mediaConfigPath]) {
     const result = spawnSync(process.execPath, ["--check", path], {
       cwd: repoDir,
       encoding: "utf8"
@@ -237,6 +239,8 @@ test("backend names every workspace table and required RPC contract", () => {
     "crm_sales",
     "crm_commission_installments",
     "crm_payments",
+    "crm_historical_import_batches",
+    "crm_historical_sales",
     "crm_audit_log"
   ]) {
     assert.match(backend, new RegExp(`["']${table}["']`), `Missing table ${table}`);
@@ -246,7 +250,8 @@ test("backend names every workspace table and required RPC contract", () => {
     "crm_save_sale",
     "crm_record_payment",
     "crm_void_payment",
-    "crm_import_workspace"
+    "crm_import_workspace",
+    "crm_import_historical_sales"
   ]) {
     assert.match(
       backend,
@@ -258,11 +263,41 @@ test("backend names every workspace table and required RPC contract", () => {
   assert.match(backend, /p_installments:\s*mapToDatabase/);
   assert.match(backend, /p_payment:\s*mapToDatabase/);
   assert.match(backend, /p_payment_id:\s*safeId/);
+  assert.match(backend, /p_batch:\s*mapToDatabase/);
+  assert.match(backend, /p_rows:\s*mapToDatabase/);
   assert.match(backend, /p_reason:\s*safeReason/);
   assert.match(
     backend,
     /\.rpc\(["']crm_import_workspace["']\s*,\s*{\s*p_state\s*:/,
     "crm_import_workspace must use the SQL parameter name p_state"
+  );
+});
+
+test("historical LVP sales remain staged, visible in analytics, and excluded from collections", () => {
+  for (const id of [
+    "view-historical",
+    "historicalImportButton",
+    "historicalImportInput",
+    "historicalOverviewTotal",
+    "historicalOverviewVolume",
+    "historicalBody",
+    "exportHistoricalButton"
+  ]) {
+    assert.ok(html.includes(`id="${id}"`), `Missing #${id}`);
+  }
+  assert.match(html, /Estas operaciones cuentan en ventas, años, proyectos y volumen/);
+  assert.match(app, /no crearán comisiones ni cobros/i);
+  assert.match(app, /function activeHistoricalSales\(\)/);
+  assert.match(app, /function analyticsSales\(\)/);
+  assert.match(app, /function renderHistoricalSales\(\)/);
+  assert.match(app, /cloudBackend\.importHistoricalSales\(batch, rows\)/);
+  assert.match(historical, /MAX_ROWS\s*=\s*5000/);
+  assert.match(historical, /sourceSnapshot/);
+  assert.match(historical, /sha256/);
+  assert.doesNotMatch(
+    historical,
+    /buyer_name\s*:\s*["'][^"']+["']|buyer_email\s*:\s*["'][^"']+@/i,
+    "the parser must not embed buyer records or email addresses"
   );
 });
 

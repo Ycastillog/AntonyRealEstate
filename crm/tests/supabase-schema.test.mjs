@@ -56,6 +56,8 @@ test("production schema defines every CRM table and critical business column", s
   const tables = [
     "crm_clients",
     "crm_sales",
+    "crm_historical_import_batches",
+    "crm_historical_sales",
     "crm_commission_installments",
     "crm_payments",
     "crm_audit_log"
@@ -74,6 +76,14 @@ test("production schema defines every CRM table and critical business column", s
   assert.match(sql, /public\.crm_clients\s*\([\s\S]*?property_stage\s+text\s+not\s+null\s+default\s+'Sin definir'/i);
   assert.match(sql, /create\s+table[\s\S]*?public\.crm_sales\s*\([\s\S]*?cancel_reason\s+text/i);
   assert.match(sql, /public\.crm_sales\s*\([\s\S]*?delivery_date\s+date[\s\S]*?shared_sale\s+boolean\s+not\s+null[\s\S]*?external_agent\s+text/i);
+  assert.match(
+    sql,
+    /public\.crm_historical_import_batches\s*\([\s\S]*?source_sha256\s+text\s+not\s+null[\s\S]*?source_row_count\s+integer\s+not\s+null/i
+  );
+  assert.match(
+    sql,
+    /public\.crm_historical_sales\s*\([\s\S]*?batch_id\s+text\s+not\s+null[\s\S]*?buyer_phone\s+text[\s\S]*?review_status\s+text\s+not\s+null[\s\S]*?source_snapshot\s+jsonb\s+not\s+null/i
+  );
   assert.match(
     sql,
     /public\.crm_commission_installments[\s\S]*?sale_id\s+text\s+not\s+null[\s\S]*?installment_kind\s+text\s+not\s+null[\s\S]*?due_date\s+date\s+not\s+null/i
@@ -95,6 +105,8 @@ test("RLS policies isolate each CRM table by authenticated owner", sqlTestOption
   for (const table of [
     "crm_clients",
     "crm_sales",
+    "crm_historical_import_batches",
+    "crm_historical_sales",
     "crm_commission_installments",
     "crm_payments",
     "crm_audit_log"
@@ -125,6 +137,7 @@ test("SQL implements and grants every RPC required by the browser adapter", sqlT
     ["crm_save_sale", ["p_sale", "p_installments"]],
     ["crm_record_payment", ["p_payment"]],
     ["crm_void_payment", ["p_payment_id", "p_reason"]],
+    ["crm_import_historical_sales", ["p_batch", "p_rows"]],
     ["crm_import_workspace", ["p_state"]],
     ["crm_workspace_health", []]
   ]);
@@ -190,6 +203,14 @@ test("financial validation, audit, timestamp, and immutability triggers are inst
     "crm_sales_financial_biu",
     "crm_sales_touch_bu",
     "crm_sales_audit_aiud",
+    "crm_historical_batches_workspace_lock_bs",
+    "crm_historical_batches_identity_bu",
+    "crm_historical_batches_touch_bu",
+    "crm_historical_batches_audit_aiud",
+    "crm_historical_sales_workspace_lock_bs",
+    "crm_historical_sales_identity_bu",
+    "crm_historical_sales_touch_bu",
+    "crm_historical_sales_audit_aiud",
     "crm_installments_identity_bu",
     "crm_installments_financial_biu",
     "crm_installments_touch_bu",
@@ -301,7 +322,8 @@ test("closed CRM catalogs, LVP pairs, and legacy mappings are explicit", sqlTest
 
   for (const definition of [
     functionDefinition("crm_save_sale"),
-    functionDefinition("crm_import_workspace")
+    functionDefinition("crm_import_workspace"),
+    functionDefinition("crm_import_historical_sales")
   ]) {
     assert.ok(definition);
     for (const project of lvpProjects) {
@@ -328,6 +350,128 @@ test("closed CRM catalogs, LVP pairs, and legacy mappings are explicit", sqlTest
   assert.match(
     sql,
     /crm_sales_active_project_unit_uidx[\s\S]{0,220}where\s+status\s+not\s+in\s*\(\s*'Desistió'\s*,\s*'Cambio'\s*\)/i
+  );
+});
+
+test("historical staging is constrained, idempotent, and RPC-only", sqlTestOptions, () => {
+  const historicalImport = functionDefinition("crm_import_historical_sales");
+  const workspaceImport = functionDefinition("crm_import_workspace");
+  assert.ok(historicalImport);
+  assert.ok(workspaceImport);
+
+  assert.match(
+    sql,
+    /crm_historical_import_batches_owner_sha_key[\s\S]{0,100}unique\s*\(\s*owner_id\s*,\s*source_sha256\s*\)/i
+  );
+  assert.match(
+    sql,
+    /crm_historical_import_batches_sha_check[\s\S]{0,180}\^\[0-9a-f\]\{64\}\$/i
+  );
+  assert.match(
+    sql,
+    /crm_historical_sales_batch_fk[\s\S]{0,180}references\s+public\.crm_historical_import_batches\s*\(\s*owner_id\s*,\s*id\s*\)/i
+  );
+  assert.match(
+    sql,
+    /crm_historical_sales_review_status_check[\s\S]{0,180}'Por completar'[\s\S]{0,80}'Lista para convertir'[\s\S]{0,80}'Convertida'/i
+  );
+  assert.match(
+    sql,
+    /crm_historical_sales_advance_check[\s\S]{0,220}advance_percentage\s+is\s+not\s+null[\s\S]{0,100}advance_percentage\s*>\s*0/i
+  );
+  assert.match(
+    sql,
+    /crm_historical_sales_ready_check[\s\S]{0,320}sale_status\s+is\s+not\s+null[\s\S]{0,320}commission_plan\s*=\s*'single'[\s\S]{0,180}advance_percentage\s+is\s+not\s+null/i
+  );
+  assert.match(
+    sql,
+    /crm_historical_sales_open_project_unit_uidx[\s\S]{0,360}where\s+review_status\s*<>\s*'Convertida'/i
+  );
+  assert.match(
+    sql,
+    /crm_audit_log_table_check[\s\S]{0,220}'crm_historical_import_batches'[\s\S]{0,100}'crm_historical_sales'/i
+  );
+
+  assert.match(historicalImport, /security\s+definer/i);
+  assert.match(
+    historicalImport,
+    /set\s+search_path\s*=\s*pg_catalog\s*,\s*pg_temp/i
+  );
+  assert.match(historicalImport, /v_owner\s+uuid\s*:=\s*auth\.uid\(\)/i);
+  assert.match(historicalImport, /entre\s+1\s+y\s+5000\s+filas/i);
+  assert.match(historicalImport, /limite\s+de\s+10\s+MiB/i);
+  assert.match(historicalImport, /jsonb_object_keys\(p_batch\)/i);
+  assert.match(historicalImport, /jsonb_object_keys\(v_row\)/i);
+  assert.match(
+    historicalImport,
+    /p_batch\.id debe ser texto o null; la identidad final es server-side/i
+  );
+  assert.match(
+    historicalImport,
+    /review_status distinto de Por completar/i
+  );
+  assert.match(
+    historicalImport,
+    /regexp_replace\s*\(\s*btrim\s*\(\s*v_row\s*->>\s*'project'/i
+  );
+  assert.match(
+    historicalImport,
+    /when\s+'altos del este'\s+then\s+'Altos del este'[\s\S]*?when\s+'east town'\s+then\s+'East Town'/i
+  );
+  assert.match(
+    historicalImport,
+    /crm_historical_sales[\s\S]*?review_status\s*<>\s*'Convertida'[\s\S]*?duplica proyecto y unidad en staging histórico no convertido/i
+  );
+  assert.match(
+    historicalImport,
+    /crm_sales[\s\S]*?status\s+not\s+in\s*\(\s*'Desistió'\s*,\s*'Cambio'\s*\)[\s\S]*?duplica proyecto y unidad de una venta operativa activa/i
+  );
+  const saveSale = functionDefinition("crm_save_sale");
+  assert.ok(saveSale);
+  assert.match(
+    saveSale,
+    /pg_advisory_xact_lock_shared[\s\S]{0,180}crm_workspace:/i
+  );
+  assert.match(
+    saveSale,
+    /crm_historical_sales[\s\S]{0,500}histórico no convertido/i
+  );
+  assert.match(
+    historicalImport,
+    /'batchId'[\s\S]{0,180}'alreadyImported'\s*,\s*true[\s\S]*?'alreadyImported'\s*,\s*false/i
+  );
+
+  const rlsBlock = sql.match(/do\s+\$crm_rls\$([\s\S]*?)\$crm_rls\$\s*;/i)?.[1];
+  assert.ok(rlsBlock);
+  assert.match(rlsBlock, /grant\s+select\s+on\s+table/i);
+  assert.match(rlsBlock, /if\s+v_table\s*=\s*'crm_clients'/i);
+  assert.doesNotMatch(
+    rlsBlock,
+    /if\s+v_table\s*=\s*'crm_historical_(?:import_batches|sales)'[\s\S]{0,180}grant\s+(?:insert|update|delete)/i
+  );
+
+  for (const collection of ["historical_import_batches", "historical_sales"]) {
+    assert.match(
+      workspaceImport,
+      new RegExp(`p_state\\s*->\\s*'${collection}'`, "i")
+    );
+    assert.match(
+      workspaceImport,
+      new RegExp(`jsonb_array_elements\\(v_${collection.replace("historical_import_batches", "historical_batches")}\\)`, "i")
+    );
+  }
+  assert.match(
+    workspaceImport,
+    /insert\s+into\s+public\.crm_historical_import_batches/i
+  );
+  assert.match(workspaceImport, /insert\s+into\s+public\.crm_historical_sales/i);
+  assert.match(
+    workspaceImport,
+    /historical_batches_upserted[\s\S]{0,120}historical_sales_upserted/i
+  );
+  assert.match(
+    workspaceImport,
+    /crm_historical_import_batches\s+where\s+owner_id\s*=\s*v_owner[\s\S]{0,180}crm_historical_sales\s+where\s+owner_id\s*=\s*v_owner/i
   );
 });
 
@@ -573,6 +717,11 @@ test("transactional acceptance covers structural installment attacks", acceptanc
   assert.match(acceptanceSql, /Entregado acepto delivery_date futura/i);
   assert.match(acceptanceSql, /qa-e2e-single-payment/i);
   assert.match(acceptanceSql, /qa-e2e-payment-balance/i);
+  assert.match(acceptanceSql, /qa-historical-source\.tsv/i);
+  assert.match(acceptanceSql, /alreadyImported/i);
+  assert.match(acceptanceSql, /duplicado de staging histórico/i);
+  assert.match(acceptanceSql, /duplicado contra venta operativa/i);
+  assert.match(acceptanceSql, /authenticated pudo escribir directamente en staging histórico/i);
   assert.match(acceptanceSql, /set\s+constraints\s+all\s+immediate/i);
   assert.match(
     acceptanceSql,
