@@ -1408,6 +1408,18 @@ begin
     when 'single' then 'Pago único'
   end;
 
+  -- INSERT ... ON CONFLICT DO UPDATE ejecuta primero los triggers de INSERT.
+  -- Si el id ya existe, la rama UPDATE volverá a ejecutar esta función con OLD
+  -- y aplicará todas las validaciones financieras sin contar dos veces la cuota.
+  if tg_op = 'INSERT' and exists (
+    select 1
+    from public.crm_commission_installments as existing
+    where existing.owner_id = new.owner_id
+      and existing.id = new.id
+  ) then
+    return new;
+  end if;
+
   if tg_op = 'UPDATE' and (
     new.owner_id is distinct from old.owner_id
     or new.id is distinct from old.id
