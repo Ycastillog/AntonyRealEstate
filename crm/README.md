@@ -4,10 +4,11 @@ CRM privado para gestionar la operación comercial de Antony Real Estate: client
 
 ## Qué resuelve
 
-- Registra cada cliente con fecha de captación, contacto, origen, etapa, zona y presupuesto.
-- Registra cada venta con cliente, proyecto, unidad, desarrolladora, precio, moneda, fecha y estado.
+- Registra cada cliente con teléfono y correo obligatorios, fecha de captación, origen, etapa, zona y presupuesto.
+- Registra cada venta seleccionando `Constructora LVP` y luego uno de sus 14 proyectos autorizados, además de unidad, precio, moneda, fecha y estado.
 - Separa el precio vendido de la comisión acordada.
-- Divide una comisión en una o varias cuotas con fecha de vencimiento.
+- Divide la comisión en pago único o en avance y saldo con porcentaje editable; el saldo usa la fecha de entrega.
+- Busca por nombre, teléfono, correo, constructora, proyecto o unidad.
 - Muestra lo cobrado, lo pendiente, lo vencido y el próximo cobro.
 - Conserva los cobros anulados y el motivo; no borra la historia financiera.
 - Calcula clientes nuevos por período, ventas por año, ventas totales y comisiones por moneda.
@@ -44,14 +45,18 @@ El esquema completo está en `../supabase-production-setup.sql`.
 ## Reglas financieras
 
 - USD y DOP se presentan por separado; no se convierten ni consolidan automáticamente.
-- Una venta cuenta como cerrada cuando está `Contratada` o `Entregada`.
+- Una venta admite cobros cuando está `Opción a compra firmada` o `Entregado`.
 - Una venta `Reservada` no admite cobros de comisión.
-- La suma del plan de cuotas debe coincidir exactamente con la comisión.
+- En `Opción a compra firmada` solo se cobra el `Avance` o el `Pago único`; el `Saldo` se habilita únicamente en `Entregado`.
+- La fecha de un cobro de `Saldo` nunca puede ser anterior a la fecha real de entrega.
+- El plan válido es exactamente un `Pago único`, o un `Avance` y un `Saldo`; la suma debe coincidir con la comisión.
+- Cada cuota tiene un tipo estructural protegido y cada cobro debe apuntar a una cuota concreta.
+- `Entregado` exige una fecha real no futura. La fecha estimada y el saldo pueden reprogramarse mientras el saldo no haya sido cobrado.
 - Un cobro no puede ser futuro, anterior a la venta, usar otra moneda ni exceder el saldo.
 - Los reintentos del mismo cobro son idempotentes para evitar duplicados.
 - Un cobro contabilizado no se edita ni elimina: se anula con motivo y se registra uno nuevo.
-- Una venta con cobros activos no se puede cancelar hasta anularlos.
-- En producción, las operaciones se conservan para auditoría; se cancelan en vez de borrarse.
+- Una venta con cobros activos no puede pasar a `Desistió` o `Cambio` hasta anularlos.
+- En producción, las operaciones se conservan para auditoría; se marcan como `Desistió` o `Cambio` en vez de borrarse.
 
 ## Puesta en producción
 

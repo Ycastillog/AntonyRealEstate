@@ -59,15 +59,16 @@ Usar un usuario y datos ficticios:
 1. El sitio público abre sin errores de consola y solo muestra registros publicados.
 2. `/portal/` y `/crm/` rechazan a un visitante sin sesión.
 3. Un usuario autenticado crea un cliente de prueba.
-4. Crea una venta `Contratada` con dos cuotas que sumen exactamente la comisión.
-5. Registra un cobro parcial y comprueba dashboard, bandeja, dossier y reporte.
-6. Repite el mismo envío y confirma que no aparece un cobro duplicado.
-7. Intenta un sobrepago, fecha futura y moneda distinta; los tres deben fallar.
-8. Anula el cobro con motivo; debe quedar visible pero salir de los totales.
-9. Confirma que otro usuario autenticado no puede leer ni cambiar esos registros.
-10. Exporta CSV y un respaldo JSON; restaura el respaldo en un workspace vacío de prueba.
-11. Ejecuta también `crm/tests/supabase-acceptance.sql` en SQL Editor. El resultado final debe ser `{"status":"passed","qa_rows_remaining":0}`.
-12. Prueba teclado y diseño en 390 px, 768 px y escritorio.
+4. Crea una venta `Opción a compra firmada` con un plan `Avance` + `Saldo` que sume exactamente la comisión.
+5. Registra un cobro parcial del avance y confirma que el saldo permanece bloqueado.
+6. Marca la propiedad `Entregado` con una fecha real no futura, registra el saldo y comprueba dashboard, bandeja, dossier y reporte.
+7. Repite el mismo envío y confirma que no aparece un cobro duplicado.
+8. Intenta cobrar el saldo antes de la entrega o fecharlo antes de la entrega real, registrar un cobro sin cuota, usar una constructora fuera del catálogo, guardar una etapa de cliente inválida, sobrepagar, usar fecha futura o moneda distinta; todos deben fallar.
+9. Anula el cobro con motivo; debe quedar visible pero salir de los totales.
+10. Confirma que otro usuario autenticado no puede leer ni cambiar esos registros.
+11. Exporta CSV y un respaldo JSON; restaura el respaldo en un workspace vacío de prueba.
+12. Ejecuta también `crm/tests/supabase-acceptance.sql` en SQL Editor. El resultado final debe ser `{"status":"passed","qa_rows_remaining":0}`.
+13. Prueba teclado y diseño en 390 px, 768 px y escritorio.
 
 ## 5. Publicación
 

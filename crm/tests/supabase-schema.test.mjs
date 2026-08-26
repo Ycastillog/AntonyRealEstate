@@ -6,20 +6,27 @@ import { fileURLToPath } from "node:url";
 const sqlPath = fileURLToPath(
   new URL("../../supabase-production-setup.sql", import.meta.url)
 );
+const acceptancePath = fileURLToPath(
+  new URL("./supabase-acceptance.sql", import.meta.url)
+);
 
-async function readOptionalSql() {
+async function readOptionalFile(path) {
   try {
-    return await readFile(sqlPath, "utf8");
+    return await readFile(path, "utf8");
   } catch (error) {
     if (error?.code === "ENOENT") return null;
     throw error;
   }
 }
 
-const sql = await readOptionalSql();
+const sql = await readOptionalFile(sqlPath);
+const acceptanceSql = await readOptionalFile(acceptancePath);
 const sqlTestOptions = sql
   ? {}
   : { skip: "supabase-production-setup.sql is not present yet" };
+const acceptanceTestOptions = acceptanceSql
+  ? {}
+  : { skip: "crm/tests/supabase-acceptance.sql is not present yet" };
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -67,8 +74,15 @@ test("production schema defines every CRM table and critical business column", s
   assert.match(sql, /public\.crm_clients\s*\([\s\S]*?property_stage\s+text\s+not\s+null\s+default\s+'Sin definir'/i);
   assert.match(sql, /create\s+table[\s\S]*?public\.crm_sales\s*\([\s\S]*?cancel_reason\s+text/i);
   assert.match(sql, /public\.crm_sales\s*\([\s\S]*?delivery_date\s+date[\s\S]*?shared_sale\s+boolean\s+not\s+null[\s\S]*?external_agent\s+text/i);
-  assert.match(sql, /public\.crm_commission_installments[\s\S]*?sale_id\s+text\s+not\s+null[\s\S]*?due_date\s+date\s+not\s+null/i);
+  assert.match(
+    sql,
+    /public\.crm_commission_installments[\s\S]*?sale_id\s+text\s+not\s+null[\s\S]*?installment_kind\s+text\s+not\s+null[\s\S]*?due_date\s+date\s+not\s+null/i
+  );
   assert.match(sql, /public\.crm_payments[\s\S]*?installment_id\s+text[\s\S]*?void_reason\s+text/i);
+  assert.match(
+    sql,
+    /crm_payments_accounted_installment_check[\s\S]{0,180}status\s*<>\s*'Contabilizado'\s+or\s+installment_id\s+is\s+not\s+null/i
+  );
   assert.match(sql, /primary\s+key\s*\(owner_id\s*,\s*id\s*\)/i);
   assert.match(sql, /crm_clients_contact_check[\s\S]{0,220}phone[\s\S]{0,120}\band\b[\s\S]{0,120}email/i);
   assert.match(sql, /Cada cliente del respaldo debe incluir teléfono y correo electrónico/i);
@@ -185,16 +199,20 @@ test("financial validation, audit, timestamp, and immutability triggers are inst
     "crm_payments_touch_bu",
     "crm_payments_audit_aiud",
     "crm_audit_log_immutable_bud",
-    "crm_audit_log_immutable_bt"
+    "crm_audit_log_immutable_bt",
+    "crm_sales_plan_constraint_aiu",
+    "crm_installments_plan_constraint_aiud"
   ];
   const missing = triggers.filter(
-    (trigger) => !new RegExp(`create\\s+trigger\\s+${trigger}\\b`, "i").test(sql)
+    (trigger) =>
+      !new RegExp(`create\\s+(?:constraint\\s+)?trigger\\s+${trigger}\\b`, "i").test(sql)
   );
   assert.deepEqual(missing, [], `Missing triggers: ${missing.join(", ")}`);
 
   for (const functionName of [
     "crm_validate_sale_financials",
     "crm_validate_installment_financials",
+    "crm_validate_commission_plan",
     "crm_validate_payment_financials",
     "crm_write_audit",
     "crm_block_audit_mutation"
@@ -204,18 +222,293 @@ test("financial validation, audit, timestamp, and immutability triggers are inst
   assert.match(sql, /crm_audit_log\s+es\s+inmutable/i);
 });
 
-test("schema enforces cancellation, installment, payment, and audit invariants", sqlTestOptions, () => {
-  assert.match(sql, /status\s*=\s*'Cancelada'[\s\S]{0,180}cancel_reason/i);
-  assert.match(sql, /new\.status\s*=\s*'Cancelada'[\s\S]{0,220}requiere\s+cancel_reason/i);
+test("schema enforces terminal, installment, payment, and audit invariants", sqlTestOptions, () => {
+  assert.match(sql, /status\s+in\s*\(\s*'Desistió'\s*,\s*'Cambio'\s*\)[\s\S]{0,180}cancel_reason/i);
+  assert.match(sql, /new\.status\s+in\s*\(\s*'Desistió'\s*,\s*'Cambio'\s*\)[\s\S]{0,220}requiere\s+cancel_reason/i);
   assert.match(sql, /v_other_planned\s*\+\s*new\.amount\s*>\s*v_commission/i);
   assert.match(sql, /v_other_sale_payments\s*\+\s*new\.amount\s*>\s*v_commission/i);
   assert.match(sql, /insert\s+into\s+public\.crm_audit_log/i);
   assert.match(sql, /before\s+truncate\s+on\s+public\.crm_audit_log/i);
   assert.match(sql, /delivery_date\s+is\s+null\s+or\s+delivery_date\s+>=\s+sale_date/i);
   assert.match(sql, /shared_sale[\s\S]{0,180}external_agent[\s\S]{0,220}not\s+shared_sale/i);
-  assert.match(sql, /property_stage\s+in\s*\('Sin definir',\s*'Listo',\s*'En planos'/i);
+  assert.match(sql, /property_stage\s+in\s*\(\s*'Sin definir'\s*,\s*'Listo'\s*,\s*'En planos \/ En construcción'\s*,\s*'Indiferente'/i);
   assert.match(sql, /v_shared_sale\s*:=\s*coalesce\(\(p_sale\s*->>\s*'shared_sale'\)::boolean,\s*false\)/i);
   assert.match(sql, /delivery_date\s*=\s*v_delivery_date[\s\S]{0,100}external_agent\s*=\s*v_external_agent/i);
+});
+
+const lvpProjects = [
+  "Altos del este",
+  "Riviera 1",
+  "Riviera 2",
+  "Riviera 3",
+  "Riviera 4",
+  "Vistas del limonal",
+  "Epic Moon",
+  "Epic River",
+  "Doña Carmen",
+  "Las Margaritas",
+  "LP12",
+  "LP11",
+  "LP11 ABEY",
+  "East Town"
+];
+
+test("closed CRM catalogs, LVP pairs, and legacy mappings are explicit", sqlTestOptions, () => {
+  assert.match(
+    sql,
+    /desired_zone\s+is\s+null[\s\S]{0,260}'Santo Domingo Norte'[\s\S]{0,120}'Santo Domingo Este'[\s\S]{0,120}'Santo Domingo Oeste'[\s\S]{0,120}'Distrito Nacional'[\s\S]{0,120}'Punta Cana'[\s\S]{0,120}'El Cibao'[\s\S]{0,120}'El Sur'[\s\S]{0,120}'El Norte'/i
+  );
+  assert.match(sql, /when\s+'zona oriental'\s+then\s+'Santo Domingo Este'/i);
+  assert.match(
+    sql,
+    /client\.desired_zone\s+is\s+distinct\s+from\s+normalized\.desired_zone/i
+  );
+  assert.match(
+    sql,
+    /set\s+property_stage\s*=\s*'En planos \/ En construcción'[\s\S]{0,100}where\s+property_stage\s+in\s*\(\s*'En planos'\s*,\s*'En construcción'/i
+  );
+  assert.match(
+    sql,
+    /status\s+in\s*\(\s*'Reservada'\s*,\s*'Opción a compra firmada'\s*,\s*'Entregado'\s*,\s*'Desistió'\s*,\s*'Cambio'/i
+  );
+  assert.match(sql, /when\s+'Contratada'\s+then\s+'Opción a compra firmada'/i);
+  assert.match(sql, /when\s+'Entregada'\s+then\s+'Entregado'/i);
+  assert.match(
+    sql,
+    /crm_clients_stage_check[\s\S]{0,220}stage\s+in\s*\(\s*'Nuevo'\s*,\s*'Calificado'\s*,\s*'En seguimiento'\s*,\s*'Comprador'\s*,\s*'Inactivo'/i
+  );
+  assert.doesNotMatch(sql, /when\s+'Cancelada'\s+then\s+'Desistió'/i);
+  assert.match(
+    sql,
+    /where\s+status\s*=\s*'Cancelada'[\s\S]{0,260}requieren revisión manual/i
+  );
+
+  const pairConstraint = sql.match(
+    /constraint\s+crm_sales_developer_project_check\s+check\s*\(([\s\S]*?)\),\s*constraint\s+crm_sales_status_check/i
+  )?.[1];
+  assert.ok(pairConstraint, "Missing Constructora LVP/project pair constraint");
+  const firstProjectList = pairConstraint.match(/project\s+in\s*\(([\s\S]*?)\)/i)?.[1];
+  assert.ok(firstProjectList, "Missing exact LVP project list");
+  assert.deepEqual(
+    [...firstProjectList.matchAll(/'([^']+)'/g)].map((match) => match[1]),
+    lvpProjects
+  );
+  assert.match(
+    pairConstraint,
+    /developer\s+is\s+not\s+distinct\s+from\s+'Constructora LVP'/i
+  );
+  assert.doesNotMatch(pairConstraint, /\bor\s*\(/i);
+
+  for (const definition of [
+    functionDefinition("crm_save_sale"),
+    functionDefinition("crm_import_workspace")
+  ]) {
+    assert.ok(definition);
+    for (const project of lvpProjects) {
+      assert.match(definition, new RegExp(`'${escapeRegExp(project)}'`, "i"));
+    }
+    assert.match(
+      definition,
+      /Constructora LVP[\s\S]{0,100}proyecto(?:s)? autorizado(?:s)?/i
+    );
+  }
+  assert.match(
+    functionDefinition("crm_import_workspace"),
+    /case\s+lower\s*\(\s*btrim\s*\([^)]*developer[^)]*\)\s*\)[\s\S]{0,120}when\s+'lvp'\s+then\s+'Constructora LVP'/i
+  );
+  assert.match(
+    sql,
+    /set\s+project\s*=\s*catalog\.canonical_project\s*,\s*developer\s*=\s*'Constructora LVP'/i
+  );
+  assert.doesNotMatch(
+    sql,
+    /set\s+project\s*=\s*catalog\.canonical_project\s*,\s*developer\s+is\s+not\s+distinct/i
+  );
+
+  assert.match(
+    sql,
+    /crm_sales_active_project_unit_uidx[\s\S]{0,220}where\s+status\s+not\s+in\s*\(\s*'Desistió'\s*,\s*'Cambio'\s*\)/i
+  );
+});
+
+test("installment_kind is structural, immutable, migrated safely, and totals 100%", sqlTestOptions, () => {
+  const installmentTrigger = functionDefinition("crm_validate_installment_financials");
+  const planTrigger = functionDefinition("crm_validate_commission_plan");
+  const saveSale = functionDefinition("crm_save_sale");
+  const importWorkspace = functionDefinition("crm_import_workspace");
+  const health = functionDefinition("crm_workspace_health");
+
+  assert.ok(installmentTrigger);
+  assert.ok(planTrigger);
+  assert.ok(saveSale);
+  assert.ok(importWorkspace);
+  assert.ok(health);
+  assert.match(
+    sql,
+    /crm_commission_installments_kind_check[\s\S]{0,260}installment_kind\s*=\s*'single'[\s\S]{0,80}sequence\s*=\s*1[\s\S]{0,140}installment_kind\s*=\s*'advance'[\s\S]{0,80}sequence\s*=\s*1[\s\S]{0,140}installment_kind\s*=\s*'balance'[\s\S]{0,80}sequence\s*=\s*2/i
+  );
+  assert.match(
+    sql,
+    /crm_commission_installments_label_kind_check[\s\S]{0,260}installment_kind\s*=\s*'advance'\s+and\s+label\s*=\s*'Avance'[\s\S]{0,120}installment_kind\s*=\s*'balance'\s+and\s+label\s*=\s*'Saldo'[\s\S]{0,120}installment_kind\s*=\s*'single'\s+and\s+label\s*=\s*'Pago único'/i
+  );
+  assert.match(
+    sql,
+    /alter\s+column\s+installment_kind\s+set\s+not\s+null/i
+  );
+  assert.match(
+    sql,
+    /count\(i\.id\)\s+not\s+in\s*\(\s*1\s*,\s*2\s*\)[\s\S]{0,600}planes de comisión con más de 2 cuotas o secuencias ambiguas/i
+  );
+  assert.match(
+    sql,
+    /set\s+installment_kind\s*=\s*case[\s\S]{0,240}plan_count\s*=\s*1\s+then\s+'single'[\s\S]{0,180}sequence\s*=\s*1\s+then\s+'advance'[\s\S]{0,180}sequence\s*=\s*2\s+then\s+'balance'/i
+  );
+  assert.match(
+    installmentTrigger,
+    /new\.installment_kind\s+is\s+distinct\s+from\s+old\.installment_kind[\s\S]{0,180}inmutables/i
+  );
+  assert.match(
+    installmentTrigger,
+    /new\.label\s*:=\s*case\s+new\.installment_kind[\s\S]{0,100}'advance'\s+then\s+'Avance'[\s\S]{0,100}'balance'\s+then\s+'Saldo'[\s\S]{0,100}'single'\s+then\s+'Pago único'/i
+  );
+  assert.match(
+    planTrigger,
+    /v_plan_total\s*<>\s*v_commission[\s\S]*?v_plan_count\s*=\s*1[\s\S]*?v_single_count\s*=\s*1[\s\S]*?v_plan_count\s*=\s*2[\s\S]*?v_advance_count\s*=\s*1[\s\S]*?v_balance_count\s*=\s*1/i
+  );
+  assert.doesNotMatch(planTrigger, /\blabel\b/i);
+  assert.match(
+    sql,
+    /create\s+constraint\s+trigger\s+crm_sales_plan_constraint_aiu[\s\S]{0,180}deferrable\s+initially\s+deferred/i
+  );
+  assert.match(
+    sql,
+    /create\s+constraint\s+trigger\s+crm_installments_plan_constraint_aiud[\s\S]{0,180}deferrable\s+initially\s+deferred/i
+  );
+  assert.match(saveSale, /El plan requiere exactamente single o advance\(1\)\+balance\(2\)/i);
+  assert.match(importWorkspace, /no se autoriza ni se migra a partir de label/i);
+  for (const definition of [saveSale, importWorkspace]) {
+    assert.match(
+      definition,
+      /installmentKind[\s\S]{0,180}installment_kind[\s\S]{0,240}no pueden contradecirse/i
+    );
+    assert.match(
+      definition,
+      /'installment_kind'\s*,\s*coalesce\s*\([\s\S]{0,180}'installmentKind'[\s\S]{0,180}'installment_kind'/i
+    );
+  }
+  assert.match(
+    sql,
+    /label\s*=\s*case[\s\S]{0,180}plan_count\s*=\s*1\s+then\s+'Pago único'[\s\S]{0,180}sequence\s*=\s*1\s+then\s+'Avance'[\s\S]{0,180}sequence\s*=\s*2\s+then\s+'Saldo'/i
+  );
+  assert.match(
+    sql,
+    /crm_commission_installments_amount_check[\s\S]{0,160}amount\s*>\s*0/i
+  );
+  assert.match(
+    health,
+    /coalesce\s*\(\s*i\.single_count[\s\S]*?coalesce\s*\(\s*i\.advance_count[\s\S]*?coalesce\s*\(\s*i\.balance_count[\s\S]*?as\s+plan_matches/i
+  );
+  assert.match(
+    health,
+    /ci\.installment_kind\s*=\s*'single'[\s\S]*?ci\.installment_kind\s*=\s*'advance'[\s\S]*?ci\.installment_kind\s*=\s*'balance'/i
+  );
+});
+
+test("commission collection is installment-bound and balance unlocks only after Entregado", sqlTestOptions, () => {
+  const saleTrigger = functionDefinition("crm_validate_sale_financials");
+  const paymentTrigger = functionDefinition("crm_validate_payment_financials");
+  const recordPayment = functionDefinition("crm_record_payment");
+
+  assert.ok(saleTrigger);
+  assert.ok(paymentTrigger);
+  assert.ok(recordPayment);
+
+  for (const definition of [paymentTrigger, recordPayment]) {
+    assert.match(
+      definition,
+      /not\s+in\s*\(\s*'Opción a compra firmada'\s*,\s*'Entregado'\s*\)/i
+    );
+    assert.match(definition, /installment_id\s+is\s+null[\s\S]{0,180}requiere installment_id/i);
+    assert.match(
+      definition,
+      /select\s+i\.amount\s*,\s*i\.installment_kind[\s\S]*?Opción a compra firmada[\s\S]*?installment_kind\s+not\s+in\s*\(\s*'advance'\s*,\s*'single'\s*\)/i
+    );
+    assert.match(definition, /balance requiere Entregado/i);
+    assert.match(
+      definition,
+      /installment_kind\s*=\s*'balance'[\s\S]{0,180}payment_date[\s\S]{0,120}delivery_date/i
+    );
+    assert.doesNotMatch(definition, /\blabel\b/i);
+  }
+  assert.match(
+    functionDefinition("crm_import_workspace"),
+    /saldo del respaldo tiene fecha anterior a la entrega/i
+  );
+
+  assert.match(
+    paymentTrigger,
+    /v_other_installment_payments\s*\+\s*new\.amount\s*>\s*v_installment_amount/i
+  );
+  assert.match(
+    recordPayment,
+    /v_installment_accounted\s*\+\s*v_amount\s*>\s*v_installment_amount/i
+  );
+  assert.match(
+    saleTrigger,
+    /new\.status\s*=\s*'Opción a compra firmada'[\s\S]*?p\.status\s*=\s*'Contabilizado'[\s\S]*?i\.installment_kind\s+not\s+in\s*\(\s*'advance'\s*,\s*'single'\s*\)/i
+  );
+});
+
+test("delivery and unpaid balance dates remain reschedulable after advance", sqlTestOptions, () => {
+  const saleTrigger = functionDefinition("crm_validate_sale_financials");
+  const installmentTrigger = functionDefinition("crm_validate_installment_financials");
+  const paymentTrigger = functionDefinition("crm_validate_payment_financials");
+  const saveSale = functionDefinition("crm_save_sale");
+  const importWorkspace = functionDefinition("crm_import_workspace");
+
+  assert.ok(saleTrigger);
+  assert.ok(installmentTrigger);
+  assert.ok(paymentTrigger);
+  assert.ok(saveSale);
+  assert.ok(importWorkspace);
+
+  for (const definition of [saleTrigger, saveSale, importWorkspace]) {
+    assert.match(definition, /Entregado[\s\S]{0,260}delivery_date[\s\S]{0,180}(?:no futura|futura)/i);
+  }
+  assert.match(
+    importWorkspace,
+    /where\s*\(x\.value\s*->>\s*'status'\)\s*=\s*'Entregado'[\s\S]{0,220}delivery_date/i
+  );
+  assert.doesNotMatch(
+    importWorkspace,
+    /plan_count\s*=\s*2[\s\S]{0,180}delivery_date\s+is\s+null/i
+  );
+  assert.doesNotMatch(saveSale, /v_delivery_date\s*:=\s*coalesce\s*\(/i);
+  assert.match(saveSale, /delivery_date\s*=\s*v_delivery_date/i);
+  assert.match(
+    saveSale,
+    /v_existing\.sale_price\s+is\s+distinct\s+from\s+v_sale_price[\s\S]*?v_existing\.commission_currency\s+is\s+distinct\s+from\s+v_commission_currency/i
+  );
+  assert.match(
+    saleTrigger,
+    /v_accounted\s*>\s*0[\s\S]*?new\.sale_price\s+is\s+distinct\s+from\s+old\.sale_price[\s\S]*?new\.commission_currency\s+is\s+distinct\s+from\s+old\.commission_currency/i
+  );
+  assert.match(
+    saveSale,
+    /i\.installment_kind\s*=\s*'balance'[\s\S]*?p\.installment_id\s*=\s*i\.id[\s\S]*?p\.installment_id\s+is\s+null/i
+  );
+  assert.match(
+    installmentTrigger,
+    /new\.due_date\s+is\s+distinct\s+from\s+old\.due_date[\s\S]*?old\.installment_kind\s*<>\s*'balance'[\s\S]*?v_accounted\s*>\s*0[\s\S]*?v_unallocated_accounted\s*>\s*0/i
+  );
+  assert.match(
+    installmentTrigger,
+    /new\.label\s+is\s+distinct\s+from\s+old\.label[\s\S]*?new\.sequence[\s\S]*?new\.amount[\s\S]*?estructura y los montos del plan no cambian/i
+  );
+  assert.match(
+    paymentTrigger,
+    /new\.installment_id\s+is\s+distinct\s+from\s+old\.installment_id[\s\S]{0,180}no cambia mientras un cobro esta Contabilizado/i
+  );
 });
 
 test("production migration is self-contained and portal writes require an admin role", sqlTestOptions, () => {
@@ -228,7 +521,7 @@ test("production migration is self-contained and portal writes require an admin 
   assert.match(sql, /auth\.jwt\(\)[\s\S]{0,100}app_metadata[\s\S]{0,80}role[\s\S]{0,40}admin/i);
   assert.match(sql, /name\s+like\s*\(\(select\s+auth\.uid\(\)\)::text\s*\|\|\s*'\/%'\)/i);
   assert.match(sql, /crm_import_workspace\s+solo\s+restaura\s+en\s+un\s+workspace\s+completamente\s+vacio/i);
-  assert.match(sql, /case\s+when\s+v_status\s*=\s*'Cancelada'\s+then\s+'Reservada'/i);
+  assert.match(sql, /case\s+when\s+v_status\s+in\s*\(\s*'Desistió'\s*,\s*'Cambio'\s*\)\s+then\s+'Reservada'/i);
 });
 
 test("database currency and post-payment plan contracts match the UI", sqlTestOptions, () => {
@@ -237,7 +530,7 @@ test("database currency and post-payment plan contracts match the UI", sqlTestOp
   assert.match(sql, /currency\s+in\s*\('USD'\s*,\s*'DOP'\)/i);
   assert.match(
     sql,
-    /El contrato financiero y su plan no cambian despues de contabilizar cobros/i
+    /El contrato financiero y la estructura del plan no cambian despues de contabilizar cobros/i
   );
   assert.match(
     sql,
@@ -255,5 +548,30 @@ test("database currency and post-payment plan contracts match the UI", sqlTestOp
   assert.match(
     sql,
     /amount::text\s+not\s+in\s*\('NaN',\s*'Infinity',\s*'-Infinity'\)/i
+  );
+});
+
+test("transactional acceptance covers structural installment attacks", acceptanceTestOptions, () => {
+  assert.match(acceptanceSql, /'Santo Domingo Este'/i);
+  assert.match(acceptanceSql, /'En planos \/ En construcción'/i);
+  assert.match(acceptanceSql, /'developer'\s*,\s*'Constructora LVP'/i);
+  assert.match(acceptanceSql, /'project'\s*,\s*'Riviera 2'/i);
+  assert.match(
+    acceptanceSql,
+    /'installmentKind'\s*,\s*'advance'[\s\S]{0,120}'amount'\s*,\s*12000[\s\S]*?'installmentKind'\s*,\s*'balance'[\s\S]{0,120}'amount'\s*,\s*138000/i
+  );
+  assert.match(acceptanceSql, /qa-e2e-advance-100-sale/i);
+  assert.match(acceptanceSql, /qa-e2e-balance-before-delivery/i);
+  assert.match(acceptanceSql, /qa-e2e-retro-balance-payment/i);
+  assert.match(acceptanceSql, /qa-e2e-unknown-developer-sale/i);
+  assert.match(acceptanceSql, /qa-e2e-invalid-stage-client/i);
+  assert.match(acceptanceSql, /qa-e2e-without-installment/i);
+  assert.match(acceptanceSql, /Entregado acepto delivery_date futura/i);
+  assert.match(acceptanceSql, /qa-e2e-single-payment/i);
+  assert.match(acceptanceSql, /qa-e2e-payment-balance/i);
+  assert.match(acceptanceSql, /set\s+constraints\s+all\s+immediate/i);
+  assert.match(
+    acceptanceSql,
+    /installment_kind\s*=\s*'balance'[\s\S]{0,100}label\s*=\s*'Saldo'/i
   );
 });

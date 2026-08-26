@@ -284,8 +284,11 @@ test("production workflows retain capture date, cancellation reason, installment
 
   assert.match(app, /const capturedAt = String\(data\.get\("capturedAt"\)/);
   assert.match(app, /capturedAt > today\(\)/);
-  assert.match(app, /saleStatus === "Cancelada" && !cancelReason/);
-  assert.match(app, /form\.elements\.cancelReason\.required = cancelled/);
+  assert.match(
+    app,
+    /TERMINAL_SALE_STATUSES\.includes\(saleStatus\) && !cancelReason/
+  );
+  assert.match(app, /form\.elements\.cancelReason\.required = terminal/);
   assert.match(app, /function readInstallmentPlan\(/);
   assert.match(app, /function renderSelectedCommissionPlan\(/);
   assert.match(app, /label: "Avance"/);
@@ -302,11 +305,30 @@ test("production workflows retain capture date, cancellation reason, installment
 });
 
 test("client feedback fields and collection visibility remain wired end to end", () => {
-  assert.match(html, /name="propertyStage"[\s\S]{0,260}>Listo para entrega</);
+  assert.match(
+    html,
+    /name="propertyStage"[\s\S]{0,320}>En planos \/ En construcción</
+  );
+  for (const zone of [
+    "Santo Domingo Norte",
+    "Santo Domingo Este",
+    "Santo Domingo Oeste",
+    "Distrito Nacional",
+    "Punta Cana",
+    "El Cibao",
+    "El Sur",
+    "El Norte"
+  ]) {
+    assert.match(html, new RegExp(`<option value="${zone}">${zone}</option>`));
+  }
   assert.match(html, /name="deliveryDate"[^>]+type="date"/);
   assert.match(html, /name="sharedSale"[^>]+type="checkbox"/);
   assert.match(html, /name="externalAgent"[^>]+maxlength="200"/);
-  assert.match(html, /Buscar cliente, proyecto o unidad/);
+  assert.ok(tagWithId(html, "strong", "collectionOverdueValue"));
+  assert.ok(tagWithId(html, "strong", "collectionPendingValue"));
+  assert.ok(tagWithId(html, "strong", "collectionReceivedValue"));
+  assert.match(html, /Buscar nombre, teléfono, correo, proyecto o unidad/);
+  assert.match(app, /client\?\.phone[\s\S]{0,80}client\?\.email/);
   assert.match(html, /data-collection-filter="all"[^>]+aria-pressed="true"/);
 
   assert.match(app, /let collectionFilter = "all"/);
@@ -318,17 +340,42 @@ test("client feedback fields and collection visibility remain wired end to end",
   assert.match(app, /sharedSale && !externalAgent/);
   assert.match(app, /deliveryDate < saleDate/);
   assert.match(app, /externalAgent: sharedSale \? externalAgent : ""/);
+  assert.match(app, /function syncBalanceDueDateWithDelivery\(/);
+  assert.match(app, /const VALID_INSTALLMENT_KINDS = \["advance", "balance", "single"\]/);
+  assert.match(
+    app,
+    /isDeliveredSale\(sale\)[\s\S]{0,120}\["advance", "single"\]\.includes\(installment\.installmentKind\)/
+  );
+  assert.match(app, /installmentId: nextInstallment\.id/);
+  assert.match(app, /payment\.installmentId[\s\S]{0,180}toCents\(payment\.amount\)/);
+  assert.match(
+    app,
+    /nextInstallment\.installmentKind\s*===\s*"balance"[\s\S]{0,160}paymentDate\s*<\s*sale\.deliveryDate/
+  );
+  assert.match(
+    app,
+    /installment\.installmentKind\s*===\s*"balance"[\s\S]{0,180}payment\.paymentDate\s*<\s*sale\.deliveryDate/
+  );
+  assert.doesNotMatch(app, /saleStatus === "Entregado" && !deliveryDate\) \{\s*deliveryDate = today\(\)/);
+  assert.match(app, /collectiblePendingForSaleCents\(sale/);
 });
 
 test("required contacts, LVP catalog, safe backup, and reserved receivables stay enforced", () => {
   assert.ok(tagWithId(html, "form", "clientForm"));
   assert.match(html, /name="phone"[^>]+required/);
   assert.match(html, /name="email"[^>]+required/);
-  assert.match(html, /id="developerCatalog"[\s\S]{0,120}Constructora LVP/);
-  assert.match(app, /"Altos del Este"/);
+  assert.match(html, /id="saleDeveloper"[\s\S]{0,160}Constructora LVP/);
+  assert.ok(
+    html.indexOf('id="saleDeveloper"') < html.indexOf('id="saleProject"'),
+    "Constructora must appear before Proyecto"
+  );
+  assert.match(html, /id="saleProject"[^>]+disabled/);
+  assert.match(app, /"Altos del este"/);
   assert.match(app, /"Riviera 4"/);
   assert.match(app, /"LP11 ABEY"/);
   assert.match(app, /"East Town"/);
+  assert.match(app, /function updateProjectCatalog\(/);
+  assert.match(app, /DEVELOPER_PROJECTS\[selectedDeveloper\]/);
   assert.match(app, /const pending = activeSales\.reduce/);
   assert.match(app, /const pendingSales = activeSales/);
   assert.match(app, /const backupData = \{[\s\S]{0,180}payments: state\.payments/);

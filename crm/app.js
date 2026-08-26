@@ -1,21 +1,44 @@
-const STORAGE_KEY = "antony-crm-local-v1";
-const APP_VERSION = 5;
+const STORAGE_KEY = "antony-crm-local-v2";
+const APP_VERSION = 7;
 const MAX_AUDIT_ENTRIES = 500;
 const VALID_CURRENCIES = ["USD", "DOP"];
 const VALID_CLIENT_STAGES = ["Nuevo", "Calificado", "En seguimiento", "Comprador", "Inactivo"];
-const VALID_PROPERTY_STAGES = ["Sin definir", "Listo", "En planos", "En construcción", "Indiferente"];
-const VALID_SALE_STATUSES = ["Reservada", "Contratada", "Entregada", "Cancelada"];
-const CLOSED_SALE_STATUSES = ["Contratada", "Entregada"];
+const VALID_DESIRED_ZONES = [
+  "Santo Domingo Norte",
+  "Santo Domingo Este",
+  "Santo Domingo Oeste",
+  "Distrito Nacional",
+  "Punta Cana",
+  "El Cibao",
+  "El Sur",
+  "El Norte"
+];
+const VALID_PROPERTY_STAGES = [
+  "Sin definir",
+  "Listo",
+  "En planos / En construcción",
+  "Indiferente"
+];
+const VALID_SALE_STATUSES = [
+  "Reservada",
+  "Opción a compra firmada",
+  "Entregado",
+  "Desistió",
+  "Cambio"
+];
+const CLOSED_SALE_STATUSES = ["Opción a compra firmada", "Entregado"];
+const TERMINAL_SALE_STATUSES = ["Desistió", "Cambio"];
+const VALID_INSTALLMENT_KINDS = ["advance", "balance", "single"];
 const VALID_PAYMENT_METHODS = ["Transferencia", "Efectivo", "Cheque", "Otro"];
 const VALID_PAYMENT_STATUSES = ["Contabilizado", "Anulado", "Revertido"];
 const DEVELOPER_PROJECTS = Object.freeze({
   "Constructora LVP": Object.freeze([
-    "Altos del Este",
+    "Altos del este",
     "Riviera 1",
     "Riviera 2",
     "Riviera 3",
     "Riviera 4",
-    "Vistas del Limonal",
+    "Vistas del limonal",
     "Epic Moon",
     "Epic River",
     "Doña Carmen",
@@ -53,7 +76,7 @@ const DEMO_DATA = {
       source: "WhatsApp",
       stage: "En seguimiento",
       desiredZone: "Punta Cana",
-      propertyStage: "En planos",
+      propertyStage: "En planos / En construcción",
       budget: 200000,
       budgetCurrency: "USD",
       notes: "Interesada en una propiedad para inversión.",
@@ -68,7 +91,7 @@ const DEMO_DATA = {
       email: "carlos.demo@example.com",
       source: "Referido",
       stage: "Comprador",
-      desiredZone: "Santo Domingo",
+      desiredZone: "Distrito Nacional",
       propertyStage: "Listo",
       budget: 10000000,
       budgetCurrency: "DOP",
@@ -82,10 +105,10 @@ const DEMO_DATA = {
     {
       id: "sale-1",
       clientId: "client-1",
-      project: "Mirador Sur",
+      project: "Riviera 1",
       unit: "A-302",
-      developer: "Caribe Development",
-      saleStatus: "Contratada",
+      developer: "Constructora LVP",
+      saleStatus: "Opción a compra firmada",
       salePrice: 185000,
       saleCurrency: "USD",
       saleDate: "2026-07-18",
@@ -105,10 +128,10 @@ const DEMO_DATA = {
     {
       id: "sale-2",
       clientId: "client-2",
-      project: "Colinas de los Ríos",
+      project: "Altos del este",
       unit: "B-204",
-      developer: "Grupo Horizonte",
-      saleStatus: "Contratada",
+      developer: "Constructora LVP",
+      saleStatus: "Opción a compra firmada",
       salePrice: 9500000,
       saleCurrency: "DOP",
       saleDate: "2026-08-03",
@@ -131,7 +154,8 @@ const DEMO_DATA = {
       id: "installment-1",
       saleId: "sale-1",
       sequence: 1,
-      label: "Cuota única",
+      installmentKind: "single",
+      label: "Pago único",
       amount: 5550,
       dueDate: "2026-08-20",
       notes: "",
@@ -142,6 +166,7 @@ const DEMO_DATA = {
       id: "installment-2a",
       saleId: "sale-2",
       sequence: 1,
+      installmentKind: "advance",
       label: "Avance",
       amount: 142500,
       dueDate: "2026-08-30",
@@ -153,6 +178,7 @@ const DEMO_DATA = {
       id: "installment-2b",
       saleId: "sale-2",
       sequence: 2,
+      installmentKind: "balance",
       label: "Saldo",
       amount: 142500,
       dueDate: "2026-09-30",
@@ -165,6 +191,7 @@ const DEMO_DATA = {
     {
       id: "payment-1",
       saleId: "sale-1",
+      installmentId: "installment-1",
       amount: 3000,
       currency: "USD",
       paymentDate: "2026-08-01",
@@ -178,6 +205,7 @@ const DEMO_DATA = {
     {
       id: "payment-2",
       saleId: "sale-2",
+      installmentId: "installment-2a",
       amount: 100000,
       currency: "DOP",
       paymentDate: "2026-08-12",
@@ -292,34 +320,58 @@ function normalizeState(value) {
     throw new Error("El archivo no contiene la estructura esperada.");
   }
 
-  const clients = value.clients.map((client, index) => ({
-    id: String(client.id || "client-import-" + index),
-    name: String(client.name || "").trim(),
-    phone: String(client.phone || "").trim(),
-    email: String(client.email || "").trim(),
-    source: String(client.source || "Otro"),
-    stage: String(client.stage || "Nuevo"),
-    desiredZone: String(client.desiredZone || "").trim(),
-    propertyStage: VALID_PROPERTY_STAGES.includes(String(client.propertyStage || ""))
-      ? String(client.propertyStage)
-      : "Sin definir",
-    budget: Math.max(numberValue(client.budget), 0),
-    budgetCurrency: normalizeCurrency(client.budgetCurrency, "USD"),
-    notes: String(client.notes || "").trim(),
-    capturedAt: dateOnly(client.capturedAt || client.createdAt, today()),
-    createdAt: dateOnly(client.createdAt, today()),
-    updatedAt: dateOnly(client.updatedAt || client.createdAt, today())
-  }));
+  const clients = value.clients.map((client, index) => {
+    const id = String(client.id || "client-import-" + index);
+    const rawZone = String(client.desiredZone || "").trim();
+    const desiredZone = rawZone ? normalizeDesiredZone(rawZone) : "";
+    const rawPropertyStage = String(client.propertyStage || "Sin definir").trim();
+    const propertyStage = canonicalPropertyStage(rawPropertyStage);
+    if (rawZone && !desiredZone) {
+      throw new Error("Zona de interés desconocida en el cliente " + id + ": " + rawZone);
+    }
+    if (!propertyStage) {
+      throw new Error("Etapa de inmueble desconocida en el cliente " + id + ": " + rawPropertyStage);
+    }
+    return {
+      id,
+      name: String(client.name || "").trim(),
+      phone: String(client.phone || "").trim(),
+      email: String(client.email || "").trim(),
+      source: String(client.source || "Otro"),
+      stage: String(client.stage || "Nuevo"),
+      desiredZone,
+      propertyStage,
+      budget: Math.max(numberValue(client.budget), 0),
+      budgetCurrency: normalizeCurrency(client.budgetCurrency, "USD"),
+      notes: String(client.notes || "").trim(),
+      capturedAt: dateOnly(client.capturedAt || client.createdAt, today()),
+      createdAt: dateOnly(client.createdAt, today()),
+      updatedAt: dateOnly(client.updatedAt || client.createdAt, today())
+    };
+  });
 
   const sales = value.sales.map((sale, index) => {
     const saleCurrency = normalizeCurrency(sale.saleCurrency, "USD");
+    const id = String(sale.id || "sale-import-" + index);
+    const developer = canonicalDeveloper(sale.developer);
+    const project = canonicalProject(developer, sale.project);
+    const rawStatus = String(sale.saleStatus || sale.status || "Reservada").trim();
+    const saleStatus = canonicalSaleStatus(rawStatus);
+    if (!developer || !project) {
+      throw new Error(
+        "Constructora o proyecto fuera del catálogo en la venta " + id + "."
+      );
+    }
+    if (!saleStatus) {
+      throw new Error("Estatus desconocido en la venta " + id + ": " + rawStatus);
+    }
     return {
-      id: String(sale.id || "sale-import-" + index),
+      id,
       clientId: String(sale.clientId || ""),
-      project: String(sale.project || "").trim(),
+      project,
       unit: String(sale.unit || "").trim(),
-      developer: String(sale.developer || "").trim(),
-      saleStatus: String(sale.saleStatus || "Contratada"),
+      developer,
+      saleStatus,
       salePrice: Math.max(numberValue(sale.salePrice), 0),
       saleCurrency,
       saleDate: dateOnly(sale.saleDate, today()),
@@ -345,7 +397,8 @@ function normalizeState(value) {
         id: "installment-import-" + sale.id + "-1",
         saleId: sale.id,
         sequence: 1,
-        label: "Cuota única",
+        installmentKind: "single",
+        label: "Pago único",
         amount: sale.commissionAmount,
         dueDate: sale.commissionDueDate || sale.saleDate,
         notes: "",
@@ -354,10 +407,20 @@ function normalizeState(value) {
       }));
   const installments = sourceInstallments.map((installment, index) => {
     const sale = salesById.get(String(installment.saleId || ""));
+    const rawKind = String(
+      installment.installmentKind || installment.kind || ""
+    ).trim();
+    const installmentKind = normalizeInstallmentKind(rawKind);
+    if (rawKind && !installmentKind) {
+      throw new Error(
+        "Tipo de cuota desconocido en " + String(installment.id || index) + ": " + rawKind
+      );
+    }
     return {
       id: String(installment.id || "installment-import-" + index),
       saleId: String(installment.saleId || ""),
       sequence: Math.max(Math.trunc(numberValue(installment.sequence || index + 1)), 1),
+      installmentKind,
       label: String(installment.label || "Cuota " + (index + 1)).trim(),
       amount: Math.max(numberValue(installment.amount), 0),
       dueDate: dateOnly(
@@ -373,8 +436,49 @@ function normalizeState(value) {
     };
   });
   sales.forEach((sale) => {
-    const dates = installments
-      .filter((installment) => installment.saleId === sale.id && installment.dueDate)
+    const schedule = installments
+      .filter((installment) => installment.saleId === sale.id)
+      .sort((a, b) => a.sequence - b.sequence);
+    if (!schedule.length || schedule.length > 2) {
+      throw new Error(
+        "La venta " + sale.id + " debe tener un pago único o un plan de avance y saldo."
+      );
+    }
+    if (schedule.some((installment) => !installment.installmentKind)) {
+      if (schedule.some((installment) => installment.installmentKind)) {
+        throw new Error("El plan de la venta " + sale.id + " mezcla cuotas tipificadas y antiguas.");
+      }
+      if (schedule.length === 1 && schedule[0].sequence === 1) {
+        schedule[0].installmentKind = "single";
+      } else if (
+        schedule.length === 2 &&
+        schedule[0].sequence === 1 &&
+        schedule[1].sequence === 2
+      ) {
+        schedule[0].installmentKind = "advance";
+        schedule[1].installmentKind = "balance";
+      } else {
+        throw new Error("El plan histórico de la venta " + sale.id + " es ambiguo.");
+      }
+    }
+    const validSingle =
+      schedule.length === 1 &&
+      schedule[0].sequence === 1 &&
+      schedule[0].installmentKind === "single";
+    const validSplit =
+      schedule.length === 2 &&
+      schedule[0].sequence === 1 &&
+      schedule[0].installmentKind === "advance" &&
+      schedule[1].sequence === 2 &&
+      schedule[1].installmentKind === "balance";
+    if (!validSingle && !validSplit) {
+      throw new Error("El plan de cobro de la venta " + sale.id + " no es válido.");
+    }
+    schedule.forEach((installment) => {
+      installment.label = installmentKindLabel(installment.installmentKind);
+    });
+    const dates = schedule
+      .filter((installment) => installment.dueDate)
       .map((installment) => installment.dueDate)
       .sort();
     sale.commissionDueDate = dates[0] || "";
@@ -414,13 +518,19 @@ function normalizeState(value) {
   if (installments.some((installment) => !saleIds.has(installment.saleId))) {
     throw new Error("Una cuota apunta a una venta inexistente.");
   }
-  const installmentIds = new Set(installments.map((installment) => installment.id));
+  const installmentsById = new Map(
+    installments.map((installment) => [installment.id, installment])
+  );
   if (
     payments.some(
-      (payment) => payment.installmentId && !installmentIds.has(payment.installmentId)
+      (payment) =>
+        (isActivePayment(payment) && !payment.installmentId) ||
+        (payment.installmentId &&
+          (!installmentsById.has(payment.installmentId) ||
+            installmentsById.get(payment.installmentId).saleId !== payment.saleId))
     )
   ) {
-    throw new Error("Un cobro apunta a una cuota inexistente.");
+    throw new Error("Cada cobro contabilizado debe apuntar a una cuota válida de su venta.");
   }
   if (
     clients.some(
@@ -429,6 +539,7 @@ function normalizeState(value) {
         !client.phone ||
         !client.email ||
         !VALID_CLIENT_STAGES.includes(client.stage) ||
+        (client.desiredZone && !VALID_DESIRED_ZONES.includes(client.desiredZone)) ||
         !VALID_PROPERTY_STAGES.includes(client.propertyStage) ||
         !isValidIsoDate(client.capturedAt) ||
         client.capturedAt > today() ||
@@ -444,6 +555,7 @@ function normalizeState(value) {
       (sale) =>
         !sale.project ||
         !sale.unit ||
+        !DEVELOPER_PROJECTS[sale.developer]?.includes(sale.project) ||
         !VALID_SALE_STATUSES.includes(sale.saleStatus) ||
         sale.salePrice <= 0 ||
         sale.commissionAmount <= 0 ||
@@ -452,6 +564,8 @@ function normalizeState(value) {
         !isValidIsoDate(sale.saleDate) ||
         (sale.deliveryDate &&
           (!isValidIsoDate(sale.deliveryDate) || sale.deliveryDate < sale.saleDate)) ||
+        (sale.saleStatus === "Entregado" &&
+          (!sale.deliveryDate || sale.deliveryDate > today())) ||
         (sale.sharedSale && !sale.externalAgent) ||
         (!sale.sharedSale && sale.externalAgent) ||
         (isCancelledSale(sale) && !sale.cancelReason) ||
@@ -467,6 +581,7 @@ function normalizeState(value) {
       const sale = salesById.get(installment.saleId);
       return (
         !installment.label ||
+        !VALID_INSTALLMENT_KINDS.includes(installment.installmentKind) ||
         installment.amount <= 0 ||
         !isValidIsoDate(installment.dueDate) ||
         installment.dueDate < sale.saleDate
@@ -486,6 +601,14 @@ function normalizeState(value) {
     );
     if (scheduledCents !== toCents(sale.commissionAmount)) {
       throw new Error("El plan de cuotas no coincide con la comisión total.");
+    }
+    const balance = schedule.find(
+      (installment) => installment.installmentKind === "balance"
+    );
+    if (balance && sale.deliveryDate && balance.dueDate !== sale.deliveryDate) {
+      throw new Error(
+        "El saldo de la venta " + sale.id + " debe quedar programado para la entrega."
+      );
     }
   });
   const activeUnits = new Set();
@@ -534,8 +657,39 @@ function normalizeState(value) {
       throw new Error("Una venta contiene cobros superiores a su comisión.");
     }
     if (isCancelledSale(sale) && activePayments.length) {
-      throw new Error("Una venta cancelada no puede conservar cobros contabilizados.");
+      throw new Error("Una venta desistida o cambiada no puede conservar cobros contabilizados.");
     }
+    const paidByInstallment = new Map();
+    activePayments.forEach((payment) => {
+      const installment = installmentsById.get(payment.installmentId);
+      if (!installment) return;
+      const kindAllowed =
+        sale.saleStatus === "Entregado" ||
+        (sale.saleStatus === "Opción a compra firmada" &&
+          ["advance", "single"].includes(installment.installmentKind));
+      if (!kindAllowed) {
+        throw new Error(
+          "Un cobro de la venta " + sale.id + " no está habilitado para su etapa."
+        );
+      }
+      if (
+        installment.installmentKind === "balance" &&
+        (!sale.deliveryDate || payment.paymentDate < sale.deliveryDate)
+      ) {
+        throw new Error(
+          "El saldo de la venta " + sale.id + " no puede cobrarse antes de la entrega."
+        );
+      }
+      paidByInstallment.set(
+        installment.id,
+        (paidByInstallment.get(installment.id) || 0) + toCents(payment.amount)
+      );
+    });
+    paidByInstallment.forEach((paid, installmentId) => {
+      if (paid > toCents(installmentsById.get(installmentId).amount)) {
+        throw new Error("Una cuota contiene cobros superiores a su monto.");
+      }
+    });
   });
 
   return {
@@ -637,6 +791,72 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
+function canonicalCatalogValue(value, catalog) {
+  const key = normalizeText(value);
+  return catalog.find((item) => normalizeText(item) === key) || "";
+}
+
+function normalizeDesiredZone(value) {
+  const canonical = canonicalCatalogValue(value, VALID_DESIRED_ZONES);
+  if (canonical) return canonical;
+  const aliases = {
+    "zona oriental": "Santo Domingo Este",
+    "santo domingo oriental": "Santo Domingo Este",
+    "sd este": "Santo Domingo Este",
+    "sd norte": "Santo Domingo Norte",
+    "sd oeste": "Santo Domingo Oeste",
+    "santo domingo": "Distrito Nacional",
+    naco: "Distrito Nacional",
+    piantini: "Distrito Nacional",
+    "evaristo morales": "Distrito Nacional",
+    "bella vista": "Distrito Nacional",
+    bavaro: "Punta Cana",
+    bávaro: "Punta Cana",
+    cibao: "El Cibao",
+    santiago: "El Cibao",
+    sur: "El Sur",
+    norte: "El Norte"
+  };
+  return aliases[normalizeText(value)] || "";
+}
+
+function canonicalPropertyStage(value) {
+  const key = normalizeText(value);
+  if (key === "en planos" || key === "en construccion") {
+    return "En planos / En construcción";
+  }
+  if (key === "listo para entrega") return "Listo";
+  return canonicalCatalogValue(value, VALID_PROPERTY_STAGES);
+}
+
+function normalizePropertyStage(value) {
+  return canonicalPropertyStage(value) || "Sin definir";
+}
+
+function canonicalSaleStatus(value) {
+  const legacy = {
+    contratada: "Opción a compra firmada",
+    entregada: "Entregado"
+  };
+  return (
+    legacy[normalizeText(value)] ||
+    canonicalCatalogValue(value, VALID_SALE_STATUSES)
+  );
+}
+
+function normalizeSaleStatus(value) {
+  return canonicalSaleStatus(value) || "Reservada";
+}
+
+function normalizeInstallmentKind(value) {
+  const candidate = normalizeText(value);
+  return VALID_INSTALLMENT_KINDS.includes(candidate) ? candidate : "";
+}
+
+function installmentKindLabel(kind) {
+  return kind === "advance" ? "Avance" : kind === "balance" ? "Saldo" : "Pago único";
+}
+
 function emptyMoneyTotals() {
   return { USD: 0, DOP: 0 };
 }
@@ -686,11 +906,29 @@ function saleLabel(sale) {
 }
 
 function isCancelledSale(sale) {
-  return sale?.saleStatus === "Cancelada";
+  return TERMINAL_SALE_STATUSES.includes(sale?.saleStatus);
 }
 
 function isClosedSale(sale) {
   return CLOSED_SALE_STATUSES.includes(sale?.saleStatus);
+}
+
+function isDeliveredSale(sale) {
+  return sale?.saleStatus === "Entregado";
+}
+
+function isBalanceInstallment(installment) {
+  return installment?.installmentKind === "balance";
+}
+
+function isInstallmentCollectible(sale, installment) {
+  if (!sale || !installment || isCancelledSale(sale) || !isClosedSale(sale)) {
+    return false;
+  }
+  return (
+    isDeliveredSale(sale) ||
+    ["advance", "single"].includes(installment.installmentKind)
+  );
 }
 
 function isActivePayment(payment) {
@@ -747,11 +985,24 @@ function pendingForSale(sale, excludedId) {
 }
 
 function installmentLedgerForSale(saleId, excludedPaymentId) {
-  let availableCents = paidForSaleCents(saleId, excludedPaymentId);
+  const paidByInstallment = activePaymentsForSale(saleId, excludedPaymentId).reduce(
+    (totals, payment) => {
+      if (payment.installmentId) {
+        totals.set(
+          payment.installmentId,
+          (totals.get(payment.installmentId) || 0) + toCents(payment.amount)
+        );
+      }
+      return totals;
+    },
+    new Map()
+  );
   return installmentsForSale(saleId).map((installment) => {
     const amountCents = toCents(installment.amount);
-    const paidCents = Math.min(amountCents, Math.max(availableCents, 0));
-    availableCents -= paidCents;
+    const paidCents = Math.min(
+      amountCents,
+      Math.max(paidByInstallment.get(installment.id) || 0, 0)
+    );
     const pendingCents = amountCents - paidCents;
     return { ...installment, amountCents, paidCents, pendingCents };
   });
@@ -766,8 +1017,28 @@ function nextOpenInstallment(sale, excludedPaymentId) {
   );
 }
 
+function nextCollectibleInstallment(sale, excludedPaymentId) {
+  if (!sale || isCancelledSale(sale)) return null;
+  return (
+    installmentLedgerForSale(sale.id, excludedPaymentId).find(
+      (installment) =>
+        installment.pendingCents > 0 && isInstallmentCollectible(sale, installment)
+    ) || null
+  );
+}
+
+function collectiblePendingForSaleCents(sale, excludedPaymentId) {
+  if (!sale || isCancelledSale(sale)) return 0;
+  return installmentLedgerForSale(sale.id, excludedPaymentId).reduce(
+    (total, installment) =>
+      total +
+      (isInstallmentCollectible(sale, installment) ? installment.pendingCents : 0),
+    0
+  );
+}
+
 function nextCommissionDueDate(sale) {
-  return nextOpenInstallment(sale)?.dueDate || "";
+  return nextCollectibleInstallment(sale)?.dueDate || "";
 }
 
 function parseLocalDate(value) {
@@ -786,7 +1057,7 @@ function daysBetween(from, to) {
 }
 
 function isCommissionOverdue(sale) {
-  const nextInstallment = nextOpenInstallment(sale);
+  const nextInstallment = nextCollectibleInstallment(sale);
   return Boolean(nextInstallment?.dueDate && nextInstallment.dueDate < today());
 }
 
@@ -1150,16 +1421,9 @@ function renderCollectionAlerts(activeSales) {
   const alerts = [];
   activeSales.forEach((sale) => {
     if (pendingForSaleCents(sale) <= 0) return;
-    const dueDate = nextCommissionDueDate(sale);
-    if (!dueDate) {
-      alerts.push({
-        sale,
-        remaining: 9998,
-        critical: false,
-        text: "Sin fecha de cobro: completa la programación"
-      });
-      return;
-    }
+    const nextInstallment = nextCollectibleInstallment(sale);
+    if (!nextInstallment) return;
+    const dueDate = nextInstallment.dueDate;
     const remaining = daysBetween(today(), dueDate);
     if (remaining >= 0) return;
     alerts.push({
@@ -1181,7 +1445,7 @@ function renderCollectionAlerts(activeSales) {
         sale,
         remaining: -9999,
         critical: true,
-        text: "Cancelada con cobros: requiere revisión"
+        text: "Desistida o cambiada con cobros: requiere revisión"
       });
     });
   alerts.sort(
@@ -1204,7 +1468,7 @@ function renderCollectionAlerts(activeSales) {
         "</small></div><span>" +
         escapeHtml(
           moneyFromCents(
-            pendingForSaleCents(alert.sale),
+            nextCollectibleInstallment(alert.sale)?.pendingCents || 0,
             alert.sale.commissionCurrency
           )
         ) +
@@ -1260,12 +1524,13 @@ function renderDashboard() {
     : 0;
   const dueSoon = closedSales.filter((sale) => {
     const dueDate = nextCommissionDueDate(sale);
-    if (!dueDate || pendingForSaleCents(sale) <= 0) return false;
+    if (!dueDate || collectiblePendingForSaleCents(sale) <= 0) return false;
     const days = daysBetween(today(), dueDate);
     return days >= 0 && days <= 7;
   });
   const undated = closedSales.filter(
-    (sale) => !nextCommissionDueDate(sale) && pendingForSaleCents(sale) > 0
+    (sale) =>
+      !nextCommissionDueDate(sale) && collectiblePendingForSaleCents(sale) > 0
   );
 
   document.querySelector("#heroPending").textContent = moneyFromCents(
@@ -1351,7 +1616,7 @@ function renderDashboard() {
   const pendingSales = activeSales
     .filter((sale) => {
       const dueDate = nextCommissionDueDate(sale);
-      if (pendingForSaleCents(sale) <= 0 || !dueDate) return false;
+      if (collectiblePendingForSaleCents(sale) <= 0 || !dueDate) return false;
       return daysBetween(today(), dueDate) >= 0;
     })
     .sort((a, b) =>
@@ -1381,7 +1646,10 @@ function renderDashboard() {
         ) +
         '</span></div><span class="pending-amount">' +
         escapeHtml(
-          moneyFromCents(pendingForSaleCents(sale), sale.commissionCurrency)
+          moneyFromCents(
+            nextCollectibleInstallment(sale)?.pendingCents || 0,
+            sale.commissionCurrency
+          )
         ) +
         "</span></button>"
     )
@@ -1504,11 +1772,20 @@ function saleDetailHtml(sale) {
     ? installmentRows
         .map((installment) => {
           const paid = installment.pendingCents === 0;
-          const overdue = !paid && installment.dueDate < today();
-          const status = paid ? "Pagada" : overdue ? "Vencida" : installment.paidCents ? "Parcial" : "Pendiente";
+          const collectible = isInstallmentCollectible(sale, installment);
+          const overdue = collectible && !paid && installment.dueDate < today();
+          const status = paid
+            ? "Pagada"
+            : !collectible
+              ? "Disponible al entregar"
+              : overdue
+                ? "Vencida"
+                : installment.paidCents
+                  ? "Parcial"
+                  : "Pendiente";
           return (
             '<div class="detail-payment"><span class="detail-payment-icon"><i data-lucide="' +
-            (paid ? "check" : overdue ? "triangle-alert" : "calendar-clock") +
+            (paid ? "check" : !collectible ? "lock-keyhole" : overdue ? "triangle-alert" : "calendar-clock") +
             '" aria-hidden="true"></i></span><div><strong>' +
             escapeHtml(installment.label) +
             '</strong><small>Vence ' +
@@ -1576,9 +1853,16 @@ function saleDetailHtml(sale) {
     ) +
     detailField(
       "Venta compartida",
-      sale.sharedSale ? sale.externalAgent || "Asesor externo" : "No"
+      sale.sharedSale ? sale.externalAgent || "Agente externo" : "No"
     ) +
-    detailField("Próximo vencimiento", formatDate(nextCommissionDueDate(sale))) +
+    detailField(
+      "Próximo vencimiento",
+      nextCommissionDueDate(sale)
+        ? formatDate(nextCommissionDueDate(sale))
+        : pendingCents > 0
+          ? "Saldo disponible al entregar"
+          : "Sin pendientes"
+    ) +
     detailField("Tasa acordada", sale.commissionRate ? sale.commissionRate + "%" : "Monto fijo") +
     "</dl></section>" +
     '<section class="detail-section"><div class="detail-section-heading"><i data-lucide="calendar-range" aria-hidden="true"></i><h3>Plan de cobro</h3></div><div class="detail-payments">' +
@@ -1590,7 +1874,9 @@ function saleDetailHtml(sale) {
     '<section class="detail-section"><div class="detail-section-heading"><i data-lucide="notebook-pen" aria-hidden="true"></i><h3>Notas de la operación</h3></div><p class="detail-note">' +
     escapeHtml(
       isCancelledSale(sale)
-        ? "Motivo de cancelación: " + sale.cancelReason + (sale.notes ? " · " + sale.notes : "")
+        ? (sale.saleStatus === "Cambio" ? "Detalle del cambio: " : "Motivo del desistimiento: ") +
+          sale.cancelReason +
+          (sale.notes ? " · " + sale.notes : "")
         : sale.notes || "No hay notas registradas para esta operación."
     ) +
     "</p></section>"
@@ -1626,7 +1912,7 @@ function renderRecordDetail() {
     primary.hidden =
       isCancelledSale(sale) ||
       !isClosedSale(sale) ||
-      pendingForSaleCents(sale) <= 0;
+      collectiblePendingForSaleCents(sale) <= 0;
     primary.innerHTML = '<i data-lucide="circle-dollar-sign" aria-hidden="true"></i>Registrar cobro';
     remove.hidden = !DEMO_MODE;
     if (DEMO_MODE) {
@@ -1777,13 +2063,16 @@ function filteredSalesForList() {
   const query = normalizeText(document.querySelector("#saleSearch").value);
   const status = document.querySelector("#saleStatusFilter").value;
   return state.sales
-    .filter(
-      (sale) =>
+    .filter((sale) => {
+      const client = clientById(sale.clientId);
+      return (
         (!status || sale.saleStatus === status) &&
         (!query ||
           normalizeText(
             [
-              clientName(sale.clientId),
+              client?.name,
+              client?.phone,
+              client?.email,
               sale.project,
               sale.unit,
               sale.developer,
@@ -1792,7 +2081,8 @@ function filteredSalesForList() {
               sale.deliveryDate
             ].join(" ")
           ).includes(query))
-    )
+      );
+    })
     .sort((a, b) => String(b.saleDate).localeCompare(String(a.saleDate)));
 }
 
@@ -1818,10 +2108,10 @@ function renderSales() {
     (sale) => sale.saleStatus === "Reservada"
   ).length;
   document.querySelector("#saleOverviewContracted").textContent = state.sales.filter(
-    (sale) => sale.saleStatus === "Contratada"
+    (sale) => sale.saleStatus === "Opción a compra firmada"
   ).length;
   document.querySelector("#saleOverviewDelivered").textContent = state.sales.filter(
-    (sale) => sale.saleStatus === "Entregada"
+    (sale) => sale.saleStatus === "Entregado"
   ).length;
   document.querySelector("#salesBody").innerHTML = sales
     .map((sale) => {
@@ -1890,7 +2180,9 @@ function renderSales() {
           nextCommissionDueDate(sale)
             ? (isClosedSale(sale) ? "Vence " : "Programada ") +
               formatDate(nextCommissionDueDate(sale))
-            : formatDate(sale.saleDate)
+            : pendingForSaleCents(sale) > 0 && isClosedSale(sale)
+              ? "Saldo disponible al entregar"
+              : formatDate(sale.saleDate)
         ) +
         '</span><span class="mobile-record-amount">' +
         escapeHtml(money(sale.salePrice, sale.saleCurrency)) +
@@ -1905,12 +2197,18 @@ function renderSales() {
   refreshIcons();
 }
 
-function collectionActionHtml(sale) {
+function collectionActionHtml(sale, installment) {
   if (pendingForSaleCents(sale) <= 0) {
     return '<span class="status-pill status-paid">Pagado</span>';
   }
   if (!isClosedSale(sale)) {
-    return '<span class="status-pill status-pending">Disponible al contratar</span>';
+    return '<span class="status-pill status-pending">Disponible al firmar opción</span>';
+  }
+  if (installment && !isInstallmentCollectible(sale, installment)) {
+    return '<span class="status-pill status-pending">Disponible al entregar</span>';
+  }
+  if (collectiblePendingForSaleCents(sale) <= 0) {
+    return '<span class="status-pill status-pending">Saldo al entregar</span>';
   }
   return (
     '<button class="button button-secondary" type="button" data-register-payment="' +
@@ -1941,15 +2239,18 @@ function renderCollectionQueue() {
   );
   const pendingSales = collectionItems.filter((item) => item.pendingCents > 0);
   const overdueSales = pendingSales.filter(
-    (item) => isClosedSale(item.sale) && Boolean(item.dueDate) && item.dueDate < today()
+    (item) =>
+      isInstallmentCollectible(item.sale, item) &&
+      Boolean(item.dueDate) &&
+      item.dueDate < today()
   );
   const nextSales = pendingSales.filter((item) => {
-    if (!isClosedSale(item.sale)) return false;
+    if (!isInstallmentCollectible(item.sale, item)) return false;
     const remaining = item.dueDate ? daysBetween(today(), item.dueDate) : 9999;
     return remaining >= 0 && remaining <= 7;
   });
   const upcomingSales = pendingSales.filter((item) => {
-    if (!item.dueDate) return false;
+    if (!isInstallmentCollectible(item.sale, item) || !item.dueDate) return false;
     return daysBetween(today(), item.dueDate) >= 0;
   });
   const undatedSales = pendingSales.filter((item) => !item.dueDate);
@@ -2025,7 +2326,10 @@ function renderCollectionQueue() {
   const timingForSale = (item) => {
     if (item.pendingCents === 0) return "Cuota completada";
     if (!item.dueDate) return "Sin fecha definida";
-    if (!isClosedSale(item.sale)) return "Programada para " + formatDate(item.dueDate);
+    if (!isClosedSale(item.sale)) return "Se habilita al firmar la opción a compra";
+    if (!isInstallmentCollectible(item.sale, item)) {
+      return "El saldo se habilita cuando la propiedad sea entregada";
+    }
     const remaining = daysBetween(today(), item.dueDate);
     if (remaining < 0) return Math.abs(remaining) + " días vencido";
     if (remaining === 0) return "Vence hoy";
@@ -2034,12 +2338,12 @@ function renderCollectionQueue() {
   const rowClassForSale = (item) =>
     item.pendingCents === 0
       ? "collection-row-paid"
-      : isClosedSale(item.sale) && item.dueDate && item.dueDate < today()
+      : isInstallmentCollectible(item.sale, item) && item.dueDate && item.dueDate < today()
         ? "collection-row-overdue"
         : "collection-row-upcoming";
   const installmentStatusBadge = (item) => {
     if (item.pendingCents === 0) return '<span class="status-pill status-paid">Pagada</span>';
-    if (!isClosedSale(item.sale)) {
+    if (!isInstallmentCollectible(item.sale, item)) {
       return '<span class="status-pill status-pending">Programada</span>';
     }
     if (item.dueDate && item.dueDate < today()) {
@@ -2071,7 +2375,7 @@ function renderCollectionQueue() {
         "</td><td>" +
         installmentStatusBadge(item) +
         "</td><td>" +
-        collectionActionHtml(item.sale) +
+        collectionActionHtml(item.sale, item) +
         "</td></tr>"
     )
     .join("");
@@ -2080,7 +2384,7 @@ function renderCollectionQueue() {
       const mobileClass =
         item.pendingCents === 0
           ? " mobile-record-paid"
-          : isClosedSale(item.sale) && item.dueDate && item.dueDate < today()
+          : isInstallmentCollectible(item.sale, item) && item.dueDate && item.dueDate < today()
             ? " mobile-record-overdue"
             : " mobile-record-upcoming";
       return (
@@ -2099,7 +2403,7 @@ function renderCollectionQueue() {
         '</span></div><div class="mobile-record-actions"><button class="icon-action" type="button" data-view-sale="' +
         escapeHtml(item.sale.id) +
         '"><i data-lucide="folder-open" aria-hidden="true"></i>Ver dossier</button>' +
-        collectionActionHtml(item.sale) +
+        collectionActionHtml(item.sale, item) +
         "</div></article>"
       );
     })
@@ -2124,6 +2428,7 @@ function filteredPaymentsForList() {
         [
           clientName(sale?.clientId),
           saleLabel(sale),
+          installmentById(payment.installmentId)?.label,
           payment.method,
           payment.reference,
           payment.notes,
@@ -2174,7 +2479,12 @@ function renderPayments() {
         '</td><td><span class="primary-cell">' +
         escapeHtml(clientName(sale?.clientId)) +
         '</span><span class="secondary-cell">' +
-        escapeHtml(saleLabel(sale)) +
+        escapeHtml(
+          saleLabel(sale) +
+            (installmentById(payment.installmentId)?.label
+              ? " · " + installmentById(payment.installmentId).label
+              : "")
+        ) +
         '</span></td><td class="money-cell">' +
         escapeHtml(money(payment.amount, payment.currency)) +
         '</td><td><span class="primary-cell">' +
@@ -2205,7 +2515,12 @@ function renderPayments() {
           ? '<span class="status-pill status-void">Anulado</span>'
           : '<span class="status-pill status-paid">Recibido</span>') +
         '</div><div class="mobile-record-main">' +
-        escapeHtml(saleLabel(sale)) +
+        escapeHtml(
+          saleLabel(sale) +
+            (installmentById(payment.installmentId)?.label
+              ? " · " + installmentById(payment.installmentId).label
+              : "")
+        ) +
         '</div><div class="mobile-record-meta"><span>' +
         escapeHtml(formatDate(payment.paymentDate) + " · " + payment.method) +
         '</span><span class="mobile-record-amount">' +
@@ -2247,15 +2562,16 @@ function populatePaymentSelect() {
   const editingPayment = paymentById(editingId);
   const eligible = state.sales.filter(
     (sale) =>
-      (isClosedSale(sale) && pendingForSaleCents(sale) > 0) ||
+      (isClosedSale(sale) && collectiblePendingForSaleCents(sale) > 0) ||
       sale.id === editingPayment?.saleId
   );
   select.innerHTML =
     '<option value="">Selecciona una venta</option>' +
     eligible
       .sort((a, b) => String(b.saleDate).localeCompare(String(a.saleDate)))
-      .map(
-        (sale) =>
+      .map((sale) => {
+        const installment = nextCollectibleInstallment(sale, editingId);
+        return (
           '<option value="' +
           escapeHtml(sale.id) +
           '">' +
@@ -2266,13 +2582,16 @@ function populatePaymentSelect() {
               " · " +
               sale.unit +
               " · " +
+              (installment?.label || "Sin cuota") +
+              " " +
               moneyFromCents(
-                pendingForSaleCents(sale, editingId),
+                installment?.pendingCents || 0,
                 sale.commissionCurrency
               )
           ) +
           "</option>"
-      )
+        );
+      })
       .join("");
   if ([...select.options].some((option) => option.value === previous)) {
     select.value = previous;
@@ -2293,7 +2612,7 @@ function updatePaymentContext() {
     return;
   }
   const editingId = form.elements.id.value;
-  const nextInstallment = nextOpenInstallment(sale, editingId);
+  const nextInstallment = nextCollectibleInstallment(sale, editingId);
   context.textContent =
     "Comisión: " +
     money(sale.commissionAmount, sale.commissionCurrency) +
@@ -2302,18 +2621,13 @@ function updatePaymentContext() {
       paidForSaleCents(sale.id, editingId),
       sale.commissionCurrency
     ) +
-    " · Disponible: " +
-    moneyFromCents(
-      pendingForSaleCents(sale, editingId),
-      sale.commissionCurrency
-    ) +
+    " · Cuota disponible: " +
+    moneyFromCents(nextInstallment?.pendingCents || 0, sale.commissionCurrency) +
     (nextInstallment
       ? " · Próxima: " + nextInstallment.label + " el " + formatDate(nextInstallment.dueDate)
       : "");
-  form.elements.amount.max = fromCents(
-    pendingForSaleCents(sale, editingId)
-  ).toFixed(2);
-  fillButton.disabled = pendingForSaleCents(sale, editingId) <= 0;
+  form.elements.amount.max = fromCents(nextInstallment?.pendingCents || 0).toFixed(2);
+  fillButton.disabled = !nextInstallment || nextInstallment.pendingCents <= 0;
 }
 
 function populateReportFilters() {
@@ -2578,50 +2892,59 @@ function canonicalDeveloper(value) {
   ) || "";
 }
 
-function developerForProject(value) {
-  const projectKey = normalizeText(value);
-  return Object.entries(DEVELOPER_PROJECTS).find(([, projects]) =>
-    projects.some((project) => normalizeText(project) === projectKey)
-  )?.[0] || "";
-}
-
-function updateProjectCatalog() {
-  const developerInput = document.querySelector("#saleDeveloper");
-  const catalog = document.querySelector("#projectCatalog");
-  if (!developerInput || !catalog) return;
-  const selectedDeveloper = canonicalDeveloper(developerInput.value);
-  const projects = selectedDeveloper
-    ? DEVELOPER_PROJECTS[selectedDeveloper]
-    : Object.values(DEVELOPER_PROJECTS).flat();
-  catalog.innerHTML = projects
-    .map((project) => '<option value="' + escapeHtml(project) + '"></option>')
-    .join("");
-}
-
-function updateDeveloperFromProject() {
-  const developerInput = document.querySelector("#saleDeveloper");
-  const projectInput = document.querySelector("#saleProject");
-  if (!developerInput || !projectInput) return;
-  const matchedDeveloper = developerForProject(projectInput.value);
-  if (matchedDeveloper) developerInput.value = matchedDeveloper;
-  updateProjectCatalog();
-}
-
-function addMonthsToDate(value, months) {
-  const parsed = parseLocalDate(value || today());
-  if (!parsed) return today();
-  const day = parsed.getDate();
-  parsed.setDate(1);
-  parsed.setMonth(parsed.getMonth() + months);
-  const lastDay = new Date(parsed.getFullYear(), parsed.getMonth() + 1, 0).getDate();
-  parsed.setDate(Math.min(day, lastDay));
-  return (
-    parsed.getFullYear() +
-    "-" +
-    String(parsed.getMonth() + 1).padStart(2, "0") +
-    "-" +
-    String(parsed.getDate()).padStart(2, "0")
+function canonicalProject(developer, value) {
+  const canonicalDeveloperValue = canonicalDeveloper(developer);
+  return canonicalCatalogValue(
+    value,
+    canonicalDeveloperValue ? DEVELOPER_PROJECTS[canonicalDeveloperValue] : []
   );
+}
+
+function populateDeveloperCatalog(preferredDeveloper) {
+  const select = document.querySelector("#saleDeveloper");
+  if (!select) return;
+  const requested = String(preferredDeveloper || "").trim();
+  const preferred = canonicalDeveloper(requested);
+  select.innerHTML =
+    '<option value="">Selecciona una constructora</option>' +
+    Object.keys(DEVELOPER_PROJECTS)
+      .map(
+        (developer) =>
+          '<option value="' + escapeHtml(developer) + '">' +
+          escapeHtml(developer) +
+          "</option>"
+      )
+      .join("");
+  select.value = preferred;
+}
+
+function updateProjectCatalog(preferredProject) {
+  const developerSelect = document.querySelector("#saleDeveloper");
+  const projectSelect = document.querySelector("#saleProject");
+  if (!developerSelect || !projectSelect) return;
+  const requestedProject =
+    preferredProject === undefined
+      ? String(projectSelect.value || "").trim()
+      : String(preferredProject || "").trim();
+  const selectedDeveloper = canonicalDeveloper(developerSelect.value);
+  const projects = selectedDeveloper ? DEVELOPER_PROJECTS[selectedDeveloper] : [];
+  const preferred = canonicalProject(selectedDeveloper, requestedProject);
+  projectSelect.innerHTML =
+    '<option value="">' +
+    (developerSelect.value
+      ? "Selecciona un proyecto"
+      : "Primero selecciona una constructora") +
+    "</option>" +
+    projects
+      .map(
+        (project) =>
+          '<option value="' + escapeHtml(project) + '">' +
+          escapeHtml(project) +
+          "</option>"
+      )
+      .join("");
+  projectSelect.disabled = !selectedDeveloper;
+  projectSelect.value = preferred;
 }
 
 function installmentPercentageText(amountCents, commissionCents) {
@@ -2643,19 +2966,26 @@ function createInstallmentRow(installment) {
   const container = document.querySelector("#installmentRows");
   if (!container) return;
   const row = document.createElement("div");
+  const dueDateLabel = isBalanceInstallment(installment)
+    ? "Fecha de entrega / cobro"
+    : "Fecha de cobro";
   row.className = "installment-row";
   row.dataset.installmentId = installment?.id || "";
+  row.dataset.installmentKind = normalizeInstallmentKind(installment?.installmentKind);
   row.innerHTML =
     '<label>Concepto<input type="text" data-installment-label maxlength="120" readonly aria-readonly="true" required /></label>' +
     '<label>Porcentaje<input type="number" data-installment-percentage min="0.0001" max="100" step="0.0001" inputmode="decimal" aria-label="Porcentaje de la comisión" readonly aria-readonly="true" required /></label>' +
     '<label>Monto calculado<input type="number" data-installment-amount min="0.01" step="0.01" readonly aria-readonly="true" required /></label>' +
-    '<label>Fecha de cobro<input type="date" data-installment-due-date required /></label>';
+    '<label>' + dueDateLabel + '<input type="date" data-installment-due-date required /></label>';
   row.querySelector("[data-installment-label]").value = installment?.label || "Pago";
   row.querySelector("[data-installment-amount]").value = numberValue(installment?.amount)
     ? numberValue(installment.amount).toFixed(2)
     : "";
   row.querySelector("[data-installment-due-date]").value =
-    installment?.dueDate || document.querySelector("#saleDate")?.value || today();
+    installment?.dueDate ||
+    (row.dataset.installmentKind === "balance"
+      ? ""
+      : document.querySelector("#saleDate")?.value || today());
   container.appendChild(row);
   if (numberValue(installment?.percentage) > 0) {
     row.querySelector("[data-installment-percentage]").value = String(
@@ -2676,14 +3006,30 @@ function applyInstallmentPlanLock() {
   const form = document.querySelector("#saleForm");
   if (!form) return;
   const locked = installmentPlanLocked();
+  const saleId = form.elements.id.value;
+  const ledgerById = new Map(
+    saleId
+      ? installmentLedgerForSale(saleId).map((installment) => [
+          installment.id,
+          installment
+        ])
+      : []
+  );
   document.querySelector("#installmentPlanner")?.classList.toggle("plan-locked", locked);
   installmentRowsFromForm().forEach((row) => {
     row.querySelectorAll("input").forEach((input) => {
       const calculated = input.matches(
         "[data-installment-label], [data-installment-percentage], [data-installment-amount]"
       );
-      input.readOnly = calculated || locked;
-      input.setAttribute("aria-readonly", String(calculated || locked));
+      const dueDate = input.matches("[data-installment-due-date]");
+      const balanceDate =
+        dueDate &&
+        row.dataset.installmentKind === "balance";
+      const paidCents = ledgerById.get(row.dataset.installmentId)?.paidCents || 0;
+      const inputLocked =
+        calculated || balanceDate || (locked && (!dueDate || paidCents > 0));
+      input.readOnly = inputLocked;
+      input.setAttribute("aria-readonly", String(inputLocked));
     });
   });
   document.querySelector("#commissionPlanType").disabled = locked;
@@ -2695,11 +3041,17 @@ function applyInstallmentPlanLock() {
   form.elements.commissionAmount.readOnly = locked;
   form.elements.commissionCurrency.disabled = locked;
   form.elements.saleDate.readOnly = locked;
+  form.elements.deliveryDate.readOnly = Boolean(
+    [...ledgerById.values()].find(
+      (installment) => installment.installmentKind === "balance"
+    )?.paidCents
+  );
 }
 
 function currentInstallmentDrafts() {
   return installmentRowsFromForm().map((row) => ({
     id: row.dataset.installmentId || "",
+    installmentKind: row.dataset.installmentKind || "",
     label: String(row.querySelector("[data-installment-label]")?.value || ""),
     amount: numberValue(row.querySelector("[data-installment-amount]")?.value),
     dueDate: String(row.querySelector("[data-installment-due-date]")?.value || "")
@@ -2708,10 +3060,15 @@ function currentInstallmentDrafts() {
 
 function updateCommissionPlanControls() {
   const mode = document.querySelector("#commissionPlanType")?.value || "advance_balance";
+  const saleForm = document.querySelector("#saleForm");
   const advanceWrap = document.querySelector("#advancePercentageWrap");
   const presets = document.querySelector("#commissionPlanPresets");
   if (advanceWrap) advanceWrap.hidden = mode === "single";
   if (presets) presets.hidden = mode === "single";
+  if (saleForm?.elements.deliveryDate) {
+    saleForm.elements.deliveryDate.required =
+      mode !== "single" || saleForm.elements.saleStatus.value === "Entregado";
+  }
   const percentage = numberValue(document.querySelector("#advancePercentage")?.value);
   document.querySelectorAll("[data-advance-preset]").forEach((button) => {
     const active = mode !== "single" && numberValue(button.dataset.advancePreset) === percentage;
@@ -2734,6 +3091,7 @@ function renderSelectedCommissionPlan(existing) {
   if (mode === "single") {
     plan.push({
       id: source[0]?.id || "",
+      installmentKind: "single",
       label: "Pago único",
       percentage: 100,
       amount: fromCents(commissionCents),
@@ -2750,6 +3108,7 @@ function renderSelectedCommissionPlan(existing) {
     plan.push(
       {
         id: source[0]?.id || "",
+        installmentKind: "advance",
         label: "Avance",
         percentage: advancePercentage,
         amount: fromCents(advanceCents),
@@ -2757,10 +3116,14 @@ function renderSelectedCommissionPlan(existing) {
       },
       {
         id: source[1]?.id || "",
+        installmentKind: "balance",
         label: "Saldo",
         percentage: Number((100 - advancePercentage).toFixed(4)),
         amount: fromCents(commissionCents - advanceCents),
-        dueDate: source[1]?.dueDate || addMonthsToDate(firstDate, 1)
+        dueDate:
+          form.elements.deliveryDate.value ||
+          source[1]?.dueDate ||
+          ""
       }
     );
   }
@@ -2821,7 +3184,7 @@ function updateInstallmentPlanSummary() {
       : " · Diferencia " +
         moneyFromCents(Math.abs(difference), document.querySelector('#saleForm [name="commissionCurrency"]')?.value));
   if (installmentPlanLocked()) {
-    summary.textContent += " · Bloqueado por cobros contabilizados";
+    summary.textContent += " · Importes bloqueados; fechas pendientes editables";
   }
   summary.classList.toggle("plan-mismatch", difference !== 0);
 }
@@ -2832,13 +3195,22 @@ function readInstallmentPlan(saleId, saleDate, commissionAmount) {
     showToast("Agrega al menos una cuota al plan de cobro", 5000);
     return null;
   }
+  const kinds = rows.map((row) => row.dataset.installmentKind);
+  const validSingle = kinds.length === 1 && kinds[0] === "single";
+  const validSplit =
+    kinds.length === 2 && kinds[0] === "advance" && kinds[1] === "balance";
+  if (!validSingle && !validSplit) {
+    showToast("El plan debe ser Pago único o Avance y Saldo", 5000);
+    return null;
+  }
   const plan = [];
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
     const labelInput = row.querySelector("[data-installment-label]");
     const amountInput = row.querySelector("[data-installment-amount]");
     const dateInput = row.querySelector("[data-installment-due-date]");
-    const label = String(labelInput?.value || "").trim();
+    const installmentKind = row.dataset.installmentKind;
+    const label = installmentKindLabel(installmentKind);
     const amount = numberValue(amountInput?.value);
     const dueDate = String(dateInput?.value || "");
     if (!label || amount <= 0 || !isValidIsoDate(dueDate) || dueDate < saleDate) {
@@ -2850,6 +3222,7 @@ function readInstallmentPlan(saleId, saleDate, commissionAmount) {
       id: row.dataset.installmentId || makeId("installment"),
       saleId,
       sequence: index + 1,
+      installmentKind,
       label,
       amount,
       dueDate,
@@ -2883,9 +3256,37 @@ function updateCancelReasonVisibility() {
   const form = document.querySelector("#saleForm");
   const wrapper = document.querySelector("#cancelReasonWrap");
   if (!form || !wrapper) return;
-  const cancelled = form.elements.saleStatus.value === "Cancelada";
-  wrapper.hidden = !cancelled;
-  form.elements.cancelReason.required = cancelled;
+  const terminal = TERMINAL_SALE_STATUSES.includes(form.elements.saleStatus.value);
+  wrapper.hidden = !terminal;
+  form.elements.cancelReason.required = terminal;
+  const label = document.querySelector("#cancelReasonLabel");
+  if (label) {
+    label.textContent =
+      form.elements.saleStatus.value === "Cambio"
+        ? "Motivo y detalle del cambio"
+        : "Motivo del desistimiento";
+  }
+}
+
+function syncBalanceDueDateWithDelivery() {
+  const form = document.querySelector("#saleForm");
+  if (!form) return;
+  const deliveryDate = form.elements.deliveryDate.value;
+  if (!deliveryDate) return;
+  const balanceRow = installmentRowsFromForm().find(
+    (row) => row.dataset.installmentKind === "balance"
+  );
+  if (!balanceRow) return;
+  const saleId = form.elements.id.value;
+  const installmentId = balanceRow.dataset.installmentId;
+  const paidBalance = saleId
+    ? installmentLedgerForSale(saleId).find(
+        (installment) => installment.id === installmentId
+      )?.paidCents || 0
+    : 0;
+  if (paidBalance > 0) return;
+  balanceRow.querySelector("[data-installment-due-date]").value = deliveryDate;
+  updateInstallmentPlanSummary();
 }
 
 function updateSharedSaleVisibility() {
@@ -2920,6 +3321,7 @@ function resetSaleForm() {
   setFormValue(form, "id", "");
   setFormValue(form, "saleDate", today());
   setFormValue(form, "cancelReason", "");
+  populateDeveloperCatalog();
   updateProjectCatalog();
   renderInstallmentEditor([]);
   updateCancelReasonVisibility();
@@ -2962,12 +3364,13 @@ function startSaleEdit(id, trigger) {
   if (!sale) return;
   const form = document.querySelector("#saleForm");
   [
-    "id", "clientId", "project", "unit", "developer", "saleStatus",
+    "id", "clientId", "unit", "saleStatus",
     "salePrice", "saleCurrency", "saleDate", "deliveryDate", "externalAgent",
     "commissionRate", "commissionAmount", "commissionCurrency", "cancelReason", "notes"
   ].forEach((name) => setFormValue(form, name, sale[name]));
+  populateDeveloperCatalog(sale.developer);
+  updateProjectCatalog(sale.project);
   form.elements.sharedSale.checked = Boolean(sale.sharedSale);
-  updateProjectCatalog();
   renderInstallmentEditor(installmentsForSale(sale.id));
   updateCancelReasonVisibility();
   updateSharedSaleVisibility();
@@ -3142,7 +3545,7 @@ function exportSalesCsv() {
   const rows = [
     [
       "Fecha", "Fecha entrega", "Cliente", "Proyecto", "Unidad", "Desarrolladora",
-      "Venta compartida", "Asesor externo",
+      "Venta compartida", "Agente o vendedor externo",
       "Estado venta", "Precio", "Moneda precio", "Comisión",
       "Moneda comisión", "Cobrado", "Pendiente", "Estado comisión",
       "Vencimiento"
@@ -3180,7 +3583,7 @@ function exportSalesCsv() {
 function exportPaymentsCsv() {
   const rows = [
     [
-      "Fecha", "Cliente", "Proyecto", "Unidad", "Monto", "Moneda",
+      "Fecha", "Cliente", "Proyecto", "Unidad", "Cuota", "Monto", "Moneda",
       "Método", "Referencia", "Estado", "Motivo de anulación", "Notas"
     ]
   ];
@@ -3193,6 +3596,7 @@ function exportPaymentsCsv() {
         clientName(sale?.clientId),
         sale?.project || "",
         sale?.unit || "",
+        installmentById(payment.installmentId)?.label || "",
         payment.amount,
         payment.currency,
         payment.method,
@@ -3308,7 +3712,9 @@ document.querySelector("#clientForm").addEventListener("submit", async (event) =
   const phone = String(data.get("phone") || "").trim();
   const email = String(data.get("email") || "").trim();
   const capturedAt = String(data.get("capturedAt") || today());
-  const propertyStage = String(data.get("propertyStage") || "Sin definir");
+  const desiredZoneRaw = String(data.get("desiredZone") || "").trim();
+  const desiredZone = normalizeDesiredZone(desiredZoneRaw);
+  const propertyStage = normalizePropertyStage(data.get("propertyStage"));
   if (!phone) {
     return showFieldError(formElement, "phone", "El teléfono es obligatorio");
   }
@@ -3323,6 +3729,9 @@ document.querySelector("#clientForm").addEventListener("submit", async (event) =
   }
   if (!isValidIsoDate(capturedAt) || capturedAt > today()) {
     return showFieldError(formElement, "capturedAt", "Indica una fecha de captación válida");
+  }
+  if (desiredZoneRaw && !desiredZone) {
+    return showFieldError(formElement, "desiredZone", "Selecciona una zona de la lista");
   }
   if (!VALID_PROPERTY_STAGES.includes(propertyStage)) {
     return showFieldError(formElement, "propertyStage", "Selecciona un estado válido");
@@ -3344,7 +3753,7 @@ document.querySelector("#clientForm").addEventListener("submit", async (event) =
     email,
     source: String(data.get("source") || "Otro"),
     stage: String(data.get("stage") || "Nuevo"),
-    desiredZone: String(data.get("desiredZone") || "").trim(),
+    desiredZone,
     propertyStage,
     budget: Math.max(numberValue(data.get("budget")), 0),
     budgetCurrency: normalizeCurrency(data.get("budgetCurrency"), "USD"),
@@ -3378,9 +3787,10 @@ document.querySelector("#clientForm").addEventListener("submit", async (event) =
 document.querySelector("#cancelClientEdit").addEventListener("click", () => closeDrawer());
 document.querySelector("#clientSearch").addEventListener("input", renderClients);
 document.querySelector("#clientStageFilter").addEventListener("change", renderClients);
-document.querySelector("#saleDeveloper").addEventListener("input", updateProjectCatalog);
-document.querySelector("#saleProject").addEventListener("input", updateDeveloperFromProject);
-document.querySelector("#saleProject").addEventListener("change", updateDeveloperFromProject);
+document.querySelector("#saleDeveloper").addEventListener("change", () => {
+  updateProjectCatalog("");
+  document.querySelector("#saleProject").focus();
+});
 document.querySelector("#salePrice").addEventListener("input", updateCommissionFromRate);
 document.querySelector("#commissionRate").addEventListener("input", updateCommissionFromRate);
 document
@@ -3398,8 +3808,22 @@ document
 document.querySelector("#commissionAmount").addEventListener("input", () => {
   renderSelectedCommissionPlan(currentInstallmentDrafts());
 });
-document.querySelector('#saleForm [name="saleStatus"]').addEventListener("change", updateCancelReasonVisibility);
+document.querySelector('#saleForm [name="saleStatus"]').addEventListener("change", () => {
+  updateCancelReasonVisibility();
+  updateCommissionPlanControls();
+  syncBalanceDueDateWithDelivery();
+});
 document.querySelector("#sharedSale").addEventListener("change", updateSharedSaleVisibility);
+document.querySelector("#deliveryDate").addEventListener("change", () => {
+  const form = document.querySelector("#saleForm");
+  if (
+    form.elements.deliveryDate.value &&
+    form.elements.deliveryDate.value < form.elements.saleDate.value
+  ) {
+    form.elements.deliveryDate.value = form.elements.saleDate.value;
+  }
+  syncBalanceDueDateWithDelivery();
+});
 document.querySelector("#saleDate").addEventListener("change", () => {
   const saleDate = document.querySelector("#saleDate").value;
   const deliveryDate = document.querySelector("#deliveryDate");
@@ -3412,6 +3836,7 @@ document.querySelector("#saleDate").addEventListener("change", () => {
       field.value = saleDate;
     }
   });
+  syncBalanceDueDateWithDelivery();
   updateInstallmentPlanSummary();
 });
 document.querySelector("#installmentRows").addEventListener("input", (event) => {
@@ -3460,13 +3885,13 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
   const id = String(data.get("id") || "");
   const current = saleById(id);
   const clientId = String(data.get("clientId") || "");
-  const project = String(data.get("project") || "").trim();
+  const projectRaw = String(data.get("project") || "").trim();
   const unit = String(data.get("unit") || "").trim();
   const salePrice = numberValue(data.get("salePrice"));
   const saleCurrency = normalizeCurrency(data.get("saleCurrency"), "USD");
   const saleDate = String(data.get("saleDate") || today());
-  const deliveryDate = String(data.get("deliveryDate") || "");
-  const saleStatus = String(data.get("saleStatus") || "Contratada");
+  let deliveryDate = String(data.get("deliveryDate") || "");
+  const saleStatus = normalizeSaleStatus(data.get("saleStatus"));
   const sharedSale = data.get("sharedSale") === "on";
   const externalAgent = String(data.get("externalAgent") || "").trim();
   const financialLocked = Boolean(id && activePaymentsForSale(id).length);
@@ -3490,11 +3915,48 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
       "Primero registra y selecciona un cliente"
     );
   }
+  if (!VALID_SALE_STATUSES.includes(saleStatus)) {
+    return showFieldError(formElement, "saleStatus", "Selecciona una etapa válida");
+  }
+  const developerRaw = String(data.get("developer") || "").trim();
+  const developer = canonicalDeveloper(developerRaw);
+  if (!developer) {
+    return showFieldError(
+      formElement,
+      "developer",
+      "Selecciona primero una constructora de la lista"
+    );
+  }
+  const project = canonicalProject(developer, projectRaw);
+  if (!project) {
+    return showFieldError(
+      formElement,
+      "project",
+      "Selecciona un proyecto de la constructora indicada"
+    );
+  }
   if (salePrice <= 0) {
     return showFieldError(
       formElement,
       "salePrice",
       "El precio vendido debe ser mayor que cero"
+    );
+  }
+  const hasBalancePlan = installmentRowsFromForm().some(
+    (row) => row.dataset.installmentKind === "balance"
+  );
+  if (hasBalancePlan && !deliveryDate) {
+    return showFieldError(
+      formElement,
+      "deliveryDate",
+      "Indica la fecha estimada de entrega para programar el saldo"
+    );
+  }
+  if (saleStatus === "Entregado" && !deliveryDate) {
+    return showFieldError(
+      formElement,
+      "deliveryDate",
+      "Indica la fecha real de entrega"
     );
   }
   if (deliveryDate && (!isValidIsoDate(deliveryDate) || deliveryDate < saleDate)) {
@@ -3504,11 +3966,30 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
       "La entrega no puede ser anterior a la fecha de venta"
     );
   }
+  if (saleStatus === "Entregado" && deliveryDate > today()) {
+    return showFieldError(
+      formElement,
+      "deliveryDate",
+      "Una propiedad entregada no puede tener una fecha de entrega futura"
+    );
+  }
+  const paidBalance = id
+    ? installmentLedgerForSale(id).find(
+        (installment) => installment.installmentKind === "balance"
+      )?.paidCents || 0
+    : 0;
+  if (paidBalance > 0 && deliveryDate !== current?.deliveryDate) {
+    return showFieldError(
+      formElement,
+      "deliveryDate",
+      "La fecha real no cambia después de cobrar el saldo"
+    );
+  }
   if (sharedSale && !externalAgent) {
     return showFieldError(
       formElement,
       "externalAgent",
-      "Indica el nombre del asesor o broker externo"
+      "Indica el nombre del agente o vendedor externo"
     );
   }
   if (commissionAmount <= 0) {
@@ -3533,7 +4014,7 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
     );
   }
   if (
-    saleStatus !== "Cancelada" &&
+    !TERMINAL_SALE_STATUSES.includes(saleStatus) &&
     hasDuplicateActiveUnit(project, unit, id)
   ) {
     return showFieldError(
@@ -3550,7 +4031,7 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
     );
   }
   if (
-    saleStatus !== "Cancelada" &&
+    !TERMINAL_SALE_STATUSES.includes(saleStatus) &&
     toCents(commissionAmount) < paidForSaleCents(id)
   ) {
     return showFieldError(
@@ -3570,21 +4051,47 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
       "La venta no puede quedar después de un cobro existente"
     );
   }
+  if (saleStatus === "Reservada" && payments.some(isActivePayment)) {
+    return showFieldError(
+      formElement,
+      "saleStatus",
+      "Una venta con cobros no puede volver a Reservada"
+    );
+  }
   if (
-    saleStatus === "Cancelada" &&
+    saleStatus === "Opción a compra firmada" &&
+    payments.some(
+      (payment) =>
+        isActivePayment(payment) &&
+        installmentById(payment.installmentId)?.installmentKind === "balance"
+    )
+  ) {
+    return showFieldError(
+      formElement,
+      "saleStatus",
+      "No puede volver a opción firmada porque el saldo ya fue cobrado"
+    );
+  }
+  if (
+    TERMINAL_SALE_STATUSES.includes(saleStatus) &&
     payments.some(isActivePayment)
   ) {
     return showFieldError(
       formElement,
       "saleStatus",
-      "Anula o revierte primero todos los cobros contabilizados"
+      "Anula o revierte primero los cobros antes de cerrar por desistimiento o cambio"
     );
   }
-  if (saleStatus === "Cancelada" && !cancelReason) {
-    return showFieldError(formElement, "cancelReason", "Indica el motivo de la cancelación");
+  if (TERMINAL_SALE_STATUSES.includes(saleStatus) && !cancelReason) {
+    return showFieldError(
+      formElement,
+      "cancelReason",
+      saleStatus === "Cambio" ? "Describe qué cambió" : "Indica el motivo del desistimiento"
+    );
   }
 
   const saleId = id || makeId("sale");
+  syncBalanceDueDateWithDelivery();
   const installments = readInstallmentPlan(saleId, saleDate, commissionAmount);
   if (!installments) return;
   const dueDate = installments.map((installment) => installment.dueDate).sort()[0] || "";
@@ -3593,7 +4100,7 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
     clientId,
     project,
     unit,
-    developer: String(data.get("developer") || "").trim(),
+    developer,
     saleStatus,
     salePrice,
     saleCurrency,
@@ -3605,9 +4112,9 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
     commissionAmount,
     commissionCurrency,
     commissionDueDate: dueDate,
-    cancelReason: saleStatus === "Cancelada" ? cancelReason : "",
+    cancelReason: TERMINAL_SALE_STATUSES.includes(saleStatus) ? cancelReason : "",
     cancelledAt:
-      saleStatus === "Cancelada"
+      TERMINAL_SALE_STATUSES.includes(saleStatus)
         ? current?.cancelledAt || new Date().toISOString()
         : "",
     notes: String(data.get("notes") || "").trim(),
@@ -3652,9 +4159,9 @@ document.querySelector("#fillPendingAmount").addEventListener("click", () => {
   const form = document.querySelector("#paymentForm");
   const sale = saleById(form.elements.saleId.value);
   if (!sale) return;
-  form.elements.amount.value = fromCents(
-    pendingForSaleCents(sale, form.elements.id.value)
-  ).toFixed(2);
+  const installment = nextCollectibleInstallment(sale, form.elements.id.value);
+  if (!installment) return;
+  form.elements.amount.value = fromCents(installment.pendingCents).toFixed(2);
   form.elements.amount.focus();
 });
 
@@ -3678,14 +4185,14 @@ document.querySelector("#paymentForm").addEventListener("submit", async (event) 
     return showFieldError(
       formElement,
       "saleId",
-      "No se puede cobrar una venta cancelada"
+      "No se puede cobrar una operación desistida o cambiada"
     );
   }
   if (!isClosedSale(sale)) {
     return showFieldError(
       formElement,
       "saleId",
-      "La operación debe estar Contratada o Entregada antes de cobrar comisión"
+      "La opción a compra debe estar firmada antes de cobrar el avance"
     );
   }
   if (amountCents <= 0) {
@@ -3716,11 +4223,31 @@ document.querySelector("#paymentForm").addEventListener("submit", async (event) 
       "Indica la referencia del cobro"
     );
   }
-  if (amountCents > pendingForSaleCents(sale, id)) {
+  const nextInstallment = nextCollectibleInstallment(sale, id);
+  if (!nextInstallment) {
+    return showFieldError(
+      formElement,
+      "saleId",
+      isDeliveredSale(sale)
+        ? "Esta operación no tiene cuotas pendientes"
+        : "El saldo se habilita cuando la propiedad esté entregada"
+    );
+  }
+  if (
+    nextInstallment.installmentKind === "balance" &&
+    (!sale.deliveryDate || paymentDate < sale.deliveryDate)
+  ) {
+    return showFieldError(
+      formElement,
+      "paymentDate",
+      "El saldo no puede cobrarse antes de la fecha real de entrega"
+    );
+  }
+  if (amountCents > nextInstallment.pendingCents) {
     return showFieldError(
       formElement,
       "amount",
-      "El cobro supera la comisión pendiente"
+      "El cobro supera el pendiente de la cuota " + nextInstallment.label
     );
   }
   if (
@@ -3738,16 +4265,12 @@ document.querySelector("#paymentForm").addEventListener("submit", async (event) 
       "Ya existe un cobro con esa referencia"
     );
   }
-  const nextInstallment = nextOpenInstallment(sale, id);
   const paymentId = id || formElement.dataset.pendingPaymentId || makeId("payment");
   formElement.dataset.pendingPaymentId = paymentId;
   const payment = {
     id: paymentId,
     saleId: sale.id,
-    installmentId:
-      nextInstallment && amountCents <= nextInstallment.pendingCents
-        ? nextInstallment.id
-        : "",
+    installmentId: nextInstallment.id,
     amount,
     currency: sale.commissionCurrency,
     paymentDate,
@@ -3986,12 +4509,12 @@ document.addEventListener("click", async (event) => {
   if (editSale) return startSaleEdit(editSale.dataset.editSale, editSale);
   if (deleteSale) {
     if (!DEMO_MODE) {
-      showToast("En producción las operaciones se conservan para auditoría; márcala Cancelada");
+      showToast("En producción las operaciones se conservan; usa Desistió o Cambio");
       return;
     }
     const id = deleteSale.dataset.deleteSale;
     if (paymentsForSale(id).length) {
-      showToast("La venta tiene cobros: edítala y márcala Cancelada");
+      showToast("La venta tiene cobros: anúlalos antes de marcar Desistió o Cambio");
       return;
     }
     const confirmation = await requestConfirmation({
