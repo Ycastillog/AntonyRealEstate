@@ -251,7 +251,9 @@ test("backend names every workspace table and required RPC contract", () => {
     "crm_record_payment",
     "crm_void_payment",
     "crm_import_workspace",
-    "crm_import_historical_sales"
+    "crm_import_historical_sales",
+    "crm_update_historical_contact",
+    "crm_enrich_historical_contacts"
   ]) {
     assert.match(
       backend,
@@ -281,7 +283,9 @@ test("historical LVP sales remain staged, visible in analytics, and excluded fro
     "historicalOverviewTotal",
     "historicalOverviewVolume",
     "historicalBody",
-    "exportHistoricalButton"
+    "exportHistoricalButton",
+    "historicalContactForm",
+    "historicalContactSubmitButton"
   ]) {
     assert.ok(html.includes(`id="${id}"`), `Missing #${id}`);
   }
@@ -291,7 +295,10 @@ test("historical LVP sales remain staged, visible in analytics, and excluded fro
   assert.match(app, /function analyticsSales\(\)/);
   assert.match(app, /function renderHistoricalSales\(\)/);
   assert.match(app, /cloudBackend\.importHistoricalSales\(batch, rows\)/);
+  assert.match(app, /cloudBackend\.updateHistoricalContact/);
+  assert.match(app, /cloudBackend\.enrichHistoricalContacts/);
   assert.match(historical, /MAX_ROWS\s*=\s*5000/);
+  assert.match(historical, /parseHistoricalContactUpdates/);
   assert.match(historical, /sourceSnapshot/);
   assert.match(historical, /sha256/);
   assert.doesNotMatch(

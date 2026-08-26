@@ -138,6 +138,8 @@ test("SQL implements and grants every RPC required by the browser adapter", sqlT
     ["crm_record_payment", ["p_payment"]],
     ["crm_void_payment", ["p_payment_id", "p_reason"]],
     ["crm_import_historical_sales", ["p_batch", "p_rows"]],
+    ["crm_update_historical_contact", ["p_contact"]],
+    ["crm_enrich_historical_contacts", ["p_rows"]],
     ["crm_import_workspace", ["p_state"]],
     ["crm_workspace_health", []]
   ]);
@@ -355,8 +357,12 @@ test("closed CRM catalogs, LVP pairs, and legacy mappings are explicit", sqlTest
 
 test("historical staging is constrained, idempotent, and RPC-only", sqlTestOptions, () => {
   const historicalImport = functionDefinition("crm_import_historical_sales");
+  const historicalContactUpdate = functionDefinition("crm_update_historical_contact");
+  const historicalContactEnrichment = functionDefinition("crm_enrich_historical_contacts");
   const workspaceImport = functionDefinition("crm_import_workspace");
   assert.ok(historicalImport);
+  assert.ok(historicalContactUpdate);
+  assert.ok(historicalContactEnrichment);
   assert.ok(workspaceImport);
 
   assert.match(
@@ -439,6 +445,37 @@ test("historical staging is constrained, idempotent, and RPC-only", sqlTestOptio
   assert.match(
     historicalImport,
     /'batchId'[\s\S]{0,180}'alreadyImported'\s*,\s*true[\s\S]*?'alreadyImported'\s*,\s*false/i
+  );
+  for (const definition of [historicalContactUpdate, historicalContactEnrichment]) {
+    assert.match(definition, /security\s+definer/i);
+    assert.match(definition, /set\s+search_path\s*=\s*pg_catalog\s*,\s*pg_temp/i);
+    assert.match(definition, /v_owner\s+uuid\s*:=\s*auth\.uid\(\)/i);
+    assert.match(definition, /owner_id\s*=\s*v_owner/i);
+    assert.match(definition, /review_status\s*<>\s*'Convertida'/i);
+  }
+  assert.match(
+    historicalContactUpdate,
+    /jsonb_object_keys\(p_contact\)[\s\S]{0,260}'buyer_name'[\s\S]{0,100}'buyer_phone'[\s\S]{0,100}'buyer_email'/i
+  );
+  assert.match(
+    historicalContactUpdate,
+    /v_buyer_phone\s+is\s+not\s+null[\s\S]{0,260}regexp_replace\(v_buyer_phone/i
+  );
+  assert.match(
+    historicalContactUpdate,
+    /v_buyer_email\s+is\s+not\s+null[\s\S]{0,260}v_buyer_email\s+!~\*/i
+  );
+  assert.match(
+    historicalContactEnrichment,
+    /jsonb_array_length\(p_rows\)\s+not\s+between\s+1\s+and\s+5000/i
+  );
+  assert.match(
+    historicalContactEnrichment,
+    /buyer_phone\s*=\s*coalesce\(hs\.buyer_phone,\s*v_buyer_phone\)[\s\S]{0,120}buyer_email\s*=\s*coalesce\(hs\.buyer_email,\s*v_buyer_email\)/i
+  );
+  assert.match(
+    historicalContactEnrichment,
+    /v_id\s*=\s*any\s*\(v_seen_ids\)/i
   );
 
   const rlsBlock = sql.match(/do\s+\$crm_rls\$([\s\S]*?)\$crm_rls\$\s*;/i)?.[1];
