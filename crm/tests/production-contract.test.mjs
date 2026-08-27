@@ -332,6 +332,9 @@ test("commission reports reconcile each installment and support export and print
   for (const id of [
     "view-reports",
     "reportYear",
+    "reportSearch",
+    "reportPeriodType",
+    "reportYearLabel",
     "reportDeveloper",
     "reportProject",
     "reportSaleStatus",
@@ -341,7 +344,14 @@ test("commission reports reconcile each installment and support export and print
     "reportCommission",
     "reportReceived",
     "reportPending",
+    "reportCollectible",
+    "reportScheduled",
     "reportOverdue",
+    "reportAging",
+    "reportPriorityList",
+    "reportRefreshIndicator",
+    "reportUpcomingMeta",
+    "clearReportFilters",
     "reportCollectionRate",
     "reportInstallmentCount",
     "reportBody",
@@ -364,6 +374,31 @@ test("commission reports reconcile each installment and support export and print
   assert.match(app, /Reporte de comisiones por constructora/);
   assert.match(app, /sale\.developer === developer/);
   assert.match(app, /function reportInstallmentsForSales\(/);
+  assert.match(app, /function renderReportCommandCenter\(/);
+  assert.match(app, /function reportSaleMatchesSearch\(/);
+  assert.match(app, /function reportDueContext\(/);
+  assert.match(app, /function reportPeriodInstallmentsForSales\(/);
+  assert.match(app, /function reportPaymentContext\(/);
+  assert.match(app, /function reportPaidCents\(/);
+  assert.match(app, /Resumen por constructora/);
+  assert.match(app, /const developerSummaryRows =/);
+  assert.match(app, /Fechas de cobro/);
+  assert.match(app, /Métodos de cobro/);
+  assert.match(app, /Referencias/);
+  assert.match(app, /"1–30 días"/);
+  assert.match(app, /"Más de 90 días"/);
+  assert.match(app, /Confirmar entrega/);
+  assert.match(app, /isReportInstallmentOverdue/);
+  assert.match(app, /\{ label: "Parcial vencida", className: "status-overdue" \}/);
+  assert.match(app, /\["Vencida", "Parcial vencida"\]/);
+  assert.match(html, /Pendiente contractual/);
+  assert.match(html, /Programado para entrega/);
+  assert.match(html, /Estado de la cuota \(detalle\)/);
+  assert.match(html, /Vencimiento de cuota/);
+  assert.match(html, /Fecha de cobro/);
+  assert.match(app, /lastWorkspaceSyncAt/);
+  assert.match(app, /Próximos 30 días/);
+  assert.match(html, /production-v14/);
 });
 
 test("signed unit changes carry the paid advance and recalculate only the balance", () => {

@@ -1,5 +1,5 @@
 const STORAGE_KEY = "antony-crm-local-v2";
-const APP_VERSION = 13;
+const APP_VERSION = 14;
 const MAX_AUDIT_ENTRIES = 500;
 const VALID_CURRENCIES = ["USD", "DOP"];
 const VALID_CLIENT_STAGES = ["Nuevo", "Calificado", "En seguimiento", "Comprador", "Inactivo"];
@@ -237,6 +237,7 @@ let activeDrawer = null;
 let drawerReturnFocus = null;
 let detailRecord = null;
 let inertedElements = [];
+let lastWorkspaceSyncAt = new Date();
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -3146,16 +3147,37 @@ function updatePaymentContext() {
 
 function populateReportFilters() {
   const yearSelect = document.querySelector("#reportYear");
+  const periodType = document.querySelector("#reportPeriodType").value || "sale";
   const developerSelect = document.querySelector("#reportDeveloper");
   const projectSelect = document.querySelector("#reportProject");
   const selectedYear = yearSelect.options.length ? yearSelect.value : "";
   const selectedDeveloper = developerSelect.value;
   const selectedProject = projectSelect.value;
   const reportSource = reportableSales();
+  const reportSaleIds = new Set(reportSource.map((sale) => sale.id));
+  const periodDates =
+    periodType === "due"
+      ? state.installments
+          .filter((installment) => reportSaleIds.has(installment.saleId))
+          .map((installment) => installment.dueDate)
+      : periodType === "payment"
+        ? state.payments
+            .filter(
+              (payment) =>
+                reportSaleIds.has(payment.saleId) && isActivePayment(payment)
+            )
+            .map((payment) => payment.paymentDate)
+        : reportSource.map((sale) => sale.saleDate);
+  document.querySelector("#reportYearLabel").textContent =
+    periodType === "due"
+      ? "Año de vencimiento"
+      : periodType === "payment"
+        ? "Año de cobro"
+        : "Año de venta";
   const years = [
     ...new Set([
       String(new Date().getFullYear()),
-      ...reportSource.map((sale) => yearOf(sale.saleDate))
+      ...periodDates.map(yearOf)
     ])
   ]
     .filter(Boolean)
@@ -3172,8 +3194,7 @@ function populateReportFilters() {
           "</option>"
       )
       .join("");
-  yearSelect.value =
-    selectedYear === "" || years.includes(selectedYear) ? selectedYear : years[0] || "";
+  yearSelect.value = years.includes(selectedYear) ? selectedYear : "";
 
   const developers = [
     ...new Set(reportSource.map((sale) => sale.developer).filter(Boolean))
@@ -3220,15 +3241,48 @@ function populateReportFilters() {
   projectSelect.value = projects.includes(selectedProject) ? selectedProject : "";
 }
 
+function reportSaleMatchesSearch(sale, query) {
+  if (!query) return true;
+  const client = clientById(sale.clientId);
+  return normalizeText(
+    [
+      sale.buyerName,
+      client?.phone,
+      client?.email,
+      sale.developer,
+      sale.project,
+      sale.unit,
+      sale.saleStatus
+    ]
+      .filter(Boolean)
+      .join(" ")
+  ).includes(query);
+}
+
 function filteredReportSales() {
   const year = document.querySelector("#reportYear").value;
+  const periodType = document.querySelector("#reportPeriodType").value || "sale";
   const developer = document.querySelector("#reportDeveloper").value;
   const project = document.querySelector("#reportProject").value;
   const saleStatus = document.querySelector("#reportSaleStatus").value;
   const commissionStatus = document.querySelector("#reportCommissionStatus").value;
+  const search = normalizeText(document.querySelector("#reportSearch").value);
   return reportableSales().filter(
-    (sale) =>
-      (!year || yearOf(sale.saleDate) === year) &&
+    (sale) => {
+      const matchesPeriod =
+        !year ||
+        (periodType === "due"
+          ? installmentsForSale(sale.id).some(
+              (installment) => yearOf(installment.dueDate) === year
+            )
+          : periodType === "payment"
+            ? activePaymentsForSale(sale.id).some(
+                (payment) => yearOf(payment.paymentDate) === year
+              )
+            : yearOf(sale.saleDate) === year);
+      return (
+      reportSaleMatchesSearch(sale, search) &&
+      matchesPeriod &&
       (!developer || sale.developer === developer) &&
       (!project || sale.project === project) &&
       (saleStatus
@@ -3236,6 +3290,8 @@ function filteredReportSales() {
         : commissionStatus === "Anulada"
           ? isCancelledSale(sale)
           : isClosedSale(sale))
+      );
+    }
   );
 }
 
@@ -3246,16 +3302,37 @@ function reportInstallmentStatus(item) {
   if (item.pendingCents === 0) {
     return { label: "Pagada", className: "status-paid" };
   }
-  if (item.paidCents > 0) {
-    return { label: "Parcial", className: "status-partial" };
-  }
   if (!isInstallmentCollectible(item.sale, item)) {
     return { label: "Programada", className: "status-pending" };
   }
   if (item.dueDate && item.dueDate < today()) {
-    return { label: "Vencida", className: "status-overdue" };
+    return item.paidCents > 0
+      ? { label: "Parcial vencida", className: "status-overdue" }
+      : { label: "Vencida", className: "status-overdue" };
+  }
+  if (item.paidCents > 0) {
+    return { label: "Parcial", className: "status-partial" };
   }
   return { label: "Pendiente", className: "status-pending" };
+}
+
+function isReportInstallmentOverdue(item) {
+  return ["Vencida", "Parcial vencida"].includes(
+    reportInstallmentStatus(item).label
+  );
+}
+
+function reportInstallmentPriority(item) {
+  const priorities = {
+    "Parcial vencida": 0,
+    Vencida: 1,
+    Pendiente: 2,
+    Parcial: 2,
+    Programada: 3,
+    Pagada: 4,
+    Anulada: 5
+  };
+  return priorities[reportInstallmentStatus(item).label] ?? 9;
 }
 
 function reportInstallmentBadge(item) {
@@ -3269,6 +3346,25 @@ function reportInstallmentBadge(item) {
   );
 }
 
+function reportDueContext(item) {
+  if (!item.dueDate) return "Sin fecha definida";
+  if (["Pagada", "Anulada"].includes(reportInstallmentStatus(item).label)) return "";
+  const difference = daysBetween(today(), item.dueDate);
+  if (
+    reportInstallmentStatus(item).label === "Programada" &&
+    isBalanceInstallment(item) &&
+    difference <= 0
+  ) {
+    return difference === 0
+      ? "Entrega prevista hoy"
+      : "Entrega por confirmar · hace " + Math.abs(difference) + " días";
+  }
+  if (difference === 0) return "Vence hoy";
+  return difference < 0
+    ? "Hace " + Math.abs(difference) + " días"
+    : "En " + difference + " días";
+}
+
 function reportInstallmentsForSales(sales) {
   return (sales || filteredReportSales())
     .flatMap((sale) =>
@@ -3280,18 +3376,71 @@ function reportInstallmentsForSales(sales) {
     );
 }
 
-function filteredReportInstallments(sales) {
+function reportPaymentsForInstallment(item, selectedPeriodOnly) {
+  const periodType = document.querySelector("#reportPeriodType").value || "sale";
+  const year = document.querySelector("#reportYear").value;
+  return activePaymentsForSale(item.sale.id)
+    .filter(
+      (payment) =>
+        payment.installmentId === item.id &&
+        (!selectedPeriodOnly ||
+          periodType !== "payment" ||
+          !year ||
+          yearOf(payment.paymentDate) === year)
+    )
+    .sort((a, b) => String(a.paymentDate).localeCompare(String(b.paymentDate)));
+}
+
+function reportPaidCents(item) {
+  const periodType = document.querySelector("#reportPeriodType").value || "sale";
+  const year = document.querySelector("#reportYear").value;
+  if (periodType !== "payment" || !year) return item.paidCents;
+  return reportPaymentsForInstallment(item, true).reduce(
+    (total, payment) => total + toCents(payment.amount),
+    0
+  );
+}
+
+function reportPaymentContext(item) {
+  const payments = reportPaymentsForInstallment(item, true);
+  if (!payments.length) return "";
+  const latest = payments[payments.length - 1];
+  return (
+    (payments.length > 1 ? payments.length + " abonos · último " : "") +
+    formatDate(latest.paymentDate) +
+    " · " +
+    latest.method +
+    (latest.reference ? " · " + latest.reference : "")
+  );
+}
+
+function reportPeriodInstallmentsForSales(sales) {
+  const year = document.querySelector("#reportYear").value;
+  const periodType = document.querySelector("#reportPeriodType").value || "sale";
+  return reportInstallmentsForSales(sales).filter((item) => {
+    if (!year || periodType === "sale") return true;
+    if (periodType === "due") return yearOf(item.dueDate) === year;
+    return reportPaymentsForInstallment(item, true).length > 0;
+  });
+}
+
+function filteredReportInstallments(sales, periodInstallments) {
   const commissionStatus = document.querySelector("#reportCommissionStatus").value;
-  return reportInstallmentsForSales(sales)
+  return (periodInstallments || reportPeriodInstallmentsForSales(sales))
     .filter((installment) => {
       if (!commissionStatus) return true;
       const status = reportInstallmentStatus(installment).label;
       return commissionStatus === "Pendiente"
         ? ["Pendiente", "Programada"].includes(status)
-        : status === commissionStatus;
+        : commissionStatus === "Parcial"
+          ? ["Parcial", "Parcial vencida"].includes(status)
+          : commissionStatus === "Vencida"
+            ? ["Vencida", "Parcial vencida"].includes(status)
+            : status === commissionStatus;
     })
     .sort(
       (a, b) =>
+        reportInstallmentPriority(a) - reportInstallmentPriority(b) ||
         String(a.dueDate || "9999-12-31").localeCompare(
           String(b.dueDate || "9999-12-31")
         ) ||
@@ -3302,12 +3451,22 @@ function filteredReportInstallments(sales) {
 
 function reportFilterSummary() {
   const parts = [];
+  const search = String(document.querySelector("#reportSearch").value || "").trim();
   const year = document.querySelector("#reportYear").value;
+  const periodType = document.querySelector("#reportPeriodType").value || "sale";
   const developer = document.querySelector("#reportDeveloper").value;
   const project = document.querySelector("#reportProject").value;
   const saleStatus = document.querySelector("#reportSaleStatus").value;
   const commissionStatus = document.querySelector("#reportCommissionStatus").value;
-  if (year) parts.push("Ventas " + year);
+  if (year) {
+    parts.push(
+      periodType === "due"
+        ? "Vencimientos " + year
+        : periodType === "payment"
+          ? "Cobros " + year
+          : "Ventas " + year
+    );
+  }
   if (developer) parts.push(developer);
   if (project) parts.push(project);
   if (saleStatus) parts.push(saleStatus);
@@ -3318,7 +3477,142 @@ function reportFilterSummary() {
         : "Cuotas " + commissionStatus.toLowerCase()
     );
   }
-  return parts.length ? parts.join(" · ") : "Todas las operaciones activas";
+  if (search) parts.push('Búsqueda “' + search + '”');
+  return parts.length ? parts.join(" · ") : "Todas las operaciones firmadas y entregadas";
+}
+
+function reportMoneySummary(totals) {
+  const parts = VALID_CURRENCIES.filter((currency) => totals[currency] > 0).map(
+    (currency) => moneyFromCents(totals[currency], currency)
+  );
+  return parts.length ? parts.join(" · ") : moneyFromCents(0, "USD");
+}
+
+function reportInstallmentTotals(items, amountSelector) {
+  return items.reduce((totals, item) => {
+    totals[item.sale.commissionCurrency] += amountSelector(item);
+    return totals;
+  }, emptyMoneyTotals());
+}
+
+function renderReportCommandCenter(installments) {
+  const overdue = installments.filter(isReportInstallmentOverdue);
+  const agingBuckets = [
+    { label: "1–30 días", minimum: 1, maximum: 30 },
+    { label: "31–60 días", minimum: 31, maximum: 60 },
+    { label: "61–90 días", minimum: 61, maximum: 90 },
+    { label: "Más de 90 días", minimum: 91, maximum: Number.POSITIVE_INFINITY }
+  ].map((bucket) => {
+    const items = overdue.filter((item) => {
+      const age = Math.max(daysBetween(item.dueDate, today()), 1);
+      return age >= bucket.minimum && age <= bucket.maximum;
+    });
+    return {
+      ...bucket,
+      items,
+      totals: reportInstallmentTotals(items, (item) => item.pendingCents)
+    };
+  });
+  const maximumAgingCount = Math.max(
+    ...agingBuckets.map((bucket) => bucket.items.length),
+    1
+  );
+  document.querySelector("#reportAging").innerHTML = overdue.length
+    ? agingBuckets
+        .map(
+          (bucket) =>
+            '<div class="report-aging-row"><div class="report-aging-heading"><strong>' +
+            escapeHtml(bucket.label) +
+            '</strong><span>' +
+            bucket.items.length +
+            (bucket.items.length === 1 ? " cuota" : " cuotas") +
+            '</span><b>' +
+            escapeHtml(reportMoneySummary(bucket.totals)) +
+            '</b></div><div class="analysis-bar report-aging-bar"><span style="width:' +
+            Math.round((bucket.items.length / maximumAgingCount) * 100) +
+            '%"></span></div></div>'
+        )
+        .join("")
+    : '<div class="detail-empty report-aging-empty"><i data-lucide="badge-check" aria-hidden="true"></i><strong>Cartera exigible al día</strong><span>No hay cuotas vencidas en este corte.</span></div>';
+
+  const deliveryAlerts = installments
+    .filter(
+      (item) =>
+        item.pendingCents > 0 &&
+        isBalanceInstallment(item) &&
+        !isDeliveredSale(item.sale) &&
+        item.dueDate &&
+        item.dueDate <= today() &&
+        !isCancelledSale(item.sale)
+    )
+    .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+  const upcoming = installments
+    .filter((item) => {
+      if (
+        item.pendingCents <= 0 ||
+        !isInstallmentCollectible(item.sale, item) ||
+        !item.dueDate
+      ) {
+        return false;
+      }
+      const days = daysBetween(today(), item.dueDate);
+      return days >= 0 && days <= 30;
+    })
+    .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+  const overduePriority = [...overdue].sort(
+    (a, b) =>
+      daysBetween(b.dueDate, today()) - daysBetween(a.dueDate, today()) ||
+      b.pendingCents - a.pendingCents
+  );
+  const priorities = [
+    ...overduePriority.slice(0, 3).map((item) => ({ item, type: "overdue" })),
+    ...deliveryAlerts.slice(0, 2).map((item) => ({ item, type: "delivery" })),
+    ...upcoming.slice(0, 1).map((item) => ({ item, type: "upcoming" }))
+  ];
+  document.querySelector("#reportPriorityMeta").textContent =
+    overdue.length +
+    (overdue.length === 1 ? " cuota vencida" : " cuotas vencidas") +
+    " · " +
+    deliveryAlerts.length +
+    (deliveryAlerts.length === 1
+      ? " entrega por confirmar"
+      : " entregas por confirmar");
+  document.querySelector("#reportShowOverdue").hidden = overdue.length === 0;
+  document.querySelector("#reportShowOverdueCount").textContent = overdue.length;
+  document.querySelector("#reportPriorityList").innerHTML = priorities.length
+    ? priorities
+        .map(({ item, type }) => {
+          const days = item.dueDate ? daysBetween(today(), item.dueDate) : 0;
+          const label =
+            type === "delivery"
+              ? "Confirmar entrega"
+              : type === "overdue"
+                ? "Vencida hace " + Math.abs(days) + " días"
+                : days === 0
+                  ? "Vence hoy"
+                  : "Vence en " + days + " días";
+          return (
+            '<button class="report-priority-item report-priority-' +
+            escapeHtml(type) +
+            '" type="button" data-view-sale="' +
+            escapeHtml(item.sale.id) +
+            '"><span class="report-priority-mark"><i data-lucide="' +
+            (type === "delivery" ? "building-2" : type === "overdue" ? "triangle-alert" : "calendar-clock") +
+            '" aria-hidden="true"></i></span><span><strong>' +
+            escapeHtml(item.sale.buyerName) +
+            '</strong><small>' +
+            escapeHtml(item.sale.developer + " · " + item.sale.project + " · " + item.sale.unit) +
+            '</small><em>' +
+            escapeHtml(label) +
+            " · " +
+            escapeHtml(item.label) +
+            '</em></span><b>' +
+            escapeHtml(moneyFromCents(item.pendingCents, item.sale.commissionCurrency)) +
+            '</b><i data-lucide="arrow-up-right" aria-hidden="true"></i></button>'
+          );
+        })
+        .join("")
+    : '<div class="detail-empty report-priority-empty"><i data-lucide="badge-check" aria-hidden="true"></i><strong>Sin prioridades urgentes</strong><span>No hay cuotas vencidas ni entregas pendientes en este corte.</span></div>';
 }
 
 function renderReportAnalysis(sales, installments) {
@@ -3329,7 +3623,9 @@ function renderReportAnalysis(sales, installments) {
       project: sale.project || "Sin proyecto",
       count: 0,
       volume: emptyMoneyTotals(),
-      commissions: emptyMoneyTotals()
+      commissions: emptyMoneyTotals(),
+      pending: emptyMoneyTotals(),
+      pendingInstallments: 0
     };
     current.count += 1;
     current.volume[sale.saleCurrency] += toCents(sale.salePrice);
@@ -3337,15 +3633,33 @@ function renderReportAnalysis(sales, installments) {
     groups.set(key, current);
     return groups;
   }, new Map());
+  installments.forEach((installment) => {
+    const key =
+      (installment.sale.developer || "Sin constructora") +
+      "::" +
+      (installment.sale.project || "Sin proyecto");
+    const project = byProject.get(key);
+    if (project) {
+      project.pending[installment.sale.commissionCurrency] += installment.pendingCents;
+      if (installment.pendingCents > 0) project.pendingInstallments += 1;
+    }
+  });
   const projects = [...byProject.entries()]
-    .sort((a, b) => b[1].count - a[1].count)
+    .sort(
+      (a, b) =>
+        b[1].pendingInstallments - a[1].pendingInstallments ||
+        b[1].count - a[1].count
+    )
     .slice(0, 6);
-  const maximum = Math.max(...projects.map(([, value]) => value.count), 1);
+  const maximum = Math.max(
+    ...projects.map(([, value]) => value.pendingInstallments),
+    1
+  );
   document.querySelector("#reportProjectBreakdown").innerHTML = projects.length
     ? projects
         .map(
           ([, value]) =>
-            '<div class="project-breakdown-row"><div><strong>' +
+            '<div class="project-breakdown-row"><div class="project-breakdown-heading"><div><strong>' +
             escapeHtml(value.project) +
             "</strong><span>" +
             escapeHtml(value.developer) +
@@ -3353,10 +3667,12 @@ function renderReportAnalysis(sales, installments) {
             value.count +
             (value.count === 1 ? " operación" : " operaciones") +
             " · " +
-            escapeHtml(pairMoney(value.volume)) +
+            escapeHtml(reportMoneySummary(value.volume)) +
             " vendidos" +
-            '</span></div><div class="analysis-bar"><span style="width:' +
-            Math.round((value.count / maximum) * 100) +
+            '</span></div><span class="project-pending"><b>' +
+            escapeHtml(reportMoneySummary(value.pending)) +
+            '</b> por cobrar</span></div><div class="analysis-bar"><span style="width:' +
+            Math.round((value.pendingInstallments / maximum) * 100) +
             '%"></span></div></div>'
         )
         .join("")
@@ -3365,27 +3681,36 @@ function renderReportAnalysis(sales, installments) {
   const statusOrder = [
     "Pagada",
     "Parcial",
+    "Parcial vencida",
     "Pendiente",
     "Vencida",
     "Programada",
     "Anulada"
   ];
-  const statusCounts = statusOrder.map((status) => ({
-    status,
-    count: installments.filter(
+  const statusCounts = statusOrder.map((status) => {
+    const items = installments.filter(
       (installment) => reportInstallmentStatus(installment).label === status
-    ).length
-  }));
+    );
+    return {
+      status,
+      count: items.length,
+      totals: reportInstallmentTotals(items, (item) =>
+        ["Pagada", "Anulada"].includes(status) ? item.amountCents : item.pendingCents
+      )
+    };
+  });
   const total = Math.max(installments.length, 1);
   document.querySelector("#reportCollectionHealth").innerHTML = statusCounts
     .map(
-      ({ status, count }) =>
+      ({ status, count, totals }) =>
         '<div class="health-row"><div><span class="health-dot health-' +
             escapeHtml(normalizeText(status).replace(/\s+/g, "-")) +
         '"></span><strong>' +
         escapeHtml(status) +
         "</strong><span>" +
         count +
+        " · " +
+        escapeHtml(reportMoneySummary(totals)) +
         '</span></div><div class="analysis-bar"><span style="width:' +
         Math.round((count / total) * 100) +
         '%"></span></div></div>'
@@ -3408,16 +3733,16 @@ function renderReports() {
   populateReportFilters();
   const selectedDeveloper = document.querySelector("#reportDeveloper").value;
   document.querySelector("#reportHeadingEyebrow").textContent = selectedDeveloper
-    ? "Conciliación · " + selectedDeveloper
-    : "Conciliación por constructora";
+    ? "Inteligencia de cartera · " + selectedDeveloper
+    : "Inteligencia de cartera";
   document.querySelector("#reportHeadingDescription").textContent = selectedDeveloper
-    ? "Revisa cada avance y saldo, identifica lo vencido y prepara el corte para " +
+    ? "Entiende cuánto te debe " +
       selectedDeveloper +
-      "."
-    : "Revisa cada avance y saldo, identifica lo vencido y prepara el corte de cada constructora.";
+      ", desde cuándo y qué cobro debes gestionar primero."
+    : "Entiende cuánto te deben, desde cuándo y qué cobro debes gestionar primero.";
   const baseSales = filteredReportSales();
-  const portfolioInstallments = reportInstallmentsForSales(baseSales);
-  const installments = filteredReportInstallments(baseSales);
+  const portfolioInstallments = reportPeriodInstallmentsForSales(baseSales);
+  const installments = filteredReportInstallments(baseSales, portfolioInstallments);
   const sales = baseSales;
   const volume = aggregate(sales, "salePrice", "saleCurrency");
   const commissions = portfolioInstallments.reduce((totals, installment) => {
@@ -3425,13 +3750,46 @@ function renderReports() {
     return totals;
   }, emptyMoneyTotals());
   const received = portfolioInstallments.reduce((totals, installment) => {
-    totals[installment.sale.commissionCurrency] += installment.paidCents;
+    totals[installment.sale.commissionCurrency] += reportPaidCents(installment);
     return totals;
   }, emptyMoneyTotals());
   const pending = portfolioInstallments.reduce((totals, installment) => {
     totals[installment.sale.commissionCurrency] += installment.pendingCents;
     return totals;
   }, emptyMoneyTotals());
+  const collectible = reportInstallmentTotals(
+    portfolioInstallments.filter(
+      (installment) =>
+        installment.pendingCents > 0 &&
+        isInstallmentCollectible(installment.sale, installment) &&
+        installment.dueDate &&
+        installment.dueDate <= today()
+    ),
+    (installment) => installment.pendingCents
+  );
+  const upcoming = reportInstallmentTotals(
+    portfolioInstallments.filter((installment) => {
+      if (
+        installment.pendingCents <= 0 ||
+        !isInstallmentCollectible(installment.sale, installment) ||
+        !installment.dueDate
+      ) {
+        return false;
+      }
+      const days = daysBetween(today(), installment.dueDate);
+      return days > 0 && days <= 30;
+    }),
+    (installment) => installment.pendingCents
+  );
+  const scheduled = reportInstallmentTotals(
+    portfolioInstallments.filter(
+      (installment) =>
+        installment.pendingCents > 0 &&
+        !isInstallmentCollectible(installment.sale, installment) &&
+        !isCancelledSale(installment.sale)
+    ),
+    (installment) => installment.pendingCents
+  );
   const overdue = portfolioInstallments.reduce((totals, installment) => {
     if (
       installment.pendingCents > 0 &&
@@ -3454,13 +3812,27 @@ function renderReports() {
   });
 
   document.querySelector("#reportSalesCount").textContent = sales.length;
+  const developerCount = new Set(sales.map((sale) => sale.developer).filter(Boolean)).size;
+  document.querySelector("#reportSalesCountMeta").textContent =
+    developerCount + (developerCount === 1 ? " constructora" : " constructoras");
   document.querySelector("#reportInstallmentCount").textContent = installments.length;
   document.querySelector("#reportCutoffTitle").textContent = reportFilterSummary();
   document.querySelector("#reportCutoffMeta").textContent =
     installments.length +
-    (installments.length === 1 ? " cuota" : " cuotas") +
-    " · corte actualizado " +
+    (installments.length === 1 ? " cuota visible" : " cuotas visibles") +
+    " · indicadores sobre " +
+    portfolioInstallments.length +
+    (portfolioInstallments.length === 1 ? " cuota" : " cuotas") +
+    " · actualizado " +
     formatDate(today());
+  document.querySelector("#reportRefreshIndicator").innerHTML =
+    '<i data-lucide="clock-3" aria-hidden="true"></i>Actualizado ' +
+    escapeHtml(
+      lastWorkspaceSyncAt.toLocaleTimeString("es-DO", {
+        hour: "numeric",
+        minute: "2-digit"
+      })
+    );
   document.querySelector("#reportSalesVolume").textContent = moneyFromCents(
     volume.USD,
     "USD"
@@ -3472,14 +3844,15 @@ function renderReports() {
   setReportMoney("reportCommission", "reportCommissionDop", commissions);
   setReportMoney("reportReceived", "reportReceivedDop", received);
   setReportMoney("reportPending", "reportPendingDop", pending);
-  document.querySelector("#reportOverdue").textContent = moneyFromCents(
-    overdue.USD,
-    "USD"
-  );
+  setReportMoney("reportCollectible", "reportCollectibleDop", collectible);
+  document.querySelector("#reportUpcomingMeta").textContent =
+    "Próximos 30 días: " + reportMoneySummary(upcoming);
+  setReportMoney("reportScheduled", "reportScheduledDop", scheduled);
+  setReportMoney("reportOverdue", "reportOverdueDop", overdue);
   document.querySelector("#reportCollectionRate").textContent =
-    (overdue.DOP ? moneyFromCents(overdue.DOP, "DOP") + " vencidos · " : "") +
     (collectionRates.length ? collectionRates.join(" · ") + " cobrado" : "0% cobrado");
 
+  renderReportCommandCenter(portfolioInstallments);
   renderReportAnalysis(sales, portfolioInstallments);
   document.querySelector("#reportBody").innerHTML = installments
     .map(
@@ -3493,21 +3866,37 @@ function renderReports() {
         '"><td><span class="primary-cell">' +
         escapeHtml(installment.sale.buyerName) +
         '</span><span class="secondary-cell">' +
-        escapeHtml(installment.sale.project + " · " + installment.sale.unit) +
+        escapeHtml(
+          installment.sale.developer +
+            " · " +
+            installment.sale.project +
+            " · " +
+            installment.sale.unit
+        ) +
         '</span></td><td><span class="primary-cell">' +
         escapeHtml(installment.label) +
         '</span><span class="secondary-cell">' +
         escapeHtml(installment.sale.saleStatus) +
         "</span></td><td>" +
         escapeHtml(installment.dueDate ? formatDate(installment.dueDate) : "Sin fecha") +
+        (reportDueContext(installment)
+          ? '<span class="secondary-cell report-due-context">' +
+            escapeHtml(reportDueContext(installment)) +
+            "</span>"
+          : "") +
         '</td><td class="money-cell">' +
         escapeHtml(
           moneyFromCents(installment.amountCents, installment.sale.commissionCurrency)
         ) +
         '</td><td class="money-cell">' +
         escapeHtml(
-          moneyFromCents(installment.paidCents, installment.sale.commissionCurrency)
+          moneyFromCents(reportPaidCents(installment), installment.sale.commissionCurrency)
         ) +
+        (reportPaymentContext(installment)
+          ? '<span class="secondary-cell report-payment-context">' +
+            escapeHtml(reportPaymentContext(installment)) +
+            "</span>"
+          : "") +
         '</td><td class="money-cell">' +
         escapeHtml(
           moneyFromCents(installment.pendingCents, installment.sale.commissionCurrency)
@@ -3532,19 +3921,32 @@ function renderReports() {
         reportInstallmentBadge(installment) +
         '</div><div class="mobile-record-main">' +
         escapeHtml(
-          installment.sale.project + " · " + installment.sale.unit + " · " + installment.label
+          installment.sale.developer +
+            " · " +
+            installment.sale.project +
+            " · " +
+            installment.sale.unit +
+            " · " +
+            installment.label
         ) +
         '</div><div class="mobile-record-meta"><span>' +
         escapeHtml(installment.dueDate ? formatDate(installment.dueDate) : "Sin fecha") +
-        '</span><span class="mobile-record-amount">' +
-        escapeHtml(
-          moneyFromCents(installment.amountCents, installment.sale.commissionCurrency)
-        ) +
-        '</span></div><div class="mobile-record-meta"><span>Pendiente</span><span class="mobile-record-amount">' +
-        escapeHtml(
-          moneyFromCents(installment.pendingCents, installment.sale.commissionCurrency)
-        ) +
-        '</span></div><div class="mobile-record-open"><span>Ver dossier</span><i data-lucide="arrow-right" aria-hidden="true"></i></div></article>'
+        (reportDueContext(installment)
+          ? " · " + escapeHtml(reportDueContext(installment))
+          : "") +
+        '</span></div><div class="mobile-report-money-grid"><span>Comisión<b>' +
+        escapeHtml(moneyFromCents(installment.amountCents, installment.sale.commissionCurrency)) +
+        '</b></span><span>Cobrado<b>' +
+        escapeHtml(moneyFromCents(reportPaidCents(installment), installment.sale.commissionCurrency)) +
+        '</b></span><span>Pendiente<b>' +
+        escapeHtml(moneyFromCents(installment.pendingCents, installment.sale.commissionCurrency)) +
+        '</b></span></div>' +
+        (reportPaymentContext(installment)
+          ? '<div class="mobile-report-payment"><i data-lucide="receipt-text" aria-hidden="true"></i>' +
+            escapeHtml(reportPaymentContext(installment)) +
+            "</div>"
+          : "") +
+        '<div class="mobile-record-open"><span>Ver dossier</span><i data-lucide="arrow-right" aria-hidden="true"></i></div></article>'
     )
     .join("");
   document.querySelector("#reportEmpty").hidden = installments.length !== 0;
@@ -4593,6 +4995,10 @@ function safeCsvCell(value) {
 
 function exportSalesCsv() {
   const installments = filteredReportInstallments();
+  if (!installments.length) {
+    showToast("No hay cuotas para exportar con estos filtros");
+    return;
+  }
   const selectedDeveloper = document.querySelector("#reportDeveloper").value;
   const developerToken = normalizeText(selectedDeveloper || "todas-constructoras")
     .replace(/^constructora\s+/, "")
@@ -4603,12 +5009,14 @@ function exportSalesCsv() {
       "Cliente", "Correo", "Teléfono", "Constructora", "Proyecto", "Unidad",
       "Fecha de venta", "Fecha de entrega", "Etapa de la venta", "Cuota",
       "Vencimiento", "Comisión esperada", "Cobrado", "Pendiente",
-      "Moneda", "Estado de la cuota"
+      "Moneda", "Estado de la cuota", "Contexto del vencimiento",
+      "Fechas de cobro", "Métodos de cobro", "Referencias"
     ]
   ];
   installments.forEach((installment) => {
     const sale = installment.sale;
     const client = clientById(sale.clientId);
+    const payments = reportPaymentsForInstallment(installment, true);
     rows.push([
       sale.buyerName || clientName(sale.clientId),
       client?.email || "",
@@ -4622,10 +5030,14 @@ function exportSalesCsv() {
       installment.label,
       installment.dueDate,
       fromCents(installment.amountCents),
-      fromCents(installment.paidCents),
+      fromCents(reportPaidCents(installment)),
       fromCents(installment.pendingCents),
       sale.commissionCurrency,
-      reportInstallmentStatus(installment).label
+      reportInstallmentStatus(installment).label,
+      reportDueContext(installment),
+      payments.map((payment) => payment.paymentDate).join(" | "),
+      payments.map((payment) => payment.method).join(" | "),
+      payments.map((payment) => payment.reference).filter(Boolean).join(" | ")
     ]);
   });
   const csv = rows.map((row) => row.map(safeCsvCell).join(",")).join("\n");
@@ -4642,25 +5054,72 @@ function printCommissionReport() {
     ? "Reporte de comisiones · " + selectedDeveloper
     : "Reporte de comisiones por constructora";
   const baseSales = filteredReportSales();
-  const installments = filteredReportInstallments(baseSales);
-  const visibleSaleIds = new Set(installments.map((installment) => installment.sale.id));
-  const sales = baseSales.filter((sale) => visibleSaleIds.has(sale.id));
+  const portfolioInstallments = reportPeriodInstallmentsForSales(baseSales);
+  const installments = filteredReportInstallments(baseSales, portfolioInstallments);
+  const sales = baseSales;
   if (!installments.length) {
     showToast("No hay cuotas para imprimir con estos filtros");
     return;
   }
-  const commissions = installments.reduce((totals, installment) => {
+  const commissions = portfolioInstallments.reduce((totals, installment) => {
     totals[installment.sale.commissionCurrency] += installment.amountCents;
     return totals;
   }, emptyMoneyTotals());
-  const received = installments.reduce((totals, installment) => {
-    totals[installment.sale.commissionCurrency] += installment.paidCents;
+  const received = portfolioInstallments.reduce((totals, installment) => {
+    totals[installment.sale.commissionCurrency] += reportPaidCents(installment);
     return totals;
   }, emptyMoneyTotals());
-  const pending = installments.reduce((totals, installment) => {
+  const pending = portfolioInstallments.reduce((totals, installment) => {
     totals[installment.sale.commissionCurrency] += installment.pendingCents;
     return totals;
   }, emptyMoneyTotals());
+  const overdue = reportInstallmentTotals(
+    portfolioInstallments.filter(isReportInstallmentOverdue),
+    (installment) => installment.pendingCents
+  );
+  const byDeveloper = sales.reduce((groups, sale) => {
+    const name = sale.developer || "Sin constructora";
+    const current = groups.get(name) || {
+      saleIds: new Set(),
+      commissions: emptyMoneyTotals(),
+      received: emptyMoneyTotals(),
+      pending: emptyMoneyTotals(),
+      overdue: emptyMoneyTotals()
+    };
+    current.saleIds.add(sale.id);
+    groups.set(name, current);
+    return groups;
+  }, new Map());
+  portfolioInstallments.forEach((installment) => {
+    const current = byDeveloper.get(installment.sale.developer || "Sin constructora");
+    if (!current) return;
+    const currency = installment.sale.commissionCurrency;
+    current.commissions[currency] += installment.amountCents;
+    current.received[currency] += reportPaidCents(installment);
+    current.pending[currency] += installment.pendingCents;
+    if (isReportInstallmentOverdue(installment)) {
+      current.overdue[currency] += installment.pendingCents;
+    }
+  });
+  const developerSummaryRows = [...byDeveloper.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], "es"))
+    .map(
+      ([name, values]) =>
+        "<tr><td><strong>" +
+        escapeHtml(name) +
+        "</strong></td><td>" +
+        values.saleIds.size +
+        '</td><td class="money">' +
+        escapeHtml(reportMoneySummary(values.commissions)) +
+        '</td><td class="money">' +
+        escapeHtml(reportMoneySummary(values.received)) +
+        '</td><td class="money">' +
+        escapeHtml(reportMoneySummary(values.pending)) +
+        '</td><td class="money">' +
+        escapeHtml(reportMoneySummary(values.overdue)) +
+        "</td></tr>"
+    )
+    .join("");
   const reportWindow = window.open("", "_blank", "width=1180,height=820");
   if (!reportWindow) {
     showToast("Permite ventanas emergentes para imprimir o guardar como PDF", 5000);
@@ -4685,14 +5144,20 @@ function printCommissionReport() {
         escapeHtml(installment.label) +
         "</td><td>" +
         escapeHtml(installment.dueDate ? formatDate(installment.dueDate) : "Sin fecha") +
+        (reportDueContext(installment)
+          ? "<small>" + escapeHtml(reportDueContext(installment)) + "</small>"
+          : "") +
         '</td><td class="money">' +
         escapeHtml(
           moneyFromCents(installment.amountCents, installment.sale.commissionCurrency)
         ) +
         '</td><td class="money">' +
         escapeHtml(
-          moneyFromCents(installment.paidCents, installment.sale.commissionCurrency)
+          moneyFromCents(reportPaidCents(installment), installment.sale.commissionCurrency)
         ) +
+        (reportPaymentContext(installment)
+          ? "<small>" + escapeHtml(reportPaymentContext(installment)) + "</small>"
+          : "") +
         '</td><td class="money">' +
         escapeHtml(
           moneyFromCents(installment.pendingCents, installment.sale.commissionCurrency)
@@ -4712,11 +5177,12 @@ function printCommissionReport() {
       '@page{size:landscape;margin:14mm}*{box-sizing:border-box}body{color:#071a33;font:12px Arial,sans-serif;margin:0}' +
       'header{align-items:flex-end;border-bottom:3px solid #b17b18;display:flex;justify-content:space-between;margin-bottom:18px;padding-bottom:14px}' +
       'h1{font:700 28px Georgia,serif;margin:3px 0}.eyebrow{color:#8a5d08;font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase}' +
-      'header p,.meta,small{color:#667085}.meta{text-align:right}.summary{display:grid;gap:10px;grid-template-columns:repeat(4,1fr);margin-bottom:18px}' +
+      'header p,.meta,small{color:#667085}.meta{text-align:right}.summary{display:grid;gap:10px;grid-template-columns:repeat(5,1fr);margin-bottom:18px}' +
       '.summary div{background:#f7f5ef;border:1px solid #ded9cc;border-radius:8px;padding:12px}.summary span{color:#667085;display:block;font-size:10px;margin-bottom:5px;text-transform:uppercase}.summary strong{font-size:18px}' +
       'table{border-collapse:collapse;width:100%}th{background:#071a33;color:#fff;font-size:10px;letter-spacing:.04em;padding:9px 8px;text-align:left;text-transform:uppercase}' +
       'td{border-bottom:1px solid #e6e2d8;padding:8px;vertical-align:top}td strong,td small{display:block}.money{text-align:right;white-space:nowrap}' +
       '.status{border-radius:99px;display:inline-block;font-size:9px;font-weight:700;padding:4px 7px;text-transform:uppercase}.status-paid{background:#dff7f0;color:#087568}.status-overdue{background:#fee4e2;color:#b42318}.status-partial,.status-pending{background:#fff3d6;color:#8a5d08}.status-void{background:#eef0f3;color:#667085}' +
+      'h2{font:700 17px Georgia,serif;margin:18px 0 8px}.developer-summary{margin-bottom:18px}.developer-summary th{background:#243a56}.developer-summary td{font-size:10px}' +
       'footer{color:#667085;font-size:9px;margin-top:12px;text-align:right}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
       '</style></head><body><header><div><span class="eyebrow">Antony Fulgencio Real Estate</span><h1>' +
       escapeHtml(reportTitle) +
@@ -4726,17 +5192,23 @@ function printCommissionReport() {
       escapeHtml(formatDate(today())) +
       "<br>" +
       installments.length +
-      " cuotas · " +
+      " cuotas visibles · " +
+      portfolioInstallments.length +
+      " en cartera · " +
       sales.length +
       " ventas</div></header><section class=\"summary\"><div><span>Comisión</span><strong>" +
-      escapeHtml(pairMoney(commissions)) +
+      escapeHtml(reportMoneySummary(commissions)) +
       "</strong></div><div><span>Cobrado</span><strong>" +
-      escapeHtml(pairMoney(received)) +
+      escapeHtml(reportMoneySummary(received)) +
       "</strong></div><div><span>Pendiente</span><strong>" +
-      escapeHtml(pairMoney(pending)) +
+      escapeHtml(reportMoneySummary(pending)) +
+      "</strong></div><div><span>Vencido</span><strong>" +
+      escapeHtml(reportMoneySummary(overdue)) +
       "</strong></div><div><span>Operaciones</span><strong>" +
       sales.length +
-      "</strong></div></section><table><thead><tr><th>Cliente / operación</th><th>Cuota</th><th>Vencimiento</th><th>Comisión</th><th>Cobrado</th><th>Pendiente</th><th>Estado</th></tr></thead><tbody>" +
+      "</strong></div></section><h2>Resumen por constructora</h2><table class=\"developer-summary\"><thead><tr><th>Constructora</th><th>Operaciones</th><th>Comisión</th><th>Cobrado</th><th>Pendiente</th><th>Vencido</th></tr></thead><tbody>" +
+      developerSummaryRows +
+      "</tbody></table><p class=\"meta\" style=\"text-align:left\">Los indicadores resumen la cartera completa del corte; la tabla respeta el filtro de estado de la cuota.</p><table><thead><tr><th>Cliente / operación</th><th>Cuota</th><th>Vencimiento</th><th>Comisión</th><th>Cobrado</th><th>Pendiente</th><th>Estado</th></tr></thead><tbody>" +
       tableRows +
       "</tbody></table><footer>Generado desde el CRM privado de Antony Fulgencio · Los montos reflejan los cobros registrados al momento del corte.</footer></body></html>"
   );
@@ -4814,7 +5286,9 @@ async function performCloudMutation(operation) {
   if (appBusy) throw new Error("Hay otra operación en curso.");
   setAppBusy(true);
   try {
-    return await operation();
+    const result = await operation();
+    lastWorkspaceSyncAt = new Date();
+    return result;
   } finally {
     setAppBusy(false);
   }
@@ -5677,9 +6151,30 @@ document.querySelectorAll("[data-collection-filter]").forEach((button) => {
     renderCollectionQueue();
   });
 });
-["reportYear", "reportDeveloper", "reportProject", "reportSaleStatus", "reportCommissionStatus"].forEach(
+["reportPeriodType", "reportYear", "reportDeveloper", "reportProject", "reportSaleStatus", "reportCommissionStatus"].forEach(
   (id) => document.querySelector("#" + id).addEventListener("change", renderReports)
 );
+document.querySelector("#reportSearch").addEventListener("input", renderReports);
+document.querySelector("#clearReportFilters").addEventListener("click", () => {
+  document.querySelector("#reportSearch").value = "";
+  document.querySelector("#reportPeriodType").value = "sale";
+  document.querySelector("#reportYear").value = "";
+  document.querySelector("#reportDeveloper").value = "";
+  populateReportFilters();
+  document.querySelector("#reportProject").value = "";
+  document.querySelector("#reportSaleStatus").value = "";
+  document.querySelector("#reportCommissionStatus").value = "";
+  renderReports();
+  document.querySelector("#reportSearch").focus();
+});
+document.querySelector("#reportShowOverdue").addEventListener("click", () => {
+  document.querySelector("#reportCommissionStatus").value = "Vencida";
+  renderReports();
+  document.querySelector("#reportBody").closest(".report-ledger-card").scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+});
 document.querySelector("#exportSalesButton").addEventListener("click", exportSalesCsv);
 document
   .querySelector("#printCommissionReportButton")
@@ -6057,6 +6552,7 @@ async function enterCloudSession(session) {
   setLoginStatus("Abriendo tu cartera segura…", "loading");
   try {
     state = normalizeState(await cloudBackend.loadWorkspace());
+    lastWorkspaceSyncAt = new Date();
     cloudReady = true;
     showCrmShell(session.user.email || "Usuario autorizado");
     resetClientForm();
