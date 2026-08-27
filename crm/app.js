@@ -3270,16 +3270,17 @@ function filteredReportSales() {
   return reportableSales().filter(
     (sale) => {
       const matchesPeriod =
-        !year ||
-        (periodType === "due"
+        periodType === "due"
           ? installmentsForSale(sale.id).some(
-              (installment) => yearOf(installment.dueDate) === year
+              (installment) =>
+                installment.dueDate &&
+                (!year || yearOf(installment.dueDate) === year)
             )
           : periodType === "payment"
             ? activePaymentsForSale(sale.id).some(
-                (payment) => yearOf(payment.paymentDate) === year
+                (payment) => !year || yearOf(payment.paymentDate) === year
               )
-            : yearOf(sale.saleDate) === year);
+            : !year || yearOf(sale.saleDate) === year;
       return (
       reportSaleMatchesSearch(sale, search) &&
       matchesPeriod &&
@@ -3418,8 +3419,10 @@ function reportPeriodInstallmentsForSales(sales) {
   const year = document.querySelector("#reportYear").value;
   const periodType = document.querySelector("#reportPeriodType").value || "sale";
   return reportInstallmentsForSales(sales).filter((item) => {
-    if (!year || periodType === "sale") return true;
-    if (periodType === "due") return yearOf(item.dueDate) === year;
+    if (periodType === "sale") return true;
+    if (periodType === "due") {
+      return Boolean(item.dueDate) && (!year || yearOf(item.dueDate) === year);
+    }
     return reportPaymentsForInstallment(item, true).length > 0;
   });
 }
@@ -3466,6 +3469,10 @@ function reportFilterSummary() {
           ? "Cobros " + year
           : "Ventas " + year
     );
+  } else if (periodType === "due") {
+    parts.push("Todos los vencimientos");
+  } else if (periodType === "payment") {
+    parts.push("Todos los cobros registrados");
   }
   if (developer) parts.push(developer);
   if (project) parts.push(project);

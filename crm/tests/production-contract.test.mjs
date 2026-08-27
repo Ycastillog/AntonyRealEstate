@@ -398,6 +398,9 @@ test("commission reports reconcile each installment and support export and print
   assert.match(html, /Fecha de cobro/);
   assert.match(app, /lastWorkspaceSyncAt/);
   assert.match(app, /Próximos 30 días/);
+  assert.match(app, /Todos los vencimientos/);
+  assert.match(app, /Todos los cobros registrados/);
+  assert.match(app, /activePaymentsForSale\(sale\.id\)\.some/);
   assert.match(html, /production-v14/);
 });
 
