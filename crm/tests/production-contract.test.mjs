@@ -275,7 +275,7 @@ test("backend names every workspace table and required RPC contract", () => {
   );
 });
 
-test("historical LVP sales remain staged, visible in analytics, and excluded from collections", () => {
+test("legacy historical data remains compatible but is retired from the CRM navigation", () => {
   for (const id of [
     "view-historical",
     "historicalImportButton",
@@ -289,10 +289,26 @@ test("historical LVP sales remain staged, visible in analytics, and excluded fro
   ]) {
     assert.ok(html.includes(`id="${id}"`), `Missing #${id}`);
   }
+  const historicalView = tagWithId(html, "section", "view-historical");
+  const historicalAttributes = attributesFor(historicalView);
+  assert.ok(historicalAttributes.has("hidden"));
+  assert.ok(historicalAttributes.has("inert"));
+  assert.doesNotMatch(html, /data-view-target=["']historical["']/);
   assert.match(html, /Estas operaciones cuentan en ventas, años, proyectos y volumen/);
   assert.match(app, /no crearán comisiones ni cobros/i);
   assert.match(app, /function activeHistoricalSales\(\)/);
   assert.match(app, /function analyticsSales\(\)/);
+  assert.match(app, /if \(hash === "historico"\)[\s\S]*?#reportes/);
+  const reportableSource = app.slice(
+    app.indexOf("function reportableSales()"),
+    app.indexOf("function installmentById")
+  );
+  assert.doesNotMatch(reportableSource, /activeHistoricalSales|historicalAnalyticsSale/);
+  const dashboardSource = app.slice(
+    app.indexOf("function renderDashboard()"),
+    app.indexOf("function renderClients()")
+  );
+  assert.doesNotMatch(dashboardSource, /activeHistoricalSales|historicalAnalyticsSale/);
   assert.match(app, /function renderHistoricalSales\(\)/);
   assert.match(app, /cloudBackend\.importHistoricalSales\(batch, rows\)/);
   assert.match(app, /cloudBackend\.updateHistoricalContact/);
@@ -306,6 +322,41 @@ test("historical LVP sales remain staged, visible in analytics, and excluded fro
     /buyer_name\s*:\s*["'][^"']+["']|buyer_email\s*:\s*["'][^"']+@/i,
     "the parser must not embed buyer records or email addresses"
   );
+});
+
+test("commission reports reconcile each installment and support export and printable PDF", () => {
+  for (const id of [
+    "view-reports",
+    "reportYear",
+    "reportProject",
+    "reportSaleStatus",
+    "reportCommissionStatus",
+    "reportCutoffTitle",
+    "reportSalesCount",
+    "reportCommission",
+    "reportReceived",
+    "reportPending",
+    "reportOverdue",
+    "reportCollectionRate",
+    "reportInstallmentCount",
+    "reportBody",
+    "reportMobileList",
+    "exportSalesButton",
+    "printCommissionReportButton"
+  ]) {
+    assert.ok(html.includes(`id="${id}"`), `Missing #${id}`);
+  }
+  assert.match(html, /Conciliación por cuota/);
+  assert.match(html, /Avances y saldos/);
+  assert.match(html, /Pendientes y programadas/);
+  assert.match(app, /function reportInstallmentStatus\(/);
+  assert.match(app, /function filteredReportInstallments\(/);
+  assert.match(app, /\["Pendiente", "Programada"\]\.includes\(status\)/);
+  assert.match(app, /pendingCents: isCancelledSale\(sale\) \? 0/);
+  assert.match(app, /function exportSalesCsv\(/);
+  assert.match(app, /antony-reporte-comisiones-lvp-/);
+  assert.match(app, /function printCommissionReport\(/);
+  assert.match(app, /Reporte de comisiones LVP/);
 });
 
 test("production workflows retain capture date, cancellation reason, installments, and payment export", () => {
@@ -365,7 +416,7 @@ test("desisted and changed sales are archived outside active sales and collectio
     /sale\.clientId === client\.id && !isCancelledSale\(sale\)/,
     "Client sale counts must exclude archived operations"
   );
-  assert.match(app, /const recent = \[\.\.\.activeSales\.map\(operationalAnalyticsSale\)/);
+  assert.match(app, /const recent = operationalSales/);
   assert.match(app, /if \(!sale \|\| isCancelledSale\(sale\)\) return 0;/);
   assert.match(app, /No se puede cobrar una operación desistida o cambiada/);
   assert.match(app, /title: saleStatus === "Cambio" \? "Archivar operación anterior" : "Confirmar desistimiento"/);

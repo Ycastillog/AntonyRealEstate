@@ -10,16 +10,17 @@
     <meta name="referrer" content="no-referrer" />
     <meta name="robots" content="noindex,nofollow,noarchive" />
     <title>Antony Private Office | CRM inmobiliario</title>
+    <link rel="icon" href="../assets/antony-fulgencio-logo-transparent.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=production-v10" />
+    <link rel="stylesheet" href="styles.css?v=production-v11" />
     <script src="../media-config.js?v=secure-auth-v3" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js" integrity="sha384-ysv13JVP3fufiEXfjML9OdCa/rRbMJvUBOWyor82wfuK8INNZAvmbxHgKIHi+oqz" crossorigin="anonymous" defer></script>
-    <script src="historical.js?v=production-v10" defer></script>
-    <script src="backend.js?v=production-v10" defer></script>
+    <script src="historical.js?v=production-v11" defer></script>
+    <script src="backend.js?v=production-v11" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" integrity="sha384-uTYyvsSSUZeaPhb5RbKlQa0zY/WpX/QHfvg2mczXyBQOpkWPEDy9lczyp+w7SKXu" crossorigin="anonymous" defer></script>
-    <script src="app.js?v=production-v10" defer></script>
+    <script src="app.js?v=production-v11" defer></script>
   </head>
   <body>
     <main class="auth-shell" id="authShell" aria-labelledby="loginTitle">
@@ -96,7 +97,6 @@
           <button class="nav-item active" type="button" data-view-target="dashboard" aria-label="Resumen" title="Resumen"><span class="nav-icon" aria-hidden="true"><i data-lucide="layout-dashboard"></i></span><span>Resumen</span></button>
           <button class="nav-item" type="button" data-view-target="clients" aria-label="Clientes" title="Clientes"><span class="nav-icon" aria-hidden="true"><i data-lucide="contact-round"></i></span><span>Clientes</span></button>
           <button class="nav-item" type="button" data-view-target="sales" aria-label="Ventas" title="Ventas"><span class="nav-icon" aria-hidden="true"><i data-lucide="building-2"></i></span><span>Ventas</span></button>
-          <button class="nav-item" type="button" data-view-target="historical" aria-label="Histórico" title="Histórico"><span class="nav-icon" aria-hidden="true"><i data-lucide="archive"></i></span><span>Histórico</span></button>
           <button class="nav-item" type="button" data-view-target="payments" aria-label="Cobros de comisión" title="Cobros de comisión"><span class="nav-icon" aria-hidden="true"><i data-lucide="badge-dollar-sign"></i></span><span>Cobros de comisión</span></button>
           <button class="nav-item" type="button" data-view-target="reports" aria-label="Reportes" title="Reportes"><span class="nav-icon" aria-hidden="true"><i data-lucide="chart-no-axes-combined"></i></span><span>Reportes</span></button>
         </nav>
@@ -237,7 +237,7 @@
             <article><span>Reservadas</span><strong id="saleOverviewReserved">0</strong><small>En proceso</small></article>
             <article><span>Opciones firmadas</span><strong id="saleOverviewContracted">0</strong><small>Avance habilitado</small></article>
             <article><span>Entregados</span><strong id="saleOverviewDelivered">0</strong><small>Saldo habilitado</small></article>
-            <article><span>Históricas</span><strong id="saleOverviewHistorical">0</strong><small>Vendidas por completar</small></article>
+            <article><span>Archivadas</span><strong id="saleOverviewArchived">0</strong><small>Desistimientos y cambios</small></article>
           </div>
           <article class="card records-card">
             <div class="card-heading records-heading"><div><h2>Operaciones</h2><span class="records-count"><span id="salesCount">0</span> ventas</span></div><div class="heading-tools"><input class="compact-input search-input" id="saleSearch" type="search" placeholder="Buscar nombre, teléfono, correo, proyecto o unidad…" aria-label="Buscar venta por nombre, teléfono, correo, proyecto o unidad" /><select class="compact-input" id="saleStatusFilter" aria-label="Filtrar por estado"><option value="">Operaciones activas</option><option value="all">Todas, incluyendo archivadas</option><option value="Reservada">Reservada</option><option value="Opción a compra firmada">Opción a compra firmada</option><option value="Entregado">Entregado</option><option value="Desistió">Desistió (archivada)</option><option value="Cambio">Cambio (archivada)</option></select></div></div>
@@ -280,7 +280,7 @@
           </form>
         </section>
 
-        <section class="view" id="view-historical" data-view="historical">
+        <section class="view" id="view-historical" data-view="historical" hidden inert aria-hidden="true">
           <div class="page-heading">
             <div><span class="eyebrow">Base inicial LVP</span><h1>Ventas históricas</h1><p>Consulta las ventas cerradas desde 2023 y completa sus datos sin generar cobros ficticios.</p></div>
             <button class="button button-primary" type="button" id="historicalImportButton"><i data-lucide="file-up" aria-hidden="true"></i>Cargar o actualizar base</button>
@@ -349,27 +349,29 @@
         </section>
 
         <section class="view" id="view-reports" data-view="reports">
-          <div class="page-heading"><div><span class="eyebrow">Inteligencia comercial</span><h1>Reportes</h1><p>Filtra resultados y entiende el rendimiento sin perder legibilidad.</p></div><button class="button button-secondary" id="exportSalesButton" type="button"><i data-lucide="download" aria-hidden="true"></i>Exportar CSV</button></div>
+          <div class="page-heading"><div><span class="eyebrow">Conciliación LVP</span><h1>Reportes de comisión</h1><p>Revisa cada avance y saldo, identifica lo vencido y prepara el corte para LVP.</p></div><div class="report-actions"><button class="button button-secondary" id="printCommissionReportButton" type="button"><i data-lucide="printer" aria-hidden="true"></i>Imprimir / PDF</button><button class="button button-primary" id="exportSalesButton" type="button"><i data-lucide="sheet" aria-hidden="true"></i>Descargar Excel (.csv)</button></div></div>
           <article class="card report-filters">
             <label>Año<select id="reportYear"></select></label><label>Proyecto<select id="reportProject"></select></label>
             <label>Etapa de la venta<select id="reportSaleStatus"><option value="">Etapas activas</option><option value="Reservada">Reservada</option><option value="Opción a compra firmada">Opción a compra firmada</option><option value="Entregado">Entregado</option><option value="Desistió">Desistió (archivada)</option><option value="Cambio">Cambio (archivada)</option></select></label>
-            <label>Estado de comisión<select id="reportCommissionStatus"><option value="">Todas las comisiones</option><option value="Por completar">Por completar</option><option value="Pendiente">Pendientes</option><option value="Parcial">Parciales</option><option value="Pagada">Pagadas</option><option value="Vencida">Vencidas</option><option value="Anulada">Anuladas</option></select></label>
+            <label>Estado de la cuota<select id="reportCommissionStatus"><option value="">Todas las cuotas</option><option value="Pendiente">Pendientes y programadas</option><option value="Parcial">Parciales</option><option value="Pagada">Pagadas</option><option value="Vencida">Vencidas</option><option value="Anulada">Anuladas</option></select></label>
           </article>
+          <article class="report-cutoff" aria-live="polite"><div><span class="eyebrow">Corte actual</span><strong id="reportCutoffTitle">Todas las operaciones activas</strong><small id="reportCutoffMeta">Actualizado con los cobros registrados en el CRM.</small></div><span class="report-live-indicator"><i data-lucide="refresh-cw" aria-hidden="true"></i>Datos en vivo</span></article>
           <div class="report-summary">
             <article class="metric-card report-card"><span>Ventas filtradas</span><strong id="reportSalesCount">0</strong></article>
             <article class="metric-card report-card"><span>Volumen vendido</span><strong id="reportSalesVolume">US$0</strong><small id="reportSalesVolumeDop">RD$0</small></article>
             <article class="metric-card report-card metric-card-attention"><span>Comisión confirmada</span><strong id="reportCommission">US$0</strong><small id="reportCommissionDop">RD$0</small></article>
             <article class="metric-card report-card"><span>Comisión cobrada</span><strong id="reportReceived">US$0</strong><small id="reportReceivedDop">RD$0</small></article>
             <article class="metric-card report-card metric-card-attention"><span>Comisión pendiente</span><strong id="reportPending">US$0</strong><small id="reportPendingDop">RD$0</small></article>
+            <article class="metric-card report-card report-card-danger"><span>Comisión vencida</span><strong id="reportOverdue">US$0</strong><small id="reportCollectionRate">0% cobrado</small></article>
           </div>
           <div class="report-analysis-grid">
             <article class="card report-analysis-card"><div class="card-heading"><div><span class="eyebrow">Portafolio</span><h2>Rendimiento por proyecto</h2></div></div><div class="project-breakdown" id="reportProjectBreakdown"></div></article>
             <article class="card report-analysis-card"><div class="card-heading"><div><span class="eyebrow">Salud de cartera</span><h2>Estado de comisiones</h2></div></div><div class="collection-health" id="reportCollectionHealth"></div></article>
           </div>
-          <article class="card records-card">
-            <div class="card-heading"><div><span class="eyebrow">Detalle</span><h2>Ventas del período</h2></div></div>
-            <div class="table-wrap desktop-table"><table class="crm-table reports-table"><caption class="visually-hidden">Detalle de ventas del período filtrado</caption><thead><tr><th scope="col">Cliente / fecha</th><th scope="col">Operación</th><th scope="col">Etapa</th><th scope="col">Precio</th><th scope="col">Comisión</th><th scope="col">Estado</th></tr></thead><tbody id="reportBody"></tbody></table></div>
-            <div class="mobile-record-list" id="reportMobileList"></div><div class="empty-state" id="reportEmpty" hidden>No hay ventas para estos filtros.</div>
+          <article class="card records-card report-ledger-card">
+            <div class="card-heading records-heading"><div><span class="eyebrow">Conciliación por cuota</span><h2>Avances y saldos</h2><span class="records-count"><span id="reportInstallmentCount">0</span> cuotas</span></div><p class="report-ledger-help">Cada línea corresponde a un pago esperado de comisión.</p></div>
+            <div class="table-wrap desktop-table"><table class="crm-table reports-table"><caption class="visually-hidden">Conciliación de avances y saldos de comisión</caption><thead><tr><th scope="col">Cliente / operación</th><th scope="col">Cuota</th><th scope="col">Vencimiento</th><th scope="col">Comisión</th><th scope="col">Cobrado</th><th scope="col">Pendiente</th><th scope="col">Estado</th></tr></thead><tbody id="reportBody"></tbody></table></div>
+            <div class="mobile-record-list" id="reportMobileList"></div><div class="empty-state" id="reportEmpty" hidden>No hay cuotas para estos filtros.</div>
           </article>
         </section>
         </section>
