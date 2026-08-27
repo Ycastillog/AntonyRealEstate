@@ -401,7 +401,7 @@ test("commission reports reconcile each installment and support export and print
   assert.match(app, /Todos los vencimientos/);
   assert.match(app, /Todos los cobros registrados/);
   assert.match(app, /activePaymentsForSale\(sale\.id\)\.some/);
-  assert.match(html, /production-v14/);
+  assert.match(html, /production-v14-1/);
 });
 
 test("signed unit changes carry the paid advance and recalculate only the balance", () => {
