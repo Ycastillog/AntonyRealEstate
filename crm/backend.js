@@ -270,6 +270,7 @@
       lowerCode === 'invalid_credentials' ||
       lowerCode === 'bad_jwt' ||
       lowerCode === 'jwt_expired' ||
+      lowerCode === 'pgrst303' ||
       lowerMessage.indexOf('invalid login credentials') !== -1 ||
       lowerMessage.indexOf('jwt expired') !== -1
     ) {
@@ -616,6 +617,7 @@
   async function signIn(email, password) {
     var db = requireClient();
     var response;
+    var synchronized;
     var normalizedEmail = typeof email === 'string' ? email.trim() : '';
 
     if (!normalizedEmail || normalizedEmail.indexOf('@') <= 0) {
@@ -645,7 +647,36 @@
         { operation: 'signIn', retryable: false }
       );
     }
-    return response.data;
+
+    // Ensure the Data API starts using the newly issued access token before the
+    // workspace queries run. This avoids a short window where the client can
+    // still send the publishable key or a previous JWT after a password change.
+    try {
+      synchronized = await db.auth.setSession({
+        access_token: response.data.session.access_token,
+        refresh_token: response.data.session.refresh_token
+      });
+    } catch (error) {
+      throw normalizeError(error, 'synchronizeSession');
+    }
+    if (synchronized && synchronized.error) {
+      throw normalizeError(synchronized.error, 'synchronizeSession');
+    }
+    if (
+      !synchronized ||
+      !synchronized.data ||
+      !synchronized.data.session ||
+      !synchronized.data.user
+    ) {
+      throw makeAdapterError(
+        'El servidor no confirmó la sesión renovada.',
+        'EMPTY_RESPONSE',
+        502,
+        'server',
+        { operation: 'synchronizeSession', retryable: false }
+      );
+    }
+    return synchronized.data;
   }
 
   async function requestPasswordReset(email, redirectTo) {

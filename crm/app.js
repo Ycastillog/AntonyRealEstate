@@ -1,5 +1,5 @@
 const STORAGE_KEY = "antony-crm-local-v2";
-const APP_VERSION = 11;
+const APP_VERSION = 12;
 const MAX_AUDIT_ENTRIES = 500;
 const VALID_CURRENCIES = ["USD", "DOP"];
 const VALID_CLIENT_STAGES = ["Nuevo", "Calificado", "En seguimiento", "Comprador", "Inactivo"];
@@ -1889,7 +1889,7 @@ function renderDashboard() {
     )
     .join("");
   document.querySelector("#pendingEmpty").hidden = pendingSales.length !== 0;
-  renderMonthlyChart(documentedClosings);
+  renderMonthlyChart(operationalClosings);
   renderCollectionAlerts(closedSales);
 }
 
@@ -4556,16 +4556,18 @@ function reportBackendDiagnostic(scope, error) {
   const details = error?.details && typeof error.details === "object"
     ? error.details
     : {};
-  console.error("Antony CRM backend failure", {
+  const diagnostic = {
     scope,
     name: String(error?.name || "Error"),
+    message: String(error?.message || "Error sin detalle").slice(0, 300),
     code: String(error?.code || "CRM_ERROR"),
     status: Number(error?.status) || 0,
     kind: String(details.kind || "unknown"),
     operation: String(details.operation || scope),
     retryable: Boolean(details.retryable),
     summary: details.summary ? String(details.summary) : null
-  });
+  };
+  console.error("Antony CRM backend failure " + JSON.stringify(diagnostic));
 }
 
 document.querySelectorAll("[data-view-target]").forEach((button) => {

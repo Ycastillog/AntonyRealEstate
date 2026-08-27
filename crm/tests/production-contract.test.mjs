@@ -309,6 +309,8 @@ test("legacy historical data remains compatible but is retired from the CRM navi
     app.indexOf("function renderClients()")
   );
   assert.doesNotMatch(dashboardSource, /activeHistoricalSales|historicalAnalyticsSale/);
+  assert.doesNotMatch(dashboardSource, /documentedClosings|documentedSales/);
+  assert.match(dashboardSource, /renderMonthlyChart\(operationalClosings\)/);
   assert.match(app, /function renderHistoricalSales\(\)/);
   assert.match(app, /cloudBackend\.importHistoricalSales\(batch, rows\)/);
   assert.match(app, /cloudBackend\.updateHistoricalContact/);

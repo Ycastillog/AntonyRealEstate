@@ -197,6 +197,35 @@ test("login trims the email and exposes only a safe authentication error", async
   assert.equal(harness.storageAccesses(), 0);
 });
 
+test("successful login synchronizes the fresh session before workspace reads", async () => {
+  const session = {
+    access_token: "fresh-access-token",
+    refresh_token: "fresh-refresh-token",
+    user: { id: "user-1", email: "antony@example.com" }
+  };
+  const setSessionCalls = [];
+  const client = {
+    auth: {
+      async signInWithPassword() {
+        return { data: { session, user: session.user }, error: null };
+      },
+      async setSession(tokens) {
+        setSessionCalls.push(tokens);
+        return { data: { session, user: session.user }, error: null };
+      }
+    }
+  };
+  const harness = evaluateBackend({ createClient: () => client });
+
+  const result = await harness.api.signIn("antony@example.com", "valid-password");
+
+  assert.equal(setSessionCalls.length, 1);
+  assert.equal(setSessionCalls[0].access_token, "fresh-access-token");
+  assert.equal(setSessionCalls[0].refresh_token, "fresh-refresh-token");
+  assert.equal(result.session.access_token, "fresh-access-token");
+  assert.equal(result.user.email, "antony@example.com");
+});
+
 test("password recovery uses an HTTPS redirect and enforces a strong replacement", async () => {
   const resetCalls = [];
   const updateCalls = [];
