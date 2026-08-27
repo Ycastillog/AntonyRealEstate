@@ -1,5 +1,5 @@
 const STORAGE_KEY = "antony-crm-local-v2";
-const APP_VERSION = 12;
+const APP_VERSION = 13;
 const MAX_AUDIT_ENTRIES = 500;
 const VALID_CURRENCIES = ["USD", "DOP"];
 const VALID_CLIENT_STAGES = ["Nuevo", "Calificado", "En seguimiento", "Comprador", "Inactivo"];
@@ -54,6 +54,7 @@ const EMPTY_STATE = {
   sales: [],
   installments: [],
   payments: [],
+  saleUnitChanges: [],
   historicalImportBatches: [],
   historicalSales: [],
   auditLog: []
@@ -219,6 +220,7 @@ const DEMO_DATA = {
       updatedAt: "2026-08-12"
     }
   ],
+  saleUnitChanges: [],
   historicalImportBatches: [],
   historicalSales: [],
   auditLog: []
@@ -298,6 +300,7 @@ function assertImportDates(value) {
     ["sales", ["saleDate", "deliveryDate", "commissionDueDate", "cancelledAt", "createdAt", "updatedAt"]],
     ["installments", ["dueDate", "createdAt", "updatedAt"]],
     ["payments", ["paymentDate", "voidedAt", "createdAt", "updatedAt"]],
+    ["saleUnitChanges", ["changeDate", "createdAt"]],
     ["historicalSales", ["saleDate", "deliveryDate", "promotedAt", "createdAt", "updatedAt"]],
     ["historicalImportBatches", ["importedAt", "createdAt"]]
   ];
@@ -508,6 +511,30 @@ function normalizeState(value) {
       updatedAt: dateOnly(payment.updatedAt || payment.createdAt, today())
     };
   });
+  const saleUnitChanges = (Array.isArray(value.saleUnitChanges)
+    ? value.saleUnitChanges
+    : []
+  ).map((change, index) => ({
+    id: String(change.id || "sale-change-import-" + index),
+    saleId: String(change.saleId || ""),
+    changeDate: dateOnly(change.changeDate || change.createdAt, today()),
+    reason: String(change.reason || "").trim(),
+    fromDeveloper: String(change.fromDeveloper || "").trim(),
+    fromProject: String(change.fromProject || "").trim(),
+    fromUnit: String(change.fromUnit || "").trim(),
+    toDeveloper: String(change.toDeveloper || "").trim(),
+    toProject: String(change.toProject || "").trim(),
+    toUnit: String(change.toUnit || "").trim(),
+    fromSalePrice: Math.max(numberValue(change.fromSalePrice), 0),
+    toSalePrice: Math.max(numberValue(change.toSalePrice), 0),
+    fromCommissionAmount: Math.max(numberValue(change.fromCommissionAmount), 0),
+    toCommissionAmount: Math.max(numberValue(change.toCommissionAmount), 0),
+    advanceCarried: Math.max(numberValue(change.advanceCarried), 0),
+    previousBalance: Math.max(numberValue(change.previousBalance), 0),
+    newBalance: Math.max(numberValue(change.newBalance), 0),
+    currency: normalizeCurrency(change.currency, "USD"),
+    createdAt: String(change.createdAt || "")
+  }));
   const historicalImportBatches = (Array.isArray(value.historicalImportBatches)
     ? value.historicalImportBatches
     : []
@@ -575,6 +602,7 @@ function normalizeState(value) {
   assertUniqueIds(sales, "ventas");
   assertUniqueIds(installments, "cuotas");
   assertUniqueIds(payments, "cobros");
+  assertUniqueIds(saleUnitChanges, "cambios de unidad");
   assertUniqueIds(historicalImportBatches, "lotes históricos");
   assertUniqueIds(historicalSales, "ventas históricas");
   const historicalBatchFingerprints = new Set();
@@ -601,6 +629,25 @@ function normalizeState(value) {
   }
   if (payments.some((payment) => !saleIds.has(payment.saleId))) {
     throw new Error("Un cobro apunta a una venta inexistente.");
+  }
+  if (
+    saleUnitChanges.some(
+      (change) =>
+        !saleIds.has(change.saleId) ||
+        !change.reason ||
+        !change.fromDeveloper ||
+        !change.fromProject ||
+        !change.fromUnit ||
+        !change.toDeveloper ||
+        !change.toProject ||
+        !change.toUnit ||
+        change.advanceCarried <= 0 ||
+        change.toCommissionAmount <= change.advanceCarried ||
+        toCents(change.newBalance) !==
+          toCents(change.toCommissionAmount) - toCents(change.advanceCarried)
+    )
+  ) {
+    throw new Error("Hay cambios de unidad con datos financieros inválidos.");
   }
   if (installments.some((installment) => !saleIds.has(installment.saleId))) {
     throw new Error("Una cuota apunta a una venta inexistente.");
@@ -673,7 +720,7 @@ function normalizeState(value) {
   historicalSales
     .filter((sale) => sale.reviewStatus !== "Convertida")
     .forEach((sale) => {
-      const key = normalizeText(sale.project) + "::" + normalizeText(sale.unit);
+      const key = unitIdentityKey(sale.developer, sale.project, sale.unit);
       if (historicalUnitKeys.has(key)) {
         throw new Error("Hay ventas históricas duplicadas para el mismo proyecto y unidad.");
       }
@@ -775,7 +822,7 @@ function normalizeState(value) {
   const activeUnits = new Set();
   sales.forEach((sale) => {
     if (isCancelledSale(sale)) return;
-    const unitKey = normalizeText(sale.project) + "::" + normalizeText(sale.unit);
+    const unitKey = unitIdentityKey(sale.developer, sale.project, sale.unit);
     if (activeUnits.has(unitKey)) {
       throw new Error("Hay más de una venta activa para el mismo proyecto y unidad.");
     }
@@ -784,7 +831,7 @@ function normalizeState(value) {
   historicalSales
     .filter((sale) => sale.reviewStatus !== "Convertida")
     .forEach((sale) => {
-      const unitKey = normalizeText(sale.project) + "::" + normalizeText(sale.unit);
+      const unitKey = unitIdentityKey(sale.developer, sale.project, sale.unit);
       if (activeUnits.has(unitKey)) {
         throw new Error("Una venta histórica duplica una operación activa.");
       }
@@ -866,6 +913,7 @@ function normalizeState(value) {
     sales,
     installments,
     payments,
+    saleUnitChanges,
     historicalImportBatches,
     historicalSales,
     auditLog: Array.isArray(value.auditLog)
@@ -960,6 +1008,10 @@ function normalizeText(value) {
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toLowerCase();
+}
+
+function unitIdentityKey(developer, project, unit) {
+  return [developer, project, unit].map(normalizeText).join("::");
 }
 
 function canonicalCatalogValue(value, catalog) {
@@ -2058,6 +2110,27 @@ function saleDetailHtml(sale) {
         )
         .join("")
     : '<div class="detail-empty">Todavía no hay cobros registrados.</div>';
+  const unitChanges = state.saleUnitChanges
+    .filter((change) => change.saleId === sale.id)
+    .sort((a, b) => String(b.changeDate).localeCompare(String(a.changeDate)));
+  const unitChangesHtml = unitChanges.length
+    ? unitChanges
+        .map(
+          (change) =>
+            '<div class="detail-payment"><span class="detail-payment-icon"><i data-lucide="repeat-2" aria-hidden="true"></i></span><div><strong>' +
+            escapeHtml(change.fromProject + " · " + change.fromUnit) +
+            " → " +
+            escapeHtml(change.toProject + " · " + change.toUnit) +
+            "</strong><small>Firmado " +
+            escapeHtml(formatDate(change.changeDate)) +
+            " · " +
+            escapeHtml(change.reason) +
+            "</small></div><span>Saldo " +
+            escapeHtml(money(change.newBalance, change.currency)) +
+            "</span></div>"
+        )
+        .join("")
+    : "";
   const archivedNotice = archived
     ? '<section class="detail-terminal-notice"><span><i data-lucide="archive-x" aria-hidden="true"></i></span><div><strong>Operación archivada</strong><p>' +
       escapeHtml(
@@ -2120,6 +2193,11 @@ function saleDetailHtml(sale) {
     '<section class="detail-section"><div class="detail-section-heading"><i data-lucide="receipt-text" aria-hidden="true"></i><h3>Historial de cobros</h3></div><div class="detail-payments">' +
     paymentsHtml +
     "</div></section>" +
+    (unitChangesHtml
+      ? '<section class="detail-section"><div class="detail-section-heading"><i data-lucide="repeat-2" aria-hidden="true"></i><h3>Cambios de unidad</h3></div><div class="detail-payments">' +
+        unitChangesHtml +
+        "</div></section>"
+      : "") +
     '<section class="detail-section"><div class="detail-section-heading"><i data-lucide="notebook-pen" aria-hidden="true"></i><h3>Notas de la operación</h3></div><p class="detail-note">' +
     escapeHtml(
       isCancelledSale(sale)
@@ -3068,10 +3146,10 @@ function updatePaymentContext() {
 
 function populateReportFilters() {
   const yearSelect = document.querySelector("#reportYear");
+  const developerSelect = document.querySelector("#reportDeveloper");
   const projectSelect = document.querySelector("#reportProject");
-  const selectedYear = yearSelect.options.length
-    ? yearSelect.value
-    : String(new Date().getFullYear());
+  const selectedYear = yearSelect.options.length ? yearSelect.value : "";
+  const selectedDeveloper = developerSelect.value;
   const selectedProject = projectSelect.value;
   const reportSource = reportableSales();
   const years = [
@@ -3097,8 +3175,35 @@ function populateReportFilters() {
   yearSelect.value =
     selectedYear === "" || years.includes(selectedYear) ? selectedYear : years[0] || "";
 
+  const developers = [
+    ...new Set(reportSource.map((sale) => sale.developer).filter(Boolean))
+  ].sort((a, b) => a.localeCompare(b, "es"));
+  developerSelect.innerHTML =
+    '<option value="">Todas las constructoras</option>' +
+    developers
+      .map(
+        (developer) =>
+          '<option value="' +
+          escapeHtml(developer) +
+          '">' +
+          escapeHtml(developer) +
+          "</option>"
+      )
+      .join("");
+  developerSelect.value = developers.includes(selectedDeveloper)
+    ? selectedDeveloper
+    : "";
+
   const projects = [
-    ...new Set(reportSource.map((sale) => sale.project).filter(Boolean))
+    ...new Set(
+      reportSource
+        .filter(
+          (sale) =>
+            !developerSelect.value || sale.developer === developerSelect.value
+        )
+        .map((sale) => sale.project)
+        .filter(Boolean)
+    )
   ].sort((a, b) => a.localeCompare(b, "es"));
   projectSelect.innerHTML =
     '<option value="">Todos los proyectos</option>' +
@@ -3117,12 +3222,14 @@ function populateReportFilters() {
 
 function filteredReportSales() {
   const year = document.querySelector("#reportYear").value;
+  const developer = document.querySelector("#reportDeveloper").value;
   const project = document.querySelector("#reportProject").value;
   const saleStatus = document.querySelector("#reportSaleStatus").value;
   const commissionStatus = document.querySelector("#reportCommissionStatus").value;
   return reportableSales().filter(
     (sale) =>
       (!year || yearOf(sale.saleDate) === year) &&
+      (!developer || sale.developer === developer) &&
       (!project || sale.project === project) &&
       (saleStatus
         ? sale.saleStatus === saleStatus
@@ -3162,8 +3269,7 @@ function reportInstallmentBadge(item) {
   );
 }
 
-function filteredReportInstallments(sales) {
-  const commissionStatus = document.querySelector("#reportCommissionStatus").value;
+function reportInstallmentsForSales(sales) {
   return (sales || filteredReportSales())
     .flatMap((sale) =>
       installmentLedgerForSale(sale.id).map((installment) => ({
@@ -3171,7 +3277,12 @@ function filteredReportInstallments(sales) {
         pendingCents: isCancelledSale(sale) ? 0 : installment.pendingCents,
         sale
       }))
-    )
+    );
+}
+
+function filteredReportInstallments(sales) {
+  const commissionStatus = document.querySelector("#reportCommissionStatus").value;
+  return reportInstallmentsForSales(sales)
     .filter((installment) => {
       if (!commissionStatus) return true;
       const status = reportInstallmentStatus(installment).label;
@@ -3192,10 +3303,12 @@ function filteredReportInstallments(sales) {
 function reportFilterSummary() {
   const parts = [];
   const year = document.querySelector("#reportYear").value;
+  const developer = document.querySelector("#reportDeveloper").value;
   const project = document.querySelector("#reportProject").value;
   const saleStatus = document.querySelector("#reportSaleStatus").value;
   const commissionStatus = document.querySelector("#reportCommissionStatus").value;
   if (year) parts.push("Ventas " + year);
+  if (developer) parts.push(developer);
   if (project) parts.push(project);
   if (saleStatus) parts.push(saleStatus);
   if (commissionStatus) {
@@ -3210,8 +3323,10 @@ function reportFilterSummary() {
 
 function renderReportAnalysis(sales, installments) {
   const byProject = sales.reduce((groups, sale) => {
-    const key = sale.project || "Sin proyecto";
+    const key = (sale.developer || "Sin constructora") + "::" + (sale.project || "Sin proyecto");
     const current = groups.get(key) || {
+      developer: sale.developer || "Sin constructora",
+      project: sale.project || "Sin proyecto",
       count: 0,
       volume: emptyMoneyTotals(),
       commissions: emptyMoneyTotals()
@@ -3229,10 +3344,12 @@ function renderReportAnalysis(sales, installments) {
   document.querySelector("#reportProjectBreakdown").innerHTML = projects.length
     ? projects
         .map(
-          ([project, value]) =>
+          ([, value]) =>
             '<div class="project-breakdown-row"><div><strong>' +
-            escapeHtml(project) +
+            escapeHtml(value.project) +
             "</strong><span>" +
+            escapeHtml(value.developer) +
+            " · " +
             value.count +
             (value.count === 1 ? " operación" : " operaciones") +
             " · " +
@@ -3289,24 +3406,33 @@ function setReportMoney(primaryId, secondaryId, totals) {
 
 function renderReports() {
   populateReportFilters();
+  const selectedDeveloper = document.querySelector("#reportDeveloper").value;
+  document.querySelector("#reportHeadingEyebrow").textContent = selectedDeveloper
+    ? "Conciliación · " + selectedDeveloper
+    : "Conciliación por constructora";
+  document.querySelector("#reportHeadingDescription").textContent = selectedDeveloper
+    ? "Revisa cada avance y saldo, identifica lo vencido y prepara el corte para " +
+      selectedDeveloper +
+      "."
+    : "Revisa cada avance y saldo, identifica lo vencido y prepara el corte de cada constructora.";
   const baseSales = filteredReportSales();
+  const portfolioInstallments = reportInstallmentsForSales(baseSales);
   const installments = filteredReportInstallments(baseSales);
-  const visibleSaleIds = new Set(installments.map((installment) => installment.sale.id));
-  const sales = baseSales.filter((sale) => visibleSaleIds.has(sale.id));
+  const sales = baseSales;
   const volume = aggregate(sales, "salePrice", "saleCurrency");
-  const commissions = installments.reduce((totals, installment) => {
+  const commissions = portfolioInstallments.reduce((totals, installment) => {
     totals[installment.sale.commissionCurrency] += installment.amountCents;
     return totals;
   }, emptyMoneyTotals());
-  const received = installments.reduce((totals, installment) => {
+  const received = portfolioInstallments.reduce((totals, installment) => {
     totals[installment.sale.commissionCurrency] += installment.paidCents;
     return totals;
   }, emptyMoneyTotals());
-  const pending = installments.reduce((totals, installment) => {
+  const pending = portfolioInstallments.reduce((totals, installment) => {
     totals[installment.sale.commissionCurrency] += installment.pendingCents;
     return totals;
   }, emptyMoneyTotals());
-  const overdue = installments.reduce((totals, installment) => {
+  const overdue = portfolioInstallments.reduce((totals, installment) => {
     if (
       installment.pendingCents > 0 &&
       isInstallmentCollectible(installment.sale, installment) &&
@@ -3354,7 +3480,7 @@ function renderReports() {
     (overdue.DOP ? moneyFromCents(overdue.DOP, "DOP") + " vencidos · " : "") +
     (collectionRates.length ? collectionRates.join(" · ") + " cobrado" : "0% cobrado");
 
-  renderReportAnalysis(sales, installments);
+  renderReportAnalysis(sales, portfolioInstallments);
   document.querySelector("#reportBody").innerHTML = installments
     .map(
       (installment) =>
@@ -3559,6 +3685,114 @@ function createInstallmentRow(installment) {
   refreshIcons();
 }
 
+function contractChangeMode() {
+  return document.querySelector("#saleForm")?.dataset.contractChange === "true";
+}
+
+function contractChangeEligibility(sale) {
+  if (!sale || sale.saleStatus !== "Opción a compra firmada") {
+    return { eligible: false, reason: "Solo aplica a una opción a compra firmada." };
+  }
+  const ledger = installmentLedgerForSale(sale.id);
+  const advance = ledger.find((item) => item.installmentKind === "advance");
+  const balance = ledger.find((item) => item.installmentKind === "balance");
+  if (!advance || !balance || ledger.length !== 2) {
+    return { eligible: false, reason: "Requiere un plan de Avance + Saldo." };
+  }
+  const activePayments = activePaymentsForSale(sale.id);
+  if (!activePayments.length || advance.paidCents !== advance.amountCents) {
+    return { eligible: false, reason: "El avance debe estar completamente cobrado." };
+  }
+  if (
+    balance.paidCents > 0 ||
+    activePayments.some((payment) => payment.installmentId !== advance.id)
+  ) {
+    return { eligible: false, reason: "No se permite después de cobrar parte del saldo." };
+  }
+  return {
+    eligible: true,
+    reason: "El avance cobrado se conservará y el nuevo pendiente quedará en Saldo.",
+    advance,
+    balance,
+    advancePaidCents: advance.paidCents
+  };
+}
+
+function updateContractChangeCard(sale) {
+  const card = document.querySelector("#contractChangeCard");
+  const button = document.querySelector("#startContractChangeButton");
+  const help = document.querySelector("#contractChangeEligibility");
+  if (!card || !button || !help) return;
+  const hasPayments = Boolean(sale && activePaymentsForSale(sale.id).length);
+  card.hidden = !hasPayments || contractChangeMode();
+  if (!hasPayments) return;
+  const eligibility = contractChangeEligibility(sale);
+  button.disabled = !eligibility.eligible;
+  help.textContent = eligibility.reason;
+}
+
+function renderContractChangePlan() {
+  const form = document.querySelector("#saleForm");
+  const sale = saleById(form?.elements.id.value);
+  const eligibility = contractChangeEligibility(sale);
+  if (!form || !eligibility.eligible) return false;
+  const commissionCents = toCents(form.elements.commissionAmount.value);
+  const balanceCents = commissionCents - eligibility.advancePaidCents;
+  const container = document.querySelector("#installmentRows");
+  container.textContent = "";
+  [
+    {
+      id: eligibility.advance.id,
+      installmentKind: "advance",
+      label: "Avance",
+      amount: fromCents(eligibility.advancePaidCents),
+      dueDate: eligibility.advance.dueDate
+    },
+    {
+      id: eligibility.balance.id,
+      installmentKind: "balance",
+      label: "Saldo",
+      amount: fromCents(Math.max(balanceCents, 0)),
+      dueDate: form.elements.deliveryDate.value || eligibility.balance.dueDate
+    }
+  ].forEach(createInstallmentRow);
+  document.querySelector("#commissionPlanType").value = "advance_balance";
+  document.querySelector("#advancePercentage").value = commissionCents > 0
+    ? String(Number(((eligibility.advancePaidCents / commissionCents) * 100).toFixed(4)))
+    : "0";
+  document.querySelector("#contractChangeFinancialSummary").textContent =
+    "Avance conservado: " +
+    moneyFromCents(eligibility.advancePaidCents, sale.commissionCurrency) +
+    " · Nuevo saldo: " +
+    moneyFromCents(Math.max(balanceCents, 0), sale.commissionCurrency) +
+    ".";
+  updateCommissionPlanControls();
+  applyInstallmentPlanLock();
+  updateInstallmentPlanSummary();
+  return true;
+}
+
+function startContractChange() {
+  const form = document.querySelector("#saleForm");
+  const sale = saleById(form?.elements.id.value);
+  const eligibility = contractChangeEligibility(sale);
+  if (!form || !eligibility.eligible) {
+    showToast(eligibility.reason || "Este cambio no está disponible", 5500);
+    return;
+  }
+  form.dataset.contractChange = "true";
+  form.dataset.contractChangeId = makeId("sale-change");
+  form.elements.saleStatus.value = "Opción a compra firmada";
+  form.elements.contractChangeReason.required = true;
+  document.querySelector("#contractChangeCard").hidden = true;
+  document.querySelector("#contractChangeReasonWrap").hidden = false;
+  document.querySelector("#installmentPlanner").classList.add("contract-change-active");
+  document.querySelector("#saleFormTitle").textContent = "Registrar cambio de unidad";
+  document.querySelector("#saleSubmitButton").textContent = "Guardar cambio y recalcular saldo";
+  renderContractChangePlan();
+  form.elements.unit.focus();
+}
+
 function installmentPlanLocked() {
   const saleId = document.querySelector("#saleForm")?.elements.id.value;
   return Boolean(saleId && activePaymentsForSale(saleId).length);
@@ -3567,7 +3801,9 @@ function installmentPlanLocked() {
 function applyInstallmentPlanLock() {
   const form = document.querySelector("#saleForm");
   if (!form) return;
-  const locked = installmentPlanLocked();
+  const hasPayments = installmentPlanLocked();
+  const changingContract = contractChangeMode();
+  const locked = hasPayments && !changingContract;
   const saleId = form.elements.id.value;
   const ledgerById = new Map(
     saleId
@@ -3589,20 +3825,22 @@ function applyInstallmentPlanLock() {
         row.dataset.installmentKind === "balance";
       const paidCents = ledgerById.get(row.dataset.installmentId)?.paidCents || 0;
       const inputLocked =
-        calculated || balanceDate || (locked && (!dueDate || paidCents > 0));
+        calculated || balanceDate || (hasPayments && (!dueDate || paidCents > 0));
       input.readOnly = inputLocked;
       input.setAttribute("aria-readonly", String(inputLocked));
     });
   });
-  document.querySelector("#commissionPlanType").disabled = locked;
-  document.querySelector("#advancePercentage").disabled = locked;
+  document.querySelector("#commissionPlanType").disabled = hasPayments;
+  document.querySelector("#advancePercentage").disabled = hasPayments;
   document.querySelectorAll("[data-advance-preset]").forEach((button) => {
-    button.disabled = locked;
+    button.disabled = hasPayments;
   });
   form.elements.commissionRate.readOnly = locked;
   form.elements.commissionAmount.readOnly = locked;
-  form.elements.commissionCurrency.disabled = locked;
-  form.elements.saleDate.readOnly = locked;
+  form.elements.salePrice.readOnly = locked;
+  form.elements.saleCurrency.disabled = hasPayments;
+  form.elements.commissionCurrency.disabled = hasPayments;
+  form.elements.saleDate.readOnly = hasPayments;
   form.elements.deliveryDate.readOnly = Boolean(
     [...ledgerById.values()].find(
       (installment) => installment.installmentKind === "balance"
@@ -3893,6 +4131,8 @@ function resetSaleForm() {
   const form = document.querySelector("#saleForm");
   clearFormErrors(form);
   form.reset();
+  delete form.dataset.contractChange;
+  delete form.dataset.contractChangeId;
   setFormValue(form, "id", "");
   setFormValue(form, "saleDate", today());
   setFormValue(form, "cancelReason", "");
@@ -3901,6 +4141,10 @@ function resetSaleForm() {
   renderInstallmentEditor([]);
   updateCancelReasonVisibility();
   updateSharedSaleVisibility();
+  form.elements.contractChangeReason.required = false;
+  document.querySelector("#contractChangeCard").hidden = true;
+  document.querySelector("#contractChangeReasonWrap").hidden = true;
+  document.querySelector("#installmentPlanner").classList.remove("contract-change-active");
   document.querySelector("#saleFormTitle").textContent = "Registrar venta";
   document.querySelector("#saleSubmitButton").textContent = "Guardar venta";
   document.querySelector("#cancelSaleEdit").hidden = false;
@@ -3948,6 +4192,12 @@ function startSaleEdit(id, trigger) {
   const sale = saleById(id);
   if (!sale) return;
   const form = document.querySelector("#saleForm");
+  delete form.dataset.contractChange;
+  delete form.dataset.contractChangeId;
+  form.elements.contractChangeReason.value = "";
+  form.elements.contractChangeReason.required = false;
+  document.querySelector("#contractChangeReasonWrap").hidden = true;
+  document.querySelector("#installmentPlanner").classList.remove("contract-change-active");
   [
     "id", "clientId", "unit", "saleStatus",
     "salePrice", "saleCurrency", "saleDate", "deliveryDate", "externalAgent",
@@ -3962,6 +4212,7 @@ function startSaleEdit(id, trigger) {
   document.querySelector("#saleFormTitle").textContent = "Editar venta";
   document.querySelector("#saleSubmitButton").textContent = "Guardar cambios";
   document.querySelector("#cancelSaleEdit").hidden = false;
+  updateContractChangeCard(sale);
   switchView("sales", true, false);
   openDrawer("saleForm", trigger);
 }
@@ -4014,13 +4265,15 @@ function findDuplicateClient(phone, email, excludedId) {
   );
 }
 
-function hasDuplicateActiveUnit(project, unit, excludedId) {
+function hasDuplicateActiveUnit(developer, project, unit, excludedId) {
+  const developerKey = normalizeText(developer);
   const projectKey = normalizeText(project);
   const unitKey = normalizeText(unit);
   return state.sales.some(
     (sale) =>
       sale.id !== excludedId &&
       !isCancelledSale(sale) &&
+      normalizeText(sale.developer) === developerKey &&
       normalizeText(sale.project) === projectKey &&
       normalizeText(sale.unit) === unitKey
   );
@@ -4049,6 +4302,7 @@ function exportBackup() {
     sales: state.sales,
     installments: state.installments,
     payments: state.payments,
+    saleUnitChanges: state.saleUnitChanges,
     historicalImportBatches: state.historicalImportBatches,
     historicalSales: state.historicalSales
   };
@@ -4093,6 +4347,7 @@ async function importBackup(file) {
         state.sales.length ||
         state.installments.length ||
         state.payments.length ||
+        state.saleUnitChanges.length ||
         state.historicalSales.length ||
         state.historicalImportBatches.length)
     ) {
@@ -4168,14 +4423,14 @@ async function importHistoricalFile(file) {
     }
     const existingByUnit = new Map(
       activeHistoricalSales().map((sale) => [
-        normalizeText(sale.project) + "::" + normalizeText(sale.unit),
+        unitIdentityKey(sale.developer, sale.project, sale.unit),
         sale
       ])
     );
     const matchingExisting = contactRows.map((row) => ({
       source: row,
       existing: existingByUnit.get(
-        normalizeText(row.project) + "::" + normalizeText(row.unit)
+        unitIdentityKey(row.developer || "Constructora LVP", row.project, row.unit)
       )
     }));
 
@@ -4261,13 +4516,13 @@ async function importHistoricalFile(file) {
     const currentUnitKeys = new Set([
       ...state.sales
         .filter((sale) => !isCancelledSale(sale))
-        .map((sale) => normalizeText(sale.project) + "::" + normalizeText(sale.unit)),
+        .map((sale) => unitIdentityKey(sale.developer, sale.project, sale.unit)),
       ...activeHistoricalSales().map(
-        (sale) => normalizeText(sale.project) + "::" + normalizeText(sale.unit)
+        (sale) => unitIdentityKey(sale.developer, sale.project, sale.unit)
       )
     ]);
     const conflict = rows.find((sale) =>
-      currentUnitKeys.has(normalizeText(sale.project) + "::" + normalizeText(sale.unit))
+      currentUnitKeys.has(unitIdentityKey(sale.developer, sale.project, sale.unit))
     );
     if (conflict) {
       throw new Error(
@@ -4338,6 +4593,11 @@ function safeCsvCell(value) {
 
 function exportSalesCsv() {
   const installments = filteredReportInstallments();
+  const selectedDeveloper = document.querySelector("#reportDeveloper").value;
+  const developerToken = normalizeText(selectedDeveloper || "todas-constructoras")
+    .replace(/^constructora\s+/, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
   const rows = [
     [
       "Cliente", "Correo", "Teléfono", "Constructora", "Proyecto", "Unidad",
@@ -4371,12 +4631,16 @@ function exportSalesCsv() {
   const csv = rows.map((row) => row.map(safeCsvCell).join(",")).join("\n");
   downloadBlob(
     new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }),
-    "antony-reporte-comisiones-lvp-" + today() + ".csv"
+    "antony-reporte-comisiones-" + developerToken + "-" + today() + ".csv"
   );
   showToast(installments.length + " cuotas exportadas para conciliación");
 }
 
 function printCommissionReport() {
+  const selectedDeveloper = document.querySelector("#reportDeveloper").value;
+  const reportTitle = selectedDeveloper
+    ? "Reporte de comisiones · " + selectedDeveloper
+    : "Reporte de comisiones por constructora";
   const baseSales = filteredReportSales();
   const installments = filteredReportInstallments(baseSales);
   const visibleSaleIds = new Set(installments.map((installment) => installment.sale.id));
@@ -4410,7 +4674,13 @@ function printCommissionReport() {
         "<tr><td><strong>" +
         escapeHtml(installment.sale.buyerName) +
         "</strong><small>" +
-        escapeHtml(installment.sale.project + " · " + installment.sale.unit) +
+        escapeHtml(
+          installment.sale.developer +
+            " · " +
+            installment.sale.project +
+            " · " +
+            installment.sale.unit
+        ) +
         "</small></td><td>" +
         escapeHtml(installment.label) +
         "</td><td>" +
@@ -4436,7 +4706,9 @@ function printCommissionReport() {
     })
     .join("");
   reportWindow.document.write(
-    '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Reporte de comisiones LVP</title><style>' +
+    '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>' +
+      escapeHtml(reportTitle) +
+      "</title><style>" +
       '@page{size:landscape;margin:14mm}*{box-sizing:border-box}body{color:#071a33;font:12px Arial,sans-serif;margin:0}' +
       'header{align-items:flex-end;border-bottom:3px solid #b17b18;display:flex;justify-content:space-between;margin-bottom:18px;padding-bottom:14px}' +
       'h1{font:700 28px Georgia,serif;margin:3px 0}.eyebrow{color:#8a5d08;font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase}' +
@@ -4446,7 +4718,9 @@ function printCommissionReport() {
       'td{border-bottom:1px solid #e6e2d8;padding:8px;vertical-align:top}td strong,td small{display:block}.money{text-align:right;white-space:nowrap}' +
       '.status{border-radius:99px;display:inline-block;font-size:9px;font-weight:700;padding:4px 7px;text-transform:uppercase}.status-paid{background:#dff7f0;color:#087568}.status-overdue{background:#fee4e2;color:#b42318}.status-partial,.status-pending{background:#fff3d6;color:#8a5d08}.status-void{background:#eef0f3;color:#667085}' +
       'footer{color:#667085;font-size:9px;margin-top:12px;text-align:right}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
-      '</style></head><body><header><div><span class="eyebrow">Antony Fulgencio Real Estate</span><h1>Reporte de comisiones LVP</h1><p>' +
+      '</style></head><body><header><div><span class="eyebrow">Antony Fulgencio Real Estate</span><h1>' +
+      escapeHtml(reportTitle) +
+      "</h1><p>" +
       escapeHtml(reportFilterSummary()) +
       '</p></div><div class="meta">Corte: ' +
       escapeHtml(formatDate(today())) +
@@ -4506,7 +4780,7 @@ function exportPaymentsCsv() {
 }
 
 function updateCommissionFromRate() {
-  if (installmentPlanLocked()) return;
+  if (installmentPlanLocked() && !contractChangeMode()) return;
   const form = document.querySelector("#saleForm");
   if (form.elements.saleCurrency.value !== form.elements.commissionCurrency.value) {
     return;
@@ -4517,7 +4791,8 @@ function updateCommissionFromRate() {
     form.elements.commissionAmount.value = fromCents(
       Math.round((price * rate) / 100)
     ).toFixed(2);
-    renderSelectedCommissionPlan(currentInstallmentDrafts());
+    if (contractChangeMode()) renderContractChangePlan();
+    else renderSelectedCommissionPlan(currentInstallmentDrafts());
   }
 }
 
@@ -4755,8 +5030,12 @@ document
     updateCommissionFromRate();
   });
 document.querySelector("#commissionAmount").addEventListener("input", () => {
-  renderSelectedCommissionPlan(currentInstallmentDrafts());
+  if (contractChangeMode()) renderContractChangePlan();
+  else renderSelectedCommissionPlan(currentInstallmentDrafts());
 });
+document
+  .querySelector("#startContractChangeButton")
+  .addEventListener("click", startContractChange);
 document.querySelector('#saleForm [name="saleStatus"]').addEventListener("change", () => {
   updateCancelReasonVisibility();
   updateCommissionPlanControls();
@@ -4772,6 +5051,7 @@ document.querySelector("#deliveryDate").addEventListener("change", () => {
     form.elements.deliveryDate.value = form.elements.saleDate.value;
   }
   syncBalanceDueDateWithDelivery();
+  if (contractChangeMode()) renderContractChangePlan();
 });
 document.querySelector("#saleDate").addEventListener("change", () => {
   const saleDate = document.querySelector("#saleDate").value;
@@ -4833,17 +5113,29 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
   const data = new FormData(formElement);
   const id = String(data.get("id") || "");
   const current = saleById(id);
+  const changingContract = contractChangeMode();
+  const contractChangeId = changingContract
+    ? formElement.dataset.contractChangeId || makeId("sale-change")
+    : "";
+  if (changingContract) formElement.dataset.contractChangeId = contractChangeId;
+  const activeSalePayments = id ? activePaymentsForSale(id) : [];
+  const hasActivePayments = Boolean(activeSalePayments.length);
   const clientId = String(data.get("clientId") || "");
   const projectRaw = String(data.get("project") || "").trim();
   const unit = String(data.get("unit") || "").trim();
-  const salePrice = numberValue(data.get("salePrice"));
-  const saleCurrency = normalizeCurrency(data.get("saleCurrency"), "USD");
+  const financialLocked = Boolean(id && hasActivePayments && !changingContract);
+  const salePrice = financialLocked
+    ? numberValue(current?.salePrice)
+    : numberValue(data.get("salePrice"));
+  const saleCurrency = normalizeCurrency(
+    hasActivePayments ? current?.saleCurrency : data.get("saleCurrency"),
+    "USD"
+  );
   const saleDate = String(data.get("saleDate") || today());
   let deliveryDate = String(data.get("deliveryDate") || "");
   const saleStatus = normalizeSaleStatus(data.get("saleStatus"));
   const sharedSale = data.get("sharedSale") === "on";
   const externalAgent = String(data.get("externalAgent") || "").trim();
-  const financialLocked = Boolean(id && activePaymentsForSale(id).length);
   const commissionRate = financialLocked
     ? numberValue(current?.commissionRate)
     : numberValue(data.get("commissionRate"));
@@ -4851,10 +5143,11 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
     ? numberValue(current?.commissionAmount)
     : numberValue(data.get("commissionAmount"));
   const commissionCurrency = normalizeCurrency(
-    financialLocked ? current?.commissionCurrency : data.get("commissionCurrency"),
+    hasActivePayments ? current?.commissionCurrency : data.get("commissionCurrency"),
     saleCurrency
   );
   const cancelReason = String(data.get("cancelReason") || "").trim();
+  const contractChangeReason = String(data.get("contractChangeReason") || "").trim();
   const payments = id ? paymentsForSale(id) : [];
   const archiveTransition =
     TERMINAL_SALE_STATUSES.includes(saleStatus) && current?.saleStatus !== saleStatus;
@@ -4885,6 +5178,52 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
       "project",
       "Selecciona un proyecto de la constructora indicada"
     );
+  }
+  const contractIdentityChanged = Boolean(
+    current &&
+      (developer !== current.developer ||
+        project !== current.project ||
+        normalizeText(unit) !== normalizeText(current.unit))
+  );
+  if (hasActivePayments && contractIdentityChanged && !changingContract) {
+    showToast("Usa Registrar cambio para conservar el avance y recalcular el saldo", 6500);
+    document.querySelector("#startContractChangeButton").focus();
+    return;
+  }
+  if (changingContract) {
+    const eligibility = contractChangeEligibility(current);
+    if (!eligibility.eligible) {
+      showToast(eligibility.reason, 6000);
+      return;
+    }
+    if (!contractIdentityChanged) {
+      return showFieldError(
+        formElement,
+        "unit",
+        "Indica la nueva unidad o selecciona el nuevo proyecto"
+      );
+    }
+    if (!contractChangeReason) {
+      return showFieldError(
+        formElement,
+        "contractChangeReason",
+        "Explica el motivo del cambio firmado"
+      );
+    }
+    if (saleStatus !== "Opción a compra firmada") {
+      return showFieldError(
+        formElement,
+        "saleStatus",
+        "El cambio firmado debe continuar como Opción a compra firmada"
+      );
+    }
+    if (toCents(commissionAmount) <= eligibility.advancePaidCents) {
+      return showFieldError(
+        formElement,
+        "commissionAmount",
+        "La nueva comisión debe ser mayor que el avance ya cobrado"
+      );
+    }
   }
   if (salePrice <= 0) {
     return showFieldError(
@@ -4966,7 +5305,7 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
   }
   if (
     !TERMINAL_SALE_STATUSES.includes(saleStatus) &&
-    hasDuplicateActiveUnit(project, unit, id)
+    hasDuplicateActiveUnit(developer, project, unit, id)
   ) {
     return showFieldError(
       formElement,
@@ -5085,17 +5424,47 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
   };
   let savedSale = sale;
   let savedInstallments = installments;
+  let savedContractChange = null;
   if (!DEMO_MODE) {
     try {
       const result = await performCloudMutation(() =>
-        cloudBackend.saveSale(sale, installments)
+        changingContract
+          ? cloudBackend.changeSaleContract(sale, installments, {
+              id: contractChangeId,
+              reason: contractChangeReason,
+              changeDate: today()
+            })
+          : cloudBackend.saveSale(sale, installments)
       );
       savedSale = result?.sale || result?.sales?.[0] || sale;
       savedInstallments = result?.installments || installments;
+      savedContractChange = result?.change || null;
     } catch (error) {
       showBackendError(error);
       return;
     }
+  }
+  if (DEMO_MODE && changingContract) {
+    const eligibility = contractChangeEligibility(current);
+    savedContractChange = {
+      id: contractChangeId,
+      saleId,
+      changeDate: today(),
+      reason: contractChangeReason,
+      fromDeveloper: current.developer,
+      fromProject: current.project,
+      fromUnit: current.unit,
+      toDeveloper: sale.developer,
+      toProject: sale.project,
+      toUnit: sale.unit,
+      advanceCarried: fromCents(eligibility.advancePaidCents),
+      previousBalance: fromCents(
+        toCents(current.commissionAmount) - eligibility.advancePaidCents
+      ),
+      newBalance: fromCents(toCents(sale.commissionAmount) - eligibility.advancePaidCents),
+      currency: sale.commissionCurrency,
+      createdAt: new Date().toISOString()
+    };
   }
   if (id) {
     state.sales = state.sales.map((item) => (item.id === id ? savedSale : item));
@@ -5107,18 +5476,21 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
   state.installments = state.installments
     .filter((installment) => installment.saleId !== saleId)
     .concat(savedInstallments);
+  if (savedContractChange) state.saleUnitChanges.push(savedContractChange);
   resetSaleForm();
   renderAll();
   closeDrawer(false);
   showToast(
-    archiveTransition
+    changingContract
+      ? "Cambio registrado: avance conservado y nuevo saldo recalculado"
+      : archiveTransition
       ? saleStatus === "Cambio"
         ? "Operación anterior archivada; registra la nueva venta por separado"
         : "Venta desistida y archivada; ya no cuenta en ventas ni cobros"
       : id
         ? "Venta actualizada"
         : "Venta guardada",
-    archiveTransition ? 6500 : 3500
+    changingContract || archiveTransition ? 6500 : 3500
   );
 });
 
@@ -5305,7 +5677,7 @@ document.querySelectorAll("[data-collection-filter]").forEach((button) => {
     renderCollectionQueue();
   });
 });
-["reportYear", "reportProject", "reportSaleStatus", "reportCommissionStatus"].forEach(
+["reportYear", "reportDeveloper", "reportProject", "reportSaleStatus", "reportCommissionStatus"].forEach(
   (id) => document.querySelector("#" + id).addEventListener("change", renderReports)
 );
 document.querySelector("#exportSalesButton").addEventListener("click", exportSalesCsv);
@@ -5313,14 +5685,6 @@ document
   .querySelector("#printCommissionReportButton")
   .addEventListener("click", printCommissionReport);
 document.querySelector("#exportPaymentsButton").addEventListener("click", exportPaymentsCsv);
-document.querySelector("#exportBackupButton").addEventListener("click", exportBackup);
-document.querySelector("#importBackupButton").addEventListener("click", () => {
-  document.querySelector("#importBackupInput").click();
-});
-document.querySelector("#importBackupInput").addEventListener("change", (event) => {
-  importBackup(event.target.files?.[0]);
-  event.target.value = "";
-});
 
 document.querySelector("#loadDemoButton").addEventListener("click", async () => {
   if (!DEMO_MODE) return;

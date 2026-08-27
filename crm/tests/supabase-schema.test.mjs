@@ -60,6 +60,7 @@ test("production schema defines every CRM table and critical business column", s
     "crm_historical_sales",
     "crm_commission_installments",
     "crm_payments",
+    "crm_sale_unit_changes",
     "crm_audit_log"
   ];
 
@@ -109,6 +110,7 @@ test("RLS policies isolate each CRM table by authenticated owner", sqlTestOption
     "crm_historical_sales",
     "crm_commission_installments",
     "crm_payments",
+    "crm_sale_unit_changes",
     "crm_audit_log"
   ]) {
     assert.match(rlsBlock, new RegExp(`["']${table}["']`), `${table} is absent from RLS loop`);
@@ -135,6 +137,7 @@ test("RLS policies isolate each CRM table by authenticated owner", sqlTestOption
 test("SQL implements and grants every RPC required by the browser adapter", sqlTestOptions, () => {
   const contracts = new Map([
     ["crm_save_sale", ["p_sale", "p_installments"]],
+    ["crm_change_sale_contract", ["p_sale", "p_installments", "p_change"]],
     ["crm_record_payment", ["p_payment"]],
     ["crm_void_payment", ["p_payment_id", "p_reason"]],
     ["crm_import_historical_sales", ["p_batch", "p_rows"]],
@@ -257,6 +260,23 @@ test("schema enforces terminal, installment, payment, and audit invariants", sql
   assert.match(sql, /property_stage\s+in\s*\(\s*'Sin definir'\s*,\s*'Listo'\s*,\s*'En planos \/ En construcción'\s*,\s*'Indiferente'/i);
   assert.match(sql, /v_shared_sale\s*:=\s*coalesce\(\(p_sale\s*->>\s*'shared_sale'\)::boolean,\s*false\)/i);
   assert.match(sql, /delivery_date\s*=\s*v_delivery_date[\s\S]{0,100}external_agent\s*=\s*v_external_agent/i);
+});
+
+test("signed unit changes preserve paid advance and create an immutable business event", sqlTestOptions, () => {
+  const changeContract = functionDefinition("crm_change_sale_contract");
+  assert.ok(changeContract);
+  assert.match(changeContract, /status\s*<>\s*'Opción a compra firmada'/i);
+  assert.match(changeContract, /v_advance_paid\s*<>\s*v_advance\.amount/i);
+  assert.match(changeContract, /v_balance_paid\s*<>\s*0/i);
+  assert.match(changeContract, /v_new_balance\s*<>\s*v_new_commission\s*-\s*v_advance_paid/i);
+  assert.match(changeContract, /insert\s+into\s+public\.crm_sale_unit_changes/i);
+  assert.match(changeContract, /perform\s+set_config\([\s\S]{0,120}app\.crm_contract_change/i);
+  assert.doesNotMatch(changeContract, /insert\s+into\s+public\.crm_payments/i);
+  assert.match(sql, /crm_sale_unit_changes_amounts_check[\s\S]{0,300}new_balance\s*=\s*to_commission_amount\s*-\s*advance_carried/i);
+  assert.match(
+    sql,
+    /crm_sales_active_project_unit_uidx[\s\S]{0,260}coalesce\(developer,\s*''\)[\s\S]{0,180}project[\s\S]{0,120}unit/i
+  );
 });
 
 const lvpProjects = [

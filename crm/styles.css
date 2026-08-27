@@ -468,7 +468,7 @@ label { color: #344054; display: grid; font-size: 12px; font-weight: 700; gap: 6
 .payment-fill { justify-self: start; min-height: 32px; }
 
 .report-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 9px; justify-content: flex-end; }
-.report-filters { align-items: end; display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 12px; }
+.report-filters { align-items: end; display: grid; gap: 16px; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: 12px; }
 .report-cutoff { align-items: center; background: linear-gradient(120deg,#fffdf7,#f5f1e7); border: 1px solid #ded6c4; border-radius: var(--r-card); display: flex; justify-content: space-between; margin-bottom: 16px; padding: 15px 18px; }
 .report-cutoff > div { display: grid; gap: 3px; }
 .report-cutoff strong { color: var(--navy); font-size: 14px; }
@@ -480,6 +480,12 @@ label { color: #344054; display: grid; font-size: 12px; font-weight: 700; gap: 6
 .report-card > strong { font-size: clamp(22px, 2vw, 30px); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .report-card-danger { border-bottom-color: var(--danger); }
 .report-card-danger::after { background: var(--danger); }
+.contract-change-card { align-items: center; background: #f7f2e6; border: 1px solid #d9c79e; border-radius: 12px; display: flex; gap: 14px; justify-content: space-between; margin-top: 16px; padding: 14px 16px; }
+.contract-change-card > div { display: grid; gap: 3px; }
+.contract-change-card strong { color: var(--navy); font-size: 14px; }
+.contract-change-card small { color: var(--text-secondary); font-size: 11px; }
+.contract-change-reason { background: #f7f2e6; border: 1px solid #d9c79e; border-radius: 12px; display: grid; gap: 7px; margin-top: 12px; padding: 14px 16px; }
+.installment-planner.contract-change-active { border-color: #b17b18; box-shadow: 0 0 0 2px rgba(177,123,24,.1); }
 .report-ledger-card { overflow: hidden; }
 .report-ledger-help { color: var(--text-secondary); font-size: 11px; margin: 0; max-width: 260px; text-align: right; }
 
