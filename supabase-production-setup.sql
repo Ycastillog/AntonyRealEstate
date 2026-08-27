@@ -1113,6 +1113,69 @@ create table if not exists public.crm_payments (
 comment on table public.crm_payments is
   'Cobros de comision. Solo status=Contabilizado participa en los totales.';
 
+create table if not exists public.crm_sale_unit_changes (
+  owner_id uuid not null default auth.uid(),
+  id text not null,
+  sale_id text not null,
+  change_date date not null default current_date,
+  reason text not null,
+  from_developer text not null,
+  from_project text not null,
+  from_unit text not null,
+  to_developer text not null,
+  to_project text not null,
+  to_unit text not null,
+  from_sale_price numeric(18,2) not null,
+  to_sale_price numeric(18,2) not null,
+  from_commission_amount numeric(18,2) not null,
+  to_commission_amount numeric(18,2) not null,
+  advance_carried numeric(18,2) not null,
+  previous_balance numeric(18,2) not null,
+  new_balance numeric(18,2) not null,
+  currency text not null,
+  created_at timestamptz not null default clock_timestamp(),
+
+  constraint crm_sale_unit_changes_pkey primary key (owner_id, id),
+  constraint crm_sale_unit_changes_owner_fk
+    foreign key (owner_id) references auth.users(id) on delete restrict,
+  constraint crm_sale_unit_changes_sale_fk
+    foreign key (owner_id, sale_id)
+    references public.crm_sales(owner_id, id)
+    on delete restrict,
+  constraint crm_sale_unit_changes_id_check check (
+    id = btrim(id) and char_length(id) between 1 and 128
+  ),
+  constraint crm_sale_unit_changes_reason_check check (
+    char_length(btrim(reason)) between 1 and 500
+  ),
+  constraint crm_sale_unit_changes_identity_check check (
+    char_length(btrim(from_developer)) between 1 and 200
+    and char_length(btrim(to_developer)) between 1 and 200
+    and char_length(btrim(from_project)) between 1 and 200
+    and char_length(btrim(to_project)) between 1 and 200
+    and char_length(btrim(from_unit)) between 1 and 120
+    and char_length(btrim(to_unit)) between 1 and 120
+    and (
+      from_developer is distinct from to_developer
+      or from_project is distinct from to_project
+      or from_unit is distinct from to_unit
+    )
+  ),
+  constraint crm_sale_unit_changes_amounts_check check (
+    from_sale_price > 0
+    and to_sale_price > 0
+    and from_commission_amount > 0
+    and to_commission_amount > advance_carried
+    and advance_carried > 0
+    and previous_balance >= 0
+    and new_balance = to_commission_amount - advance_carried
+  ),
+  constraint crm_sale_unit_changes_currency_check check (currency in ('USD', 'DOP'))
+);
+
+comment on table public.crm_sale_unit_changes is
+  'Eventos inmutables de cambio de unidad; conservan el avance y documentan el saldo recalculado.';
+
 create table if not exists public.crm_audit_log (
   owner_id uuid not null,
   id text not null default gen_random_uuid()::text,
@@ -1139,7 +1202,8 @@ create table if not exists public.crm_audit_log (
       'crm_historical_import_batches',
       'crm_historical_sales',
       'crm_commission_installments',
-      'crm_payments'
+      'crm_payments',
+      'crm_sale_unit_changes'
     )
   ),
   constraint crm_audit_log_operation_check check (
@@ -1171,7 +1235,8 @@ alter table public.crm_audit_log
       'crm_historical_import_batches',
       'crm_historical_sales',
       'crm_commission_installments',
-      'crm_payments'
+      'crm_payments',
+      'crm_sale_unit_changes'
     )
   );
 
@@ -1500,8 +1565,12 @@ declare
   v_request_owner uuid := auth.uid();
   v_planned numeric := 0;
   v_accounted numeric := 0;
+  v_advance_amount numeric := 0;
+  v_paid_advance numeric := 0;
+  v_paid_balance numeric := 0;
   v_first_payment date;
   v_first_due date;
+  v_contract_change boolean := false;
 begin
   -- Los BEFORE triggers se ejecutan antes del WITH CHECK de RLS. Esta comprobacion
   -- evita que una fila forjada use el SECURITY DEFINER para sondear otro owner.
@@ -1518,6 +1587,10 @@ begin
   ) then
     raise exception 'owner_id e id de una venta son inmutables';
   end if;
+
+  v_contract_change := tg_op = 'UPDATE'
+    and current_setting('app.crm_contract_change', true)
+      = new.owner_id::text || ':' || new.id;
 
   -- La fecha terminal es server-side cuando el cliente no la aporta.
   if new.status in ('Desistió', 'Cambio') then
@@ -1559,7 +1632,7 @@ begin
     where p.owner_id = new.owner_id
       and p.sale_id = new.id;
 
-    if new.commission_amount < v_planned then
+    if new.commission_amount < v_planned and not v_contract_change then
       raise exception
         'commission_amount (%) no puede ser menor que las cuotas planificadas (%)',
         new.commission_amount, v_planned;
@@ -1571,7 +1644,7 @@ begin
         new.commission_amount, v_accounted;
     end if;
 
-    if v_accounted > 0 and (
+    if v_accounted > 0 and not v_contract_change and (
       new.sale_price is distinct from old.sale_price
       or new.sale_currency is distinct from old.sale_currency
       or new.sale_date is distinct from old.sale_date
@@ -1581,6 +1654,55 @@ begin
     ) then
       raise exception
         'Montos, monedas y fecha de venta no cambian después de contabilizar cobros';
+    end if;
+
+    if v_contract_change then
+      select
+        coalesce(max(i.amount) filter (where i.installment_kind = 'advance'), 0),
+        coalesce(sum(p.amount) filter (
+          where p.status = 'Contabilizado' and i.installment_kind = 'advance'
+        ), 0),
+        coalesce(sum(p.amount) filter (
+          where p.status = 'Contabilizado' and i.installment_kind = 'balance'
+        ), 0)
+        into v_advance_amount, v_paid_advance, v_paid_balance
+      from public.crm_commission_installments as i
+      left join public.crm_payments as p
+        on p.owner_id = i.owner_id
+       and p.sale_id = i.sale_id
+       and p.installment_id = i.id
+      where i.owner_id = new.owner_id
+        and i.sale_id = new.id;
+
+      if old.status <> 'Opción a compra firmada'
+         or new.status <> 'Opción a compra firmada'
+         or new.client_id is distinct from old.client_id
+         or new.sale_currency is distinct from old.sale_currency
+         or new.commission_currency is distinct from old.commission_currency
+         or new.sale_date is distinct from old.sale_date
+         or new.shared_sale is distinct from old.shared_sale
+         or new.external_agent is distinct from old.external_agent
+         or (
+           new.developer is not distinct from old.developer
+           and new.project is not distinct from old.project
+           and new.unit is not distinct from old.unit
+         ) then
+        raise exception
+          'El cambio firmado solo modifica contrato, unidad, importes y entrega de una opción activa';
+      end if;
+
+      if v_paid_advance <= 0
+         or v_paid_advance <> v_advance_amount
+         or v_paid_balance <> 0
+         or v_accounted <> v_paid_advance then
+        raise exception
+          'El cambio requiere Avance totalmente cobrado y Saldo sin cobros';
+      end if;
+
+      if new.commission_amount <= v_paid_advance then
+        raise exception
+          'La nueva comisión debe ser mayor que el avance conservado';
+      end if;
     end if;
 
     if new.status in ('Desistió', 'Cambio') and v_accounted > 0 then
@@ -1656,6 +1778,7 @@ declare
   v_sale_accounted numeric := 0;
   v_accounted numeric := 0;
   v_unallocated_accounted numeric := 0;
+  v_contract_change boolean := false;
 begin
   if v_request_owner is not null
      and new.owner_id is distinct from v_request_owner then
@@ -1696,6 +1819,10 @@ begin
     raise exception
       'owner_id, id, sale_id e installment_kind de una cuota son inmutables';
   end if;
+
+  v_contract_change := tg_op = 'UPDATE'
+    and current_setting('app.crm_contract_change', true)
+      = new.owner_id::text || ':' || new.sale_id;
 
   select s.commission_amount, s.sale_date, s.status
     into v_commission, v_sale_date, v_sale_status
@@ -1753,7 +1880,7 @@ begin
       'No se pueden añadir cuotas después de contabilizar cobros';
   end if;
 
-  if tg_op = 'UPDATE' and v_sale_accounted > 0 then
+  if tg_op = 'UPDATE' and v_sale_accounted > 0 and not v_contract_change then
     if new.label is distinct from old.label
        or new.sequence is distinct from old.sequence
        or new.amount is distinct from old.amount
@@ -1771,6 +1898,17 @@ begin
        ) then
       raise exception
         'Solo puede cambiar due_date de Saldo mientras esa cuota no tenga cobros contabilizados';
+    end if;
+  end if;
+
+  if tg_op = 'UPDATE' and v_contract_change then
+    if new.installment_kind = 'advance' then
+      if new.amount <> v_accounted or new.due_date is distinct from old.due_date then
+        raise exception
+          'El Avance de un cambio debe conservar exactamente lo cobrado y su fecha';
+      end if;
+    elsif new.installment_kind = 'balance' and v_accounted <> 0 then
+      raise exception 'El Saldo no puede cambiar después de recibir cobros';
     end if;
   end if;
 
@@ -2613,8 +2751,14 @@ alter table public.crm_sales
     and (status <> 'Entregado' or delivery_date is not null)
   );
 
+drop index if exists public.crm_sales_active_project_unit_uidx;
 create unique index crm_sales_active_project_unit_uidx
-  on public.crm_sales(owner_id, lower(btrim(project)), lower(btrim(unit)))
+  on public.crm_sales(
+    owner_id,
+    lower(btrim(coalesce(developer, ''))),
+    lower(btrim(project)),
+    lower(btrim(unit))
+  )
   where status not in ('Desistió', 'Cambio');
 
 -- -----------------------------------------------------------------------------
@@ -2633,6 +2777,7 @@ begin
     'crm_historical_sales',
     'crm_commission_installments',
     'crm_payments',
+    'crm_sale_unit_changes',
     'crm_audit_log'
   ]
   loop
@@ -3626,6 +3771,7 @@ declare
   v_sales jsonb;
   v_installments jsonb;
   v_payments jsonb;
+  v_sale_unit_changes jsonb;
   v_historical_batches jsonb;
   v_historical_sales jsonb;
   v_item jsonb;
@@ -3635,6 +3781,7 @@ declare
   v_sale_count integer := 0;
   v_installment_count integer := 0;
   v_payment_count integer := 0;
+  v_sale_unit_change_count integer := 0;
   v_historical_batch_count integer := 0;
   v_historical_sale_count integer := 0;
   v_sale_id text;
@@ -3672,6 +3819,7 @@ begin
       'commission_installments',
       'installments',
       'payments',
+      'sale_unit_changes',
       'historical_import_batches',
       'historical_sales'
     ])
@@ -3714,6 +3862,7 @@ begin
     '[]'::jsonb
   );
   v_payments := coalesce(p_state -> 'payments', '[]'::jsonb);
+  v_sale_unit_changes := coalesce(p_state -> 'sale_unit_changes', '[]'::jsonb);
   v_historical_batches := coalesce(
     p_state -> 'historical_import_batches',
     '[]'::jsonb
@@ -3724,6 +3873,7 @@ begin
      or jsonb_typeof(v_sales) <> 'array'
      or jsonb_typeof(v_installments) <> 'array'
      or jsonb_typeof(v_payments) <> 'array'
+     or jsonb_typeof(v_sale_unit_changes) <> 'array'
      or jsonb_typeof(v_historical_batches) <> 'array'
      or jsonb_typeof(v_historical_sales) <> 'array' then
     raise exception using
@@ -3735,6 +3885,7 @@ begin
     + jsonb_array_length(v_sales)
     + jsonb_array_length(v_installments)
     + jsonb_array_length(v_payments)
+    + jsonb_array_length(v_sale_unit_changes)
     + jsonb_array_length(v_historical_batches)
     + jsonb_array_length(v_historical_sales);
 
@@ -3754,6 +3905,8 @@ begin
     select value from jsonb_array_elements(v_installments)
     union all
     select value from jsonb_array_elements(v_payments)
+    union all
+    select value from jsonb_array_elements(v_sale_unit_changes)
     union all
     select value from jsonb_array_elements(v_historical_batches)
     union all
@@ -3818,6 +3971,25 @@ begin
     raise exception using
       errcode = '22023',
       message = format('Claves no reconocidas en historical_sales: %s', v_unknown);
+  end if;
+
+  select string_agg(distinct keys.key, ', ' order by keys.key)
+    into v_unknown
+  from jsonb_array_elements(v_sale_unit_changes) as item(value)
+  cross join lateral jsonb_object_keys(item.value) as keys(key)
+  where not (keys.key = any (array[
+    'owner_id', 'id', 'sale_id', 'change_date', 'reason',
+    'from_developer', 'from_project', 'from_unit',
+    'to_developer', 'to_project', 'to_unit',
+    'from_sale_price', 'to_sale_price',
+    'from_commission_amount', 'to_commission_amount',
+    'advance_carried', 'previous_balance', 'new_balance', 'currency', 'created_at'
+  ]));
+
+  if v_unknown is not null then
+    raise exception using
+      errcode = '22023',
+      message = format('Claves no reconocidas en sale_unit_changes: %s', v_unknown);
   end if;
 
   -- La aplicación exporta installmentKind (camelCase); la base persiste
@@ -4281,6 +4453,7 @@ begin
        select 1 from public.crm_commission_installments where owner_id = v_owner
      )
      or exists (select 1 from public.crm_payments where owner_id = v_owner)
+     or exists (select 1 from public.crm_sale_unit_changes where owner_id = v_owner)
      or exists (
        select 1 from public.crm_historical_import_batches where owner_id = v_owner
      )
@@ -4329,6 +4502,20 @@ begin
     where nullif(btrim(x.value ->> 'id'), '') is null
   ) then
     raise exception 'Un cobro no tiene id' using errcode = '22023';
+  end if;
+
+  if exists (
+    select 1 from jsonb_array_elements(v_sale_unit_changes) as x(value)
+    where nullif(btrim(x.value ->> 'id'), '') is null
+       or nullif(btrim(x.value ->> 'sale_id'), '') is null
+       or nullif(btrim(x.value ->> 'reason'), '') is null
+       or not exists (
+         select 1 from jsonb_array_elements(v_sales) as s(value)
+         where btrim(s.value ->> 'id') = btrim(x.value ->> 'sale_id')
+       )
+  ) then
+    raise exception 'Un cambio de unidad no tiene identidad, motivo o venta válida'
+      using errcode = '23503';
   end if;
 
   -- JSON admite números finitos, pero PostgreSQL numeric también acepta valores
@@ -4794,6 +4981,38 @@ begin
   get diagnostics v_rows = row_count;
   v_payment_count := v_payment_count + v_rows;
 
+  insert into public.crm_sale_unit_changes (
+    owner_id, id, sale_id, change_date, reason,
+    from_developer, from_project, from_unit,
+    to_developer, to_project, to_unit,
+    from_sale_price, to_sale_price,
+    from_commission_amount, to_commission_amount,
+    advance_carried, previous_balance, new_balance, currency, created_at
+  )
+  select
+    v_owner,
+    btrim(x.value ->> 'id'),
+    btrim(x.value ->> 'sale_id'),
+    (x.value ->> 'change_date')::date,
+    btrim(x.value ->> 'reason'),
+    btrim(x.value ->> 'from_developer'),
+    btrim(x.value ->> 'from_project'),
+    btrim(x.value ->> 'from_unit'),
+    btrim(x.value ->> 'to_developer'),
+    btrim(x.value ->> 'to_project'),
+    btrim(x.value ->> 'to_unit'),
+    (x.value ->> 'from_sale_price')::numeric,
+    (x.value ->> 'to_sale_price')::numeric,
+    (x.value ->> 'from_commission_amount')::numeric,
+    (x.value ->> 'to_commission_amount')::numeric,
+    (x.value ->> 'advance_carried')::numeric,
+    (x.value ->> 'previous_balance')::numeric,
+    (x.value ->> 'new_balance')::numeric,
+    upper(btrim(x.value ->> 'currency')),
+    coalesce((x.value ->> 'created_at')::timestamptz, clock_timestamp())
+  from jsonb_array_elements(v_sale_unit_changes) as x(value);
+  get diagnostics v_sale_unit_change_count = row_count;
+
   if exists (
     select 1
     from public.crm_sales as s
@@ -4883,6 +5102,7 @@ begin
     'sales_upserted', v_sale_count,
     'installments_upserted', v_installment_count,
     'payments_upserted', v_payment_count,
+    'sale_unit_changes_upserted', v_sale_unit_change_count,
     'historical_batches_upserted', v_historical_batch_count,
     'historical_sales_upserted', v_historical_sale_count
   );
@@ -5654,6 +5874,279 @@ $function$;
 comment on function public.crm_save_sale(jsonb, jsonb) is
   'Upsert atomico de venta y reemplazo exacto de su plan de cuotas para auth.uid().';
 
+drop function if exists public.crm_change_sale_contract(jsonb, jsonb, jsonb);
+
+create function public.crm_change_sale_contract(
+  p_sale jsonb,
+  p_installments jsonb,
+  p_change jsonb
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, pg_temp
+as $function$
+declare
+  v_owner uuid := auth.uid();
+  v_sale_id text := nullif(btrim(p_sale ->> 'id'), '');
+  v_change_id text := nullif(btrim(p_change ->> 'id'), '');
+  v_reason text := nullif(btrim(p_change ->> 'reason'), '');
+  v_change_date date := nullif(p_change ->> 'change_date', '')::date;
+  v_new_developer text := nullif(btrim(p_sale ->> 'developer'), '');
+  v_new_project text := nullif(btrim(p_sale ->> 'project'), '');
+  v_new_unit text := nullif(btrim(p_sale ->> 'unit'), '');
+  v_new_sale_price numeric := (p_sale ->> 'sale_price')::numeric;
+  v_new_commission_rate numeric := (p_sale ->> 'commission_rate')::numeric;
+  v_new_commission numeric := (p_sale ->> 'commission_amount')::numeric;
+  v_new_delivery_date date := nullif(p_sale ->> 'delivery_date', '')::date;
+  v_new_notes text := nullif(p_sale ->> 'notes', '');
+  v_advance_payload jsonb;
+  v_balance_payload jsonb;
+  v_advance public.crm_commission_installments%rowtype;
+  v_balance public.crm_commission_installments%rowtype;
+  v_sale public.crm_sales%rowtype;
+  v_saved public.crm_sales%rowtype;
+  v_existing_change public.crm_sale_unit_changes%rowtype;
+  v_advance_paid numeric := 0;
+  v_balance_paid numeric := 0;
+  v_total_paid numeric := 0;
+  v_new_advance numeric;
+  v_new_balance numeric;
+  v_new_advance_due date;
+  v_new_balance_due date;
+  v_result_installments jsonb;
+  v_change public.crm_sale_unit_changes%rowtype;
+begin
+  if v_owner is null then
+    raise exception using
+      errcode = '28000',
+      message = 'crm_change_sale_contract requiere una sesion authenticated';
+  end if;
+  if jsonb_typeof(p_sale) is distinct from 'object'
+     or jsonb_typeof(p_installments) is distinct from 'array'
+     or jsonb_typeof(p_change) is distinct from 'object' then
+    raise exception using
+      errcode = '22023',
+      message = 'Venta, cuotas y cambio requieren objetos JSON válidos';
+  end if;
+  if v_sale_id is null or char_length(v_sale_id) > 128
+     or v_change_id is null or char_length(v_change_id) > 128 then
+    raise exception 'La venta y el cambio requieren identificadores válidos';
+  end if;
+  if v_reason is null or char_length(v_reason) > 500 then
+    raise exception 'El cambio requiere un motivo de hasta 500 caracteres';
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended('crm:sale:' || v_owner::text || ':' || v_sale_id, 0)
+  );
+  select * into v_sale
+  from public.crm_sales
+  where owner_id = v_owner and id = v_sale_id
+  for update;
+  if not found then
+    raise exception 'La venta indicada no existe';
+  end if;
+
+  select * into v_existing_change
+  from public.crm_sale_unit_changes
+  where owner_id = v_owner and id = v_change_id;
+  if found then
+    if v_existing_change.sale_id <> v_sale_id then
+      raise exception 'El identificador del cambio ya pertenece a otra venta';
+    end if;
+    select coalesce(jsonb_agg(to_jsonb(i) order by i.sequence), '[]'::jsonb)
+      into v_result_installments
+    from public.crm_commission_installments as i
+    where i.owner_id = v_owner and i.sale_id = v_sale_id;
+    return jsonb_build_object(
+      'sale', to_jsonb(v_sale),
+      'installments', v_result_installments,
+      'change', to_jsonb(v_existing_change)
+    );
+  end if;
+
+  if v_sale.status <> 'Opción a compra firmada'
+     or coalesce(p_sale ->> 'status', p_sale ->> 'sale_status', '')
+       <> 'Opción a compra firmada' then
+    raise exception 'Solo una Opción a compra firmada admite cambio de unidad';
+  end if;
+  if nullif(btrim(p_sale ->> 'client_id'), '') is distinct from v_sale.client_id
+     or upper(nullif(btrim(p_sale ->> 'sale_currency'), '')) is distinct from v_sale.sale_currency
+     or upper(nullif(btrim(p_sale ->> 'commission_currency'), '')) is distinct from v_sale.commission_currency
+     or (p_sale ->> 'sale_date')::date is distinct from v_sale.sale_date then
+    raise exception 'Cliente, monedas y fecha original no cambian al trasladar la unidad';
+  end if;
+  if v_new_developer is null or v_new_project is null or v_new_unit is null
+     or (
+       v_new_developer is not distinct from v_sale.developer
+       and v_new_project is not distinct from v_sale.project
+       and v_new_unit is not distinct from v_sale.unit
+     ) then
+    raise exception 'Indica una constructora, proyecto o unidad diferente';
+  end if;
+  if v_new_developer is distinct from 'Constructora LVP'
+     or v_new_project not in (
+       'Altos del este', 'Riviera 1', 'Riviera 2', 'Riviera 3',
+       'Riviera 4', 'Vistas del limonal', 'Epic Moon', 'Epic River',
+       'Doña Carmen', 'Las Margaritas', 'LP12', 'LP11', 'LP11 ABEY',
+       'East Town'
+     ) then
+    raise exception 'La constructora y el proyecto no pertenecen al catálogo autorizado';
+  end if;
+  if exists (
+    select 1 from public.crm_sales as occupied
+    where occupied.owner_id = v_owner
+      and occupied.id <> v_sale_id
+      and occupied.status not in ('Desistió', 'Cambio')
+      and lower(btrim(coalesce(occupied.developer, '')))
+        = lower(btrim(v_new_developer))
+      and lower(btrim(occupied.project)) = lower(btrim(v_new_project))
+      and lower(btrim(occupied.unit)) = lower(btrim(v_new_unit))
+  ) then
+    raise exception 'La nueva unidad ya pertenece a otra operación activa';
+  end if;
+  if v_new_sale_price is null or v_new_sale_price <= 0
+     or v_new_sale_price <> round(v_new_sale_price, 2)
+     or v_new_commission_rate is null
+     or v_new_commission_rate < 0 or v_new_commission_rate > 100
+     or v_new_commission_rate <> round(v_new_commission_rate, 4)
+     or v_new_commission is null or v_new_commission <= 0
+     or v_new_commission <> round(v_new_commission, 2) then
+    raise exception 'Precio, tasa o comisión nueva inválidos';
+  end if;
+  if v_sale.sale_currency = v_sale.commission_currency
+     and v_new_commission_rate > 0
+     and v_new_commission <> round(v_new_sale_price * v_new_commission_rate / 100, 2) then
+    raise exception 'La nueva comisión no coincide con precio por tasa';
+  end if;
+  if v_new_delivery_date is null or v_new_delivery_date < v_sale.sale_date then
+    raise exception 'El cambio requiere una nueva fecha de entrega válida';
+  end if;
+  if v_change_date is null
+     or v_change_date < v_sale.sale_date
+     or v_change_date > current_date then
+    raise exception 'La fecha del cambio firmado no es válida';
+  end if;
+  if v_new_notes is not null and char_length(v_new_notes) > 20000 then
+    raise exception 'Las notas exceden el límite permitido';
+  end if;
+
+  select * into v_advance
+  from public.crm_commission_installments
+  where owner_id = v_owner and sale_id = v_sale_id
+    and installment_kind = 'advance'
+  for update;
+  select * into v_balance
+  from public.crm_commission_installments
+  where owner_id = v_owner and sale_id = v_sale_id
+    and installment_kind = 'balance'
+  for update;
+  if v_advance.id is null or v_balance.id is null or (
+    select count(*) from public.crm_commission_installments
+    where owner_id = v_owner and sale_id = v_sale_id
+  ) <> 2 then
+    raise exception 'El cambio requiere un plan exacto de Avance + Saldo';
+  end if;
+
+  select
+    coalesce(sum(p.amount) filter (
+      where p.status = 'Contabilizado' and p.installment_id = v_advance.id
+    ), 0),
+    coalesce(sum(p.amount) filter (
+      where p.status = 'Contabilizado' and p.installment_id = v_balance.id
+    ), 0),
+    coalesce(sum(p.amount) filter (where p.status = 'Contabilizado'), 0)
+    into v_advance_paid, v_balance_paid, v_total_paid
+  from public.crm_payments as p
+  where p.owner_id = v_owner and p.sale_id = v_sale_id;
+  if v_advance_paid <= 0
+     or v_advance_paid <> v_advance.amount
+     or v_balance_paid <> 0
+     or v_total_paid <> v_advance_paid then
+    raise exception 'El Avance debe estar pagado completo y el Saldo sin cobros';
+  end if;
+  if jsonb_array_length(p_installments) <> 2 then
+    raise exception 'El plan nuevo requiere exactamente Avance y Saldo';
+  end if;
+  select value into v_advance_payload
+  from jsonb_array_elements(p_installments)
+  where coalesce(value ->> 'installment_kind', value ->> 'installmentKind') = 'advance';
+  select value into v_balance_payload
+  from jsonb_array_elements(p_installments)
+  where coalesce(value ->> 'installment_kind', value ->> 'installmentKind') = 'balance';
+  if v_advance_payload is null or v_balance_payload is null
+     or btrim(v_advance_payload ->> 'id') <> v_advance.id
+     or btrim(v_balance_payload ->> 'id') <> v_balance.id then
+    raise exception 'Las cuotas del cambio deben conservar sus identificadores';
+  end if;
+  v_new_advance := (v_advance_payload ->> 'amount')::numeric;
+  v_new_balance := (v_balance_payload ->> 'amount')::numeric;
+  v_new_advance_due := (v_advance_payload ->> 'due_date')::date;
+  v_new_balance_due := (v_balance_payload ->> 'due_date')::date;
+  if v_new_advance <> v_advance_paid
+     or v_new_advance_due <> v_advance.due_date
+     or v_new_balance <= 0
+     or v_new_balance <> v_new_commission - v_advance_paid
+     or v_new_balance_due <> v_new_delivery_date then
+    raise exception 'El plan debe conservar el Avance y colocar toda la diferencia en Saldo';
+  end if;
+
+  perform set_config(
+    'app.crm_contract_change',
+    v_owner::text || ':' || v_sale_id,
+    true
+  );
+  update public.crm_sales
+  set developer = v_new_developer,
+      project = v_new_project,
+      unit = v_new_unit,
+      sale_price = v_new_sale_price,
+      delivery_date = v_new_delivery_date,
+      commission_rate = v_new_commission_rate,
+      commission_amount = v_new_commission,
+      notes = v_new_notes
+  where owner_id = v_owner and id = v_sale_id
+  returning * into v_saved;
+
+  update public.crm_commission_installments
+  set amount = v_new_balance,
+      due_date = v_new_balance_due
+  where owner_id = v_owner and sale_id = v_sale_id and id = v_balance.id;
+
+  insert into public.crm_sale_unit_changes (
+    owner_id, id, sale_id, change_date, reason,
+    from_developer, from_project, from_unit,
+    to_developer, to_project, to_unit,
+    from_sale_price, to_sale_price,
+    from_commission_amount, to_commission_amount,
+    advance_carried, previous_balance, new_balance, currency
+  ) values (
+    v_owner, v_change_id, v_sale_id, v_change_date, v_reason,
+    v_sale.developer, v_sale.project, v_sale.unit,
+    v_new_developer, v_new_project, v_new_unit,
+    v_sale.sale_price, v_new_sale_price,
+    v_sale.commission_amount, v_new_commission,
+    v_advance_paid, v_sale.commission_amount - v_advance_paid,
+    v_new_balance, v_sale.commission_currency
+  ) returning * into v_change;
+
+  select coalesce(jsonb_agg(to_jsonb(i) order by i.sequence), '[]'::jsonb)
+    into v_result_installments
+  from public.crm_commission_installments as i
+  where i.owner_id = v_owner and i.sale_id = v_sale_id;
+  return jsonb_build_object(
+    'sale', to_jsonb(v_saved),
+    'installments', v_result_installments,
+    'change', to_jsonb(v_change)
+  );
+end
+$function$;
+
+comment on function public.crm_change_sale_contract(jsonb, jsonb, jsonb) is
+  'Traslada una opción firmada conservando pagos de Avance y recalculando solo el Saldo.';
+
 drop function if exists public.crm_record_payment(jsonb);
 
 create function public.crm_record_payment(p_payment jsonb)
@@ -6081,6 +6574,7 @@ revoke all on function public.crm_update_historical_contact(jsonb) from public, 
 revoke all on function public.crm_enrich_historical_contacts(jsonb) from public, anon, authenticated;
 revoke all on function public.crm_import_workspace(jsonb) from public, anon, authenticated;
 revoke all on function public.crm_save_sale(jsonb, jsonb) from public, anon, authenticated;
+revoke all on function public.crm_change_sale_contract(jsonb, jsonb, jsonb) from public, anon, authenticated;
 revoke all on function public.crm_record_payment(jsonb) from public, anon, authenticated;
 revoke all on function public.crm_void_payment(text, text) from public, anon, authenticated;
 revoke all on function public.crm_workspace_health() from public, anon, authenticated;
@@ -6090,6 +6584,7 @@ grant execute on function public.crm_update_historical_contact(jsonb) to authent
 grant execute on function public.crm_enrich_historical_contacts(jsonb) to authenticated;
 grant execute on function public.crm_import_workspace(jsonb) to authenticated;
 grant execute on function public.crm_save_sale(jsonb, jsonb) to authenticated;
+grant execute on function public.crm_change_sale_contract(jsonb, jsonb, jsonb) to authenticated;
 grant execute on function public.crm_record_payment(jsonb) to authenticated;
 grant execute on function public.crm_void_payment(text, text) to authenticated;
 grant execute on function public.crm_workspace_health() to authenticated;

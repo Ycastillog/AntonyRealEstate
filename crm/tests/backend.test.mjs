@@ -285,6 +285,7 @@ test("loadWorkspace starts every table read in parallel and maps snake_case deep
     "crm_sales",
     "crm_commission_installments",
     "crm_payments",
+    "crm_sale_unit_changes",
     "crm_historical_import_batches",
     "crm_historical_sales",
     "crm_audit_log"
@@ -376,6 +377,17 @@ test("loadWorkspace starts every table read in parallel and maps snake_case deep
     crm_payments: [
       { id: "payment-1", payment_date: "2026-08-10", sale_id: "sale-new" }
     ],
+    crm_sale_unit_changes: [
+      {
+        id: "change-1",
+        sale_id: "sale-new",
+        change_date: "2026-08-09",
+        from_unit: "A-1",
+        to_unit: "A-2",
+        advance_carried: 100,
+        new_balance: 120
+      }
+    ],
     crm_historical_import_batches: [
       {
         id: "batch-1",
@@ -444,6 +456,7 @@ test("loadWorkspace starts every table read in parallel and maps snake_case deep
     ["audit-new", "audit-old"]
   );
   assert.equal(workspace.historicalImportBatches[0].sourceRowCount, 1);
+  assert.equal(workspace.saleUnitChanges[0].fromUnit, "A-1");
   assert.equal(workspace.historicalSales[0].buyerName, "Cliente histórico");
   assert.equal(workspace.historicalSales[0].batchId, "batch-1");
   assert.equal(workspace.auditLog[0].afterData.desiredZone, "Naco");
@@ -581,6 +594,7 @@ test("a mutation without returned data is rejected as unconfirmed", async () => 
 test("financial mutations use RPC contracts and preserve the UI sale status name", async () => {
   const pending = {
     crm_save_sale: deferred(),
+    crm_change_sale_contract: deferred(),
     crm_record_payment: deferred(),
     crm_import_workspace: deferred(),
     crm_import_historical_sales: deferred(),
@@ -758,5 +772,50 @@ test("financial mutations use RPC contracts and preserve the UI sale status name
     error: null
   });
   assert.equal((await enrichHistoricalPromise).updated, 1);
+
+  const changePromise = harness.api.changeSaleContract(
+    harness.realmValue({
+      id: "sale-1",
+      saleStatus: "Opción a compra firmada",
+      commissionAmount: 500
+    }),
+    harness.realmValue([
+      {
+        id: "advance-1",
+        saleId: "sale-1",
+        sequence: 1,
+        installmentKind: "advance",
+        amount: 200
+      },
+      {
+        id: "balance-1",
+        saleId: "sale-1",
+        sequence: 2,
+        installmentKind: "balance",
+        amount: 300
+      }
+    ]),
+    harness.realmValue({
+      id: "change-1",
+      reason: "Nueva unidad firmada",
+      changeDate: "2026-08-26",
+      ownerId: "must-not-pass"
+    })
+  );
+  await nextTurn();
+  assert.equal(calls[6].name, "crm_change_sale_contract");
+  assert.equal(calls[6].payload.p_sale.status, "Opción a compra firmada");
+  assert.equal(calls[6].payload.p_installments[1].installment_kind, "balance");
+  assert.equal(calls[6].payload.p_change.change_date, "2026-08-26");
+  assert.ok(!Object.hasOwn(calls[6].payload.p_change, "owner_id"));
+  pending.crm_change_sale_contract.resolve({
+    data: harness.realmValue({
+      sale: { id: "sale-1", status: "Opción a compra firmada" },
+      installments: [],
+      change: { id: "change-1", sale_id: "sale-1", new_balance: 300 }
+    }),
+    error: null
+  });
+  assert.equal((await changePromise).change.newBalance, 300);
   assert.equal(harness.storageAccesses(), 0);
 });

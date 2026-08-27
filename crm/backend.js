@@ -772,6 +772,7 @@
       fetchTable('crm_sales', false, null, 'loadSales'),
       fetchTable('crm_commission_installments', true, null, 'loadInstallments'),
       fetchTable('crm_payments', false, null, 'loadPayments'),
+      fetchTable('crm_sale_unit_changes', false, null, 'loadSaleUnitChanges'),
       fetchTable('crm_historical_import_batches', false, null, 'loadHistoricalBatches'),
       fetchTable('crm_historical_sales', false, null, 'loadHistoricalSales'),
       fetchTable('crm_audit_log', false, MAX_AUDIT_ROWS, 'loadAuditLog', 'changed_at')
@@ -784,17 +785,22 @@
     );
     var installments = orderedRows(results[2], ['dueDate', 'installmentNumber', 'createdAt'], true);
     var payments = orderedRows(results[3], ['paymentDate', 'paidAt', 'createdAt'], false);
-    var historicalImportBatches = orderedRows(
+    var saleUnitChanges = orderedRows(
       results[4],
+      ['changeDate', 'createdAt'],
+      false
+    );
+    var historicalImportBatches = orderedRows(
+      results[5],
       ['importedAt', 'createdAt'],
       false
     );
     var historicalSales = orderedRows(
-      results[5],
+      results[6],
       ['saleDate', 'createdAt'],
       false
     );
-    var auditLog = orderedRows(results[6], ['changedAt'], false).slice(0, MAX_AUDIT_ROWS);
+    var auditLog = orderedRows(results[7], ['changedAt'], false).slice(0, MAX_AUDIT_ROWS);
 
     deepFreeze(auditLog);
     return {
@@ -802,6 +808,7 @@
       sales: sales,
       installments: installments,
       payments: payments,
+      saleUnitChanges: saleUnitChanges,
       historicalImportBatches: historicalImportBatches,
       historicalSales: historicalSales,
       auditLog: auditLog
@@ -907,6 +914,31 @@
     return data;
   }
 
+  async function changeSaleContract(sale, installments, change) {
+    var db = requireClient();
+    var sourceChange = requireRecord(change, 'El cambio de unidad');
+    var payload = {
+      p_sale: mapSaleToDatabase(requireRecord(sale, 'La venta')),
+      p_installments: mapToDatabase(requireArray(installments, 'installments')),
+      p_change: mapToDatabase({
+        id: sourceChange.id,
+        reason: sourceChange.reason,
+        changeDate: sourceChange.changeDate
+      })
+    };
+    var request;
+    var data;
+
+    try {
+      request = db.rpc('crm_change_sale_contract', payload);
+    } catch (error) {
+      throw normalizeError(error, 'changeSaleContract');
+    }
+    data = mapFromDatabase(await executeRequest(request, 'changeSaleContract', true));
+    if (data && data.sale) data.sale = normalizeSaleRecord(data.sale);
+    return data;
+  }
+
   function deleteSale(id) {
     return deleteRow('crm_sales', id, 'deleteSale');
   }
@@ -963,6 +995,9 @@
       sales: requireArray(source.sales, 'sales'),
       installments: requireArray(source.installments, 'installments'),
       payments: requireArray(source.payments, 'payments'),
+      saleUnitChanges: source.saleUnitChanges === undefined
+        ? []
+        : requireArray(source.saleUnitChanges, 'saleUnitChanges'),
       historicalImportBatches: source.historicalImportBatches === undefined
         ? []
         : requireArray(source.historicalImportBatches, 'historicalImportBatches'),
@@ -984,6 +1019,7 @@
           sales: importableState.sales,
           installments: mapToDatabase(importableState.installments),
           payments: mapToDatabase(importableState.payments),
+          sale_unit_changes: mapToDatabase(importableState.saleUnitChanges),
           historical_import_batches: mapToDatabase(
             importableState.historicalImportBatches
           ),
@@ -1101,6 +1137,7 @@
     saveClient: saveClient,
     deleteClient: deleteClient,
     saveSale: saveSale,
+    changeSaleContract: changeSaleContract,
     deleteSale: deleteSale,
     savePayment: savePayment,
     voidPayment: voidPayment,

@@ -239,6 +239,7 @@ test("backend names every workspace table and required RPC contract", () => {
     "crm_sales",
     "crm_commission_installments",
     "crm_payments",
+    "crm_sale_unit_changes",
     "crm_historical_import_batches",
     "crm_historical_sales",
     "crm_audit_log"
@@ -248,6 +249,7 @@ test("backend names every workspace table and required RPC contract", () => {
 
   for (const rpc of [
     "crm_save_sale",
+    "crm_change_sale_contract",
     "crm_record_payment",
     "crm_void_payment",
     "crm_import_workspace",
@@ -330,6 +332,7 @@ test("commission reports reconcile each installment and support export and print
   for (const id of [
     "view-reports",
     "reportYear",
+    "reportDeveloper",
     "reportProject",
     "reportSaleStatus",
     "reportCommissionStatus",
@@ -356,9 +359,23 @@ test("commission reports reconcile each installment and support export and print
   assert.match(app, /\["Pendiente", "Programada"\]\.includes\(status\)/);
   assert.match(app, /pendingCents: isCancelledSale\(sale\) \? 0/);
   assert.match(app, /function exportSalesCsv\(/);
-  assert.match(app, /antony-reporte-comisiones-lvp-/);
+  assert.match(app, /antony-reporte-comisiones-/);
   assert.match(app, /function printCommissionReport\(/);
-  assert.match(app, /Reporte de comisiones LVP/);
+  assert.match(app, /Reporte de comisiones por constructora/);
+  assert.match(app, /sale\.developer === developer/);
+  assert.match(app, /function reportInstallmentsForSales\(/);
+});
+
+test("signed unit changes carry the paid advance and recalculate only the balance", () => {
+  assert.ok(tagWithId(html, "button", "startContractChangeButton"));
+  assert.ok(tagWithId(html, "label", "contractChangeReasonWrap"));
+  assert.match(app, /function contractChangeEligibility\(/);
+  assert.match(app, /advance\.paidCents !== advance\.amountCents/);
+  assert.match(app, /balance\.paidCents > 0/);
+  assert.match(app, /commissionCents - eligibility\.advancePaidCents/);
+  assert.match(app, /cloudBackend\.changeSaleContract/);
+  assert.match(app, /state\.saleUnitChanges\.push/);
+  assert.match(backend, /crm_change_sale_contract/);
 });
 
 test("production workflows retain capture date, cancellation reason, installments, and payment export", () => {
@@ -507,6 +524,8 @@ test("required contacts, LVP catalog, safe backup, and reserved receivables stay
     /auditLog/
   );
   assert.match(backend, /'desiredZone', 'propertyStage'/);
+  assert.doesNotMatch(html, /Descargar respaldo \(\.json\)|Importar respaldo \(\.json\)/);
+  assert.doesNotMatch(html, /id="exportBackupButton"|id="importBackupButton"/);
 });
 
 test("local demo and cloud production paths stay separated", () => {

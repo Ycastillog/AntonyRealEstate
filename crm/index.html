@@ -14,13 +14,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=production-v12" />
+    <link rel="stylesheet" href="styles.css?v=production-v13" />
     <script src="../media-config.js?v=secure-auth-v3" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js" integrity="sha384-ysv13JVP3fufiEXfjML9OdCa/rRbMJvUBOWyor82wfuK8INNZAvmbxHgKIHi+oqz" crossorigin="anonymous" defer></script>
-    <script src="historical.js?v=production-v12" defer></script>
-    <script src="backend.js?v=production-v12" defer></script>
+    <script src="historical.js?v=production-v13" defer></script>
+    <script src="backend.js?v=production-v13" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" integrity="sha384-uTYyvsSSUZeaPhb5RbKlQa0zY/WpX/QHfvg2mczXyBQOpkWPEDy9lczyp+w7SKXu" crossorigin="anonymous" defer></script>
-    <script src="app.js?v=production-v12" defer></script>
+    <script src="app.js?v=production-v13" defer></script>
   </head>
   <body>
     <main class="auth-shell" id="authShell" aria-labelledby="loginTitle">
@@ -124,13 +124,9 @@
             </span>
             <button class="button button-secondary logout-button" type="button" id="logoutButton" aria-label="Cerrar sesión" title="Cerrar sesión"><i data-lucide="log-out" aria-hidden="true"></i><span>Cerrar sesión</span></button>
             <details class="data-menu">
-              <summary class="button button-secondary" aria-label="Configuración y respaldo" title="Configuración y respaldo"><i data-lucide="settings-2" aria-hidden="true"></i><span>Sistema</span></summary>
+              <summary class="button button-secondary" aria-label="Configuración de la cuenta" title="Configuración de la cuenta"><i data-lucide="settings-2" aria-hidden="true"></i><span>Cuenta</span></summary>
               <div class="data-menu-panel">
                 <button type="button" id="changePasswordButton"><i data-lucide="key-round" aria-hidden="true"></i>Cambiar contraseña</button>
-                <button type="button" id="exportBackupButton"><i data-lucide="download" aria-hidden="true"></i>Descargar respaldo (.json)</button>
-                <button class="file-action" type="button" id="importBackupButton"><i data-lucide="upload" aria-hidden="true"></i>Importar respaldo (.json)</button>
-                <input id="importBackupInput" type="file" accept="application/json,.json" hidden />
-                <p class="data-menu-help">Archivo técnico para restaurar el CRM. No es un reporte y no debe editarse.</p>
                 <button class="demo-only" type="button" id="loadDemoButton">Cargar datos de ejemplo</button>
                 <button class="demo-only danger-option" type="button" id="resetDataButton">Vaciar CRM</button>
               </div>
@@ -256,7 +252,13 @@
                 <label class="shared-sale-toggle"><span><input name="sharedSale" id="sharedSale" type="checkbox" /> Venta compartida</span><small>Actívalo cuando participa otro agente o vendedor.</small></label>
                 <label class="form-grid-full" id="externalAgentWrap" hidden>Agente o vendedor externo<input name="externalAgent" type="text" maxlength="200" placeholder="Nombre del agente o vendedor externo" /></label>
                 <label class="form-grid-full" id="cancelReasonWrap" hidden><span id="cancelReasonLabel">Motivo del desistimiento o cambio</span><textarea name="cancelReason" rows="3" maxlength="500" aria-describedby="cancelReasonHelp terminalSaleNoticeText"></textarea><small class="field-help" id="cancelReasonHelp">Deja constancia del préstamo no aprobado, proyecto anterior, nueva unidad o cambio de condiciones.</small><span class="terminal-sale-notice" role="note"><strong id="terminalSaleNoticeTitle">La operación será archivada</strong><small id="terminalSaleNoticeText">Dejará de contar como venta, comisión pendiente o cobro. Solo quedará disponible en el filtro de operaciones archivadas para fines de control.</small></span></label>
-              </div></div>
+              </div>
+              <div class="contract-change-card" id="contractChangeCard" hidden>
+                <div><strong>Cambio de unidad o proyecto</strong><small id="contractChangeEligibility">Conserva el avance cobrado y recalcula únicamente el saldo pendiente.</small></div>
+                <button class="button button-secondary" type="button" id="startContractChangeButton"><i data-lucide="repeat-2" aria-hidden="true"></i>Registrar cambio</button>
+              </div>
+              <label class="contract-change-reason" id="contractChangeReasonWrap" hidden>Motivo del cambio<textarea name="contractChangeReason" rows="3" maxlength="500" placeholder="Ej.: el cliente cambió a otra unidad y firmó el nuevo contrato"></textarea><small class="field-help" id="contractChangeFinancialSummary">El avance ya cobrado se conservará y la diferencia quedará en Saldo.</small></label>
+              </div>
               <div class="form-section"><h3>Valores y comisión</h3><div class="form-grid">
                 <label>Precio vendido<input name="salePrice" id="salePrice" type="number" min="0" step="0.01" aria-describedby="salePriceHelp" required /><small class="field-help" id="salePriceHelp">Monto total de la propiedad.</small></label><label>Moneda del precio<select name="saleCurrency"><option value="USD">US$ Dólares</option><option value="DOP">RD$ Pesos</option></select></label>
                 <label>Tasa de comisión (%)<input name="commissionRate" id="commissionRate" type="number" min="0" step="0.01" /></label><label>Comisión total<input name="commissionAmount" id="commissionAmount" type="number" min="0" step="0.01" required /></label>
@@ -349,9 +351,9 @@
         </section>
 
         <section class="view" id="view-reports" data-view="reports">
-          <div class="page-heading"><div><span class="eyebrow">Conciliación LVP</span><h1>Reportes de comisión</h1><p>Revisa cada avance y saldo, identifica lo vencido y prepara el corte para LVP.</p></div><div class="report-actions"><button class="button button-secondary" id="printCommissionReportButton" type="button"><i data-lucide="printer" aria-hidden="true"></i>Imprimir / PDF</button><button class="button button-primary" id="exportSalesButton" type="button"><i data-lucide="sheet" aria-hidden="true"></i>Descargar Excel (.csv)</button></div></div>
+          <div class="page-heading"><div><span class="eyebrow" id="reportHeadingEyebrow">Conciliación por constructora</span><h1>Reportes de comisión</h1><p id="reportHeadingDescription">Revisa cada avance y saldo, identifica lo vencido y prepara el corte de cada constructora.</p></div><div class="report-actions"><button class="button button-secondary" id="printCommissionReportButton" type="button"><i data-lucide="printer" aria-hidden="true"></i>Imprimir / PDF</button><button class="button button-primary" id="exportSalesButton" type="button"><i data-lucide="sheet" aria-hidden="true"></i>Descargar Excel (.csv)</button></div></div>
           <article class="card report-filters">
-            <label>Año<select id="reportYear"></select></label><label>Proyecto<select id="reportProject"></select></label>
+            <label>Año de venta<select id="reportYear"></select></label><label>Constructora<select id="reportDeveloper"></select></label><label>Proyecto<select id="reportProject"></select></label>
             <label>Etapa de la venta<select id="reportSaleStatus"><option value="">Etapas activas</option><option value="Reservada">Reservada</option><option value="Opción a compra firmada">Opción a compra firmada</option><option value="Entregado">Entregado</option><option value="Desistió">Desistió (archivada)</option><option value="Cambio">Cambio (archivada)</option></select></label>
             <label>Estado de la cuota<select id="reportCommissionStatus"><option value="">Todas las cuotas</option><option value="Pendiente">Pendientes y programadas</option><option value="Parcial">Parciales</option><option value="Pagada">Pagadas</option><option value="Vencida">Vencidas</option><option value="Anulada">Anuladas</option></select></label>
           </article>
