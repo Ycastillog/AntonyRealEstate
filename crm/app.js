@@ -1,6 +1,7 @@
 const STORAGE_KEY = "antony-crm-local-v2";
-const APP_VERSION = 14;
+const APP_VERSION = 15;
 const MAX_AUDIT_ENTRIES = 500;
+const REPORT_PAGE_SIZE = 10;
 const VALID_CURRENCIES = ["USD", "DOP"];
 const VALID_CLIENT_STAGES = ["Nuevo", "Calificado", "En seguimiento", "Comprador", "Inactivo"];
 const VALID_DESIRED_ZONES = [
@@ -238,6 +239,7 @@ let drawerReturnFocus = null;
 let detailRecord = null;
 let inertedElements = [];
 let lastWorkspaceSyncAt = new Date();
+let reportPage = 1;
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -3736,6 +3738,50 @@ function setReportMoney(primaryId, secondaryId, totals) {
   );
 }
 
+function activeReportFilterCount() {
+  const values = [
+    document.querySelector("#reportSearch").value,
+    document.querySelector("#reportYear").value,
+    document.querySelector("#reportDeveloper").value,
+    document.querySelector("#reportProject").value,
+    document.querySelector("#reportSaleStatus").value,
+    document.querySelector("#reportCommissionStatus").value
+  ];
+  return (
+    values.filter((value) => String(value || "").trim()).length +
+    (document.querySelector("#reportPeriodType").value === "sale" ? 0 : 1)
+  );
+}
+
+function paginatedReportInstallments(installments) {
+  const totalPages = Math.max(1, Math.ceil(installments.length / REPORT_PAGE_SIZE));
+  reportPage = Math.min(Math.max(reportPage, 1), totalPages);
+  const startIndex = (reportPage - 1) * REPORT_PAGE_SIZE;
+  const endIndex = Math.min(startIndex + REPORT_PAGE_SIZE, installments.length);
+  const firstVisible = installments.length ? startIndex + 1 : 0;
+  document.querySelector("#reportPageRange").textContent =
+    firstVisible + "–" + endIndex + " de " + installments.length;
+  document.querySelector("#reportPageStatus").textContent =
+    "Página " + reportPage + " de " + totalPages;
+  document.querySelector("#reportPrevPage").disabled = reportPage <= 1;
+  document.querySelector("#reportNextPage").disabled = reportPage >= totalPages;
+  document.querySelector("#reportPagination").hidden =
+    installments.length <= REPORT_PAGE_SIZE;
+  return installments.slice(startIndex, endIndex);
+}
+
+function resetReportPageAndRender() {
+  reportPage = 1;
+  renderReports();
+}
+
+function scrollToReportLedger() {
+  document.querySelector("#reportLedger").scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+}
+
 function renderReports() {
   populateReportFilters();
   const selectedDeveloper = document.querySelector("#reportDeveloper").value;
@@ -3750,6 +3796,7 @@ function renderReports() {
   const baseSales = filteredReportSales();
   const portfolioInstallments = reportPeriodInstallmentsForSales(baseSales);
   const installments = filteredReportInstallments(baseSales, portfolioInstallments);
+  const visibleInstallments = paginatedReportInstallments(installments);
   const sales = baseSales;
   const volume = aggregate(sales, "salePrice", "saleCurrency");
   const commissions = portfolioInstallments.reduce((totals, installment) => {
@@ -3823,6 +3870,10 @@ function renderReports() {
   document.querySelector("#reportSalesCountMeta").textContent =
     developerCount + (developerCount === 1 ? " constructora" : " constructoras");
   document.querySelector("#reportInstallmentCount").textContent = installments.length;
+  const filterCount = activeReportFilterCount();
+  document.querySelector("#reportFilterCount").textContent = filterCount
+    ? filterCount + (filterCount === 1 ? " activo" : " activos")
+    : "Sin filtros";
   document.querySelector("#reportCutoffTitle").textContent = reportFilterSummary();
   document.querySelector("#reportCutoffMeta").textContent =
     installments.length +
@@ -3861,7 +3912,7 @@ function renderReports() {
 
   renderReportCommandCenter(portfolioInstallments);
   renderReportAnalysis(sales, portfolioInstallments);
-  document.querySelector("#reportBody").innerHTML = installments
+  document.querySelector("#reportBody").innerHTML = visibleInstallments
     .map(
       (installment) =>
         '<tr class="record-row ' +
@@ -3913,7 +3964,7 @@ function renderReports() {
         "</td></tr>"
     )
     .join("");
-  document.querySelector("#reportMobileList").innerHTML = installments
+  document.querySelector("#reportMobileList").innerHTML = visibleInstallments
     .map(
       (installment) =>
         '<article class="mobile-record-card record-row' +
@@ -6159,9 +6210,22 @@ document.querySelectorAll("[data-collection-filter]").forEach((button) => {
   });
 });
 ["reportPeriodType", "reportYear", "reportDeveloper", "reportProject", "reportSaleStatus", "reportCommissionStatus"].forEach(
-  (id) => document.querySelector("#" + id).addEventListener("change", renderReports)
+  (id) =>
+    document
+      .querySelector("#" + id)
+      .addEventListener("change", resetReportPageAndRender)
 );
-document.querySelector("#reportSearch").addEventListener("input", renderReports);
+document
+  .querySelector("#reportSearch")
+  .addEventListener("input", resetReportPageAndRender);
+document.querySelector("#reportFilterToggle").addEventListener("click", () => {
+  const filters = document.querySelector("#reportFilters");
+  const expanded = filters.classList.toggle("report-filters-open");
+  document.querySelector("#reportFilterToggle").setAttribute(
+    "aria-expanded",
+    String(expanded)
+  );
+});
 document.querySelector("#clearReportFilters").addEventListener("click", () => {
   document.querySelector("#reportSearch").value = "";
   document.querySelector("#reportPeriodType").value = "sale";
@@ -6171,16 +6235,28 @@ document.querySelector("#clearReportFilters").addEventListener("click", () => {
   document.querySelector("#reportProject").value = "";
   document.querySelector("#reportSaleStatus").value = "";
   document.querySelector("#reportCommissionStatus").value = "";
+  reportPage = 1;
+  document.querySelector("#reportFilters").classList.remove("report-filters-open");
+  document.querySelector("#reportFilterToggle").setAttribute("aria-expanded", "false");
   renderReports();
   document.querySelector("#reportSearch").focus();
 });
 document.querySelector("#reportShowOverdue").addEventListener("click", () => {
   document.querySelector("#reportCommissionStatus").value = "Vencida";
+  reportPage = 1;
   renderReports();
-  document.querySelector("#reportBody").closest(".report-ledger-card").scrollIntoView({
-    behavior: "smooth",
-    block: "start"
-  });
+  scrollToReportLedger();
+});
+document.querySelector("#reportPrevPage").addEventListener("click", () => {
+  if (reportPage <= 1) return;
+  reportPage -= 1;
+  renderReports();
+  scrollToReportLedger();
+});
+document.querySelector("#reportNextPage").addEventListener("click", () => {
+  reportPage += 1;
+  renderReports();
+  scrollToReportLedger();
 });
 document.querySelector("#exportSalesButton").addEventListener("click", exportSalesCsv);
 document

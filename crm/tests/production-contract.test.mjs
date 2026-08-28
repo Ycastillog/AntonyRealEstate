@@ -335,6 +335,9 @@ test("commission reports reconcile each installment and support export and print
     "reportSearch",
     "reportPeriodType",
     "reportYearLabel",
+    "reportFilterToggle",
+    "reportFilterCount",
+    "reportFilters",
     "reportDeveloper",
     "reportProject",
     "reportSaleStatus",
@@ -355,6 +358,12 @@ test("commission reports reconcile each installment and support export and print
     "reportCollectionRate",
     "reportInstallmentCount",
     "reportBody",
+    "reportLedger",
+    "reportPagination",
+    "reportPrevPage",
+    "reportPageRange",
+    "reportPageStatus",
+    "reportNextPage",
     "reportMobileList",
     "exportSalesButton",
     "printCommissionReportButton"
@@ -380,6 +389,10 @@ test("commission reports reconcile each installment and support export and print
   assert.match(app, /function reportPeriodInstallmentsForSales\(/);
   assert.match(app, /function reportPaymentContext\(/);
   assert.match(app, /function reportPaidCents\(/);
+  assert.match(app, /const REPORT_PAGE_SIZE = 10/);
+  assert.match(app, /function paginatedReportInstallments\(/);
+  assert.match(app, /function activeReportFilterCount\(/);
+  assert.match(app, /function resetReportPageAndRender\(/);
   assert.match(app, /Resumen por constructora/);
   assert.match(app, /const developerSummaryRows =/);
   assert.match(app, /Fechas de cobro/);
@@ -401,7 +414,7 @@ test("commission reports reconcile each installment and support export and print
   assert.match(app, /Todos los vencimientos/);
   assert.match(app, /Todos los cobros registrados/);
   assert.match(app, /activePaymentsForSale\(sale\.id\)\.some/);
-  assert.match(html, /production-v14-2/);
+  assert.match(html, /production-v15/);
 });
 
 test("signed unit changes carry the paid advance and recalculate only the balance", () => {
