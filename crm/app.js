@@ -1,7 +1,8 @@
 const STORAGE_KEY = "antony-crm-local-v2";
-const APP_VERSION = 15;
+const APP_VERSION = 16;
 const MAX_AUDIT_ENTRIES = 500;
 const REPORT_PAGE_SIZE = 10;
+const RECORD_PAGE_SIZE = 10;
 const VALID_CURRENCIES = ["USD", "DOP"];
 const VALID_CLIENT_STAGES = ["Nuevo", "Calificado", "En seguimiento", "Comprador", "Inactivo"];
 const VALID_DESIRED_ZONES = [
@@ -240,6 +241,7 @@ let detailRecord = null;
 let inertedElements = [];
 let lastWorkspaceSyncAt = new Date();
 let reportPage = 1;
+const recordPages = { clients: 1, sales: 1, collections: 1, payments: 1 };
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -1836,8 +1838,8 @@ function renderDashboard() {
     ? "Tienes " +
       overdue.length +
       (overdue.length === 1
-        ? " comisión vencida que necesita seguimiento hoy."
-        : " comisiones vencidas que necesitan seguimiento hoy.")
+        ? " operación con comisión vencida que necesita seguimiento hoy."
+        : " operaciones con comisión vencida que necesitan seguimiento hoy.")
     : undated.length
       ? "Hay " +
         undated.length +
@@ -1871,7 +1873,8 @@ function renderDashboard() {
   document.querySelector("#metricPendingDop").textContent =
     moneyFromCents(pending.DOP, "DOP") + " por cobrar";
   document.querySelector("#metricOverdue").textContent =
-    overdue.length + (overdue.length === 1 ? " vencida" : " vencidas");
+    overdue.length +
+    (overdue.length === 1 ? " operación vencida" : " operaciones vencidas");
 
   const recent = operationalSales
     .sort((a, b) => String(b.saleDate).localeCompare(String(a.saleDate)))
@@ -2270,6 +2273,39 @@ function clientActionsHtml(client) {
   );
 }
 
+function paginatedRecords(items, key, prefix) {
+  const totalPages = Math.max(1, Math.ceil(items.length / RECORD_PAGE_SIZE));
+  recordPages[key] = Math.min(Math.max(recordPages[key] || 1, 1), totalPages);
+  const startIndex = (recordPages[key] - 1) * RECORD_PAGE_SIZE;
+  const endIndex = Math.min(startIndex + RECORD_PAGE_SIZE, items.length);
+  const firstVisible = items.length ? startIndex + 1 : 0;
+  document.querySelector("#" + prefix + "PageRange").textContent =
+    firstVisible + "–" + endIndex + " de " + items.length;
+  document.querySelector("#" + prefix + "PageStatus").textContent =
+    "Página " + recordPages[key] + " de " + totalPages;
+  document.querySelector("#" + prefix + "PrevPage").disabled =
+    recordPages[key] <= 1;
+  document.querySelector("#" + prefix + "NextPage").disabled =
+    recordPages[key] >= totalPages;
+  document.querySelector("#" + prefix + "Pagination").hidden =
+    items.length <= RECORD_PAGE_SIZE;
+  return items.slice(startIndex, endIndex);
+}
+
+function resetRecordPage(key, render) {
+  recordPages[key] = 1;
+  render();
+}
+
+function turnRecordPage(key, direction, render, anchorId) {
+  recordPages[key] += direction;
+  render();
+  document.querySelector(anchorId).scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+}
+
 function renderClients() {
   const query = normalizeText(document.querySelector("#clientSearch").value);
   const stage = document.querySelector("#clientStageFilter").value;
@@ -2296,6 +2332,7 @@ function renderClients() {
       );
     })
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const visibleClients = paginatedRecords(clients, "clients", "clients");
   const filtersActive = query || stage;
   document.querySelector("#clientOverviewTotal").textContent = state.clients.length;
   document.querySelector("#clientOverviewNew").textContent = state.clients.filter(
@@ -2310,7 +2347,7 @@ function renderClients() {
   document.querySelector("#clientsCount").textContent = filtersActive
     ? clients.length + " / " + state.clients.length
     : state.clients.length;
-  document.querySelector("#clientsBody").innerHTML = clients
+  document.querySelector("#clientsBody").innerHTML = visibleClients
     .map((client) => {
       const salesCount = state.sales.filter(
         (sale) => sale.clientId === client.id && !isCancelledSale(sale)
@@ -2356,7 +2393,7 @@ function renderClients() {
       );
     })
     .join("");
-  document.querySelector("#clientsMobileList").innerHTML = clients
+  document.querySelector("#clientsMobileList").innerHTML = visibleClients
     .map((client) => {
       const budget = client.budget
         ? money(client.budget, client.budgetCurrency)
@@ -2434,6 +2471,7 @@ function saleActionsHtml(sale) {
 
 function renderSales() {
   const sales = filteredSalesForList();
+  const visibleSales = paginatedRecords(sales, "sales", "sales");
   const queryActive = Boolean(document.querySelector("#saleSearch").value);
   const status = document.querySelector("#saleStatusFilter").value;
   const scopedTotal =
@@ -2457,7 +2495,7 @@ function renderSales() {
   document.querySelector("#saleOverviewArchived").textContent = state.sales.filter(
     isCancelledSale
   ).length;
-  document.querySelector("#salesBody").innerHTML = sales
+  document.querySelector("#salesBody").innerHTML = visibleSales
     .map((sale) => {
       const totalCents = toCents(sale.commissionAmount);
       const progress = totalCents
@@ -2497,7 +2535,7 @@ function renderSales() {
       );
     })
     .join("");
-  document.querySelector("#salesMobileList").innerHTML = sales
+  document.querySelector("#salesMobileList").innerHTML = visibleSales
     .map(
       (sale) =>
         '<article class="mobile-record-card record-row' +
@@ -2819,6 +2857,7 @@ function renderCollectionQueue() {
       String(a.dueDate || "9999").localeCompare(String(b.dueDate || "9999")) ||
       b.pendingCents - a.pendingCents
   );
+  const visibleQueue = paginatedRecords(queue, "collections", "collections");
 
   const filterCounts = {
     all: pendingSales.length,
@@ -2870,7 +2909,7 @@ function renderCollectionQueue() {
     return '<span class="status-pill status-pending">Pendiente</span>';
   };
 
-  document.querySelector("#collectionQueueBody").innerHTML = queue
+  document.querySelector("#collectionQueueBody").innerHTML = visibleQueue
     .map(
       (item) =>
         '<tr class="record-row ' +
@@ -2896,7 +2935,7 @@ function renderCollectionQueue() {
         "</td></tr>"
     )
     .join("");
-  document.querySelector("#collectionQueueMobile").innerHTML = queue
+  document.querySelector("#collectionQueueMobile").innerHTML = visibleQueue
     .map((item) => {
       const mobileClass =
         item.pendingCents === 0
@@ -2980,11 +3019,12 @@ function paymentActionsHtml(payment, sale) {
 
 function renderPayments() {
   const payments = filteredPaymentsForList();
+  const visiblePayments = paginatedRecords(payments, "payments", "payments");
   const searching = document.querySelector("#paymentSearch").value;
   document.querySelector("#paymentsCount").textContent = searching
     ? payments.length + " / " + state.payments.length
     : state.payments.length;
-  document.querySelector("#paymentsBody").innerHTML = payments
+  document.querySelector("#paymentsBody").innerHTML = visiblePayments
     .map((payment) => {
       const sale = saleById(payment.saleId);
       const voided = !isActivePayment(payment);
@@ -3018,7 +3058,7 @@ function renderPayments() {
       );
     })
     .join("");
-  document.querySelector("#paymentsMobileList").innerHTML = payments
+  document.querySelector("#paymentsMobileList").innerHTML = visiblePayments
     .map((payment) => {
       const sale = saleById(payment.saleId);
       const voided = !isActivePayment(payment);
@@ -3480,11 +3520,14 @@ function reportFilterSummary() {
   if (project) parts.push(project);
   if (saleStatus) parts.push(saleStatus);
   if (commissionStatus) {
-    parts.push(
-      commissionStatus === "Pendiente"
-        ? "Cuotas pendientes y programadas"
-        : "Cuotas " + commissionStatus.toLowerCase()
-    );
+    const commissionStatusLabels = {
+      Pendiente: "Cuotas pendientes y programadas",
+      Parcial: "Cuotas parciales",
+      Pagada: "Cuotas pagadas",
+      Vencida: "Cuotas vencidas",
+      Anulada: "Cuotas anuladas"
+    };
+    parts.push(commissionStatusLabels[commissionStatus] || commissionStatus);
   }
   if (search) parts.push('Búsqueda “' + search + '”');
   return parts.length ? parts.join(" · ") : "Todas las operaciones firmadas y entregadas";
@@ -5541,8 +5584,12 @@ document.querySelector("#cancelClientEdit").addEventListener("click", () => clos
 document
   .querySelector("#cancelHistoricalContactEdit")
   .addEventListener("click", () => closeDrawer());
-document.querySelector("#clientSearch").addEventListener("input", renderClients);
-document.querySelector("#clientStageFilter").addEventListener("change", renderClients);
+document.querySelector("#clientSearch").addEventListener("input", () =>
+  resetRecordPage("clients", renderClients)
+);
+document.querySelector("#clientStageFilter").addEventListener("change", () =>
+  resetRecordPage("clients", renderClients)
+);
 document.querySelector("#saleDeveloper").addEventListener("change", () => {
   updateProjectCatalog("");
   document.querySelector("#saleProject").focus();
@@ -6027,8 +6074,12 @@ document.querySelector("#saleForm").addEventListener("submit", async (event) => 
 });
 
 document.querySelector("#cancelSaleEdit").addEventListener("click", () => closeDrawer());
-document.querySelector("#saleSearch").addEventListener("input", renderSales);
-document.querySelector("#saleStatusFilter").addEventListener("change", renderSales);
+document.querySelector("#saleSearch").addEventListener("input", () =>
+  resetRecordPage("sales", renderSales)
+);
+document.querySelector("#saleStatusFilter").addEventListener("change", () =>
+  resetRecordPage("sales", renderSales)
+);
 document.querySelector("#paymentSaleId").addEventListener("change", updatePaymentContext);
 document.querySelector("#fillPendingAmount").addEventListener("click", () => {
   const form = document.querySelector("#paymentForm");
@@ -6188,7 +6239,9 @@ document.querySelector("#paymentForm").addEventListener("submit", async (event) 
 });
 
 document.querySelector("#cancelPaymentEdit").addEventListener("click", () => closeDrawer());
-document.querySelector("#paymentSearch").addEventListener("input", renderPayments);
+document.querySelector("#paymentSearch").addEventListener("input", () =>
+  resetRecordPage("payments", renderPayments)
+);
 document.querySelector("#historicalSearch").addEventListener("input", renderHistoricalSales);
 ["historicalYearFilter", "historicalProjectFilter"].forEach((id) =>
   document.querySelector("#" + id).addEventListener("change", renderHistoricalSales)
@@ -6206,7 +6259,22 @@ document
 document.querySelectorAll("[data-collection-filter]").forEach((button) => {
   button.addEventListener("click", () => {
     collectionFilter = button.dataset.collectionFilter;
+    recordPages.collections = 1;
     renderCollectionQueue();
+  });
+});
+[
+  ["clients", "clients", renderClients, "#clientsLedger"],
+  ["sales", "sales", renderSales, "#salesLedger"],
+  ["collections", "collections", renderCollectionQueue, "#collectionLedger"],
+  ["payments", "payments", renderPayments, "#paymentsLedger"]
+].forEach(([prefix, key, render, anchor]) => {
+  document.querySelector("#" + prefix + "PrevPage").addEventListener("click", () => {
+    if (recordPages[key] <= 1) return;
+    turnRecordPage(key, -1, render, anchor);
+  });
+  document.querySelector("#" + prefix + "NextPage").addEventListener("click", () => {
+    turnRecordPage(key, 1, render, anchor);
   });
 });
 ["reportPeriodType", "reportYear", "reportDeveloper", "reportProject", "reportSaleStatus", "reportCommissionStatus"].forEach(

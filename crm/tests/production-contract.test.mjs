@@ -414,7 +414,40 @@ test("commission reports reconcile each installment and support export and print
   assert.match(app, /Todos los vencimientos/);
   assert.match(app, /Todos los cobros registrados/);
   assert.match(app, /activePaymentsForSale\(sale\.id\)\.some/);
-  assert.match(html, /production-v15/);
+  assert.match(html, /production-v16/);
+});
+
+test("large operational lists paginate without changing their totals", () => {
+  for (const prefix of ["clients", "sales", "collections", "payments"]) {
+    for (const suffix of [
+      "Pagination",
+      "PrevPage",
+      "PageRange",
+      "PageStatus",
+      "NextPage"
+    ]) {
+      assert.match(html, new RegExp(`id=["']${prefix}${suffix}["']`));
+    }
+  }
+  for (const id of [
+    "clientsLedger",
+    "salesLedger",
+    "collectionLedger",
+    "paymentsLedger"
+  ]) {
+    assert.match(html, new RegExp(`id=["']${id}["']`));
+  }
+  assert.match(app, /const RECORD_PAGE_SIZE = 10/);
+  assert.match(app, /function paginatedRecords\(/);
+  assert.match(app, /function resetRecordPage\(/);
+  assert.match(app, /function turnRecordPage\(/);
+  assert.match(app, /const visibleClients = paginatedRecords/);
+  assert.match(app, /const visibleSales = paginatedRecords/);
+  assert.match(app, /const visibleQueue = paginatedRecords/);
+  assert.match(app, /const visiblePayments = paginatedRecords/);
+  assert.match(html, /No hay cobros programados para los próximos 7 días/);
+  assert.match(app, /operaciones con comisión vencida/);
+  assert.match(app, /Cuotas vencidas/);
 });
 
 test("signed unit changes carry the paid advance and recalculate only the balance", () => {
