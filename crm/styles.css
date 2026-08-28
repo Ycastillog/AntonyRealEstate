@@ -1788,6 +1788,26 @@ body[data-environment="local"] .demo-only,
   .report-cutoff { flex-direction: column; }
   .report-cutoff > div { width: 100%; }
   .report-live-indicator { align-self: flex-start; order: -1; }
+  .metric-card > strong,
+  .collection-metric > strong,
+  .report-card > strong {
+    font-size: clamp(17px, 4.8vw, 21px);
+    letter-spacing: -.04em;
+    white-space: nowrap;
+  }
+  .collection-tabs {
+    flex-wrap: wrap;
+    gap: 4px;
+    overflow-x: visible;
+    padding: 0 12px 12px;
+  }
+  .collection-tab {
+    flex: 1 1 30%;
+    font-size: 11px;
+    justify-content: center;
+    min-width: 0;
+    padding-inline: 5px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

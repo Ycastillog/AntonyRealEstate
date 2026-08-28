@@ -414,7 +414,7 @@ test("commission reports reconcile each installment and support export and print
   assert.match(app, /Todos los vencimientos/);
   assert.match(app, /Todos los cobros registrados/);
   assert.match(app, /activePaymentsForSale\(sale\.id\)\.some/);
-  assert.match(html, /production-v16/);
+  assert.match(html, /production-v16-1/);
 });
 
 test("large operational lists paginate without changing their totals", () => {
