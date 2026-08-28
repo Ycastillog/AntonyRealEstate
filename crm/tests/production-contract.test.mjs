@@ -338,6 +338,11 @@ test("commission reports reconcile each installment and support export and print
     "reportFilterToggle",
     "reportFilterCount",
     "reportFilters",
+    "reportSummaryTab",
+    "reportAnalysisTab",
+    "reportLedgerTab",
+    "reportSummaryPanel",
+    "reportAnalysisPanel",
     "reportDeveloper",
     "reportProject",
     "reportSaleStatus",
@@ -393,6 +398,10 @@ test("commission reports reconcile each installment and support export and print
   assert.match(app, /function paginatedReportInstallments\(/);
   assert.match(app, /function activeReportFilterCount\(/);
   assert.match(app, /function resetReportPageAndRender\(/);
+  assert.match(app, /function setReportSection\(/);
+  assert.match(app, /setReportSection\("ledger", \{ scroll: true \}\)/);
+  assert.match(app, /thead\{display:table-header-group\}/);
+  assert.match(app, /detail-title.*page-break-before:always/);
   assert.match(app, /Resumen por constructora/);
   assert.match(app, /const developerSummaryRows =/);
   assert.match(app, /Fechas de cobro/);
@@ -414,7 +423,7 @@ test("commission reports reconcile each installment and support export and print
   assert.match(app, /Todos los vencimientos/);
   assert.match(app, /Todos los cobros registrados/);
   assert.match(app, /activePaymentsForSale\(sale\.id\)\.some/);
-  assert.match(html, /production-v16-1/);
+  assert.match(html, /production-v17/);
 });
 
 test("large operational lists paginate without changing their totals", () => {

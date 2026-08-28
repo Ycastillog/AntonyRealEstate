@@ -241,6 +241,7 @@ let detailRecord = null;
 let inertedElements = [];
 let lastWorkspaceSyncAt = new Date();
 let reportPage = 1;
+let reportSection = "summary";
 const recordPages = { clients: 1, sales: 1, collections: 1, payments: 1 };
 
 function clone(value) {
@@ -3818,11 +3819,29 @@ function resetReportPageAndRender() {
   renderReports();
 }
 
-function scrollToReportLedger() {
-  document.querySelector("#reportLedger").scrollIntoView({
-    behavior: "smooth",
-    block: "start"
+function setReportSection(section, { focus = false, scroll = false } = {}) {
+  const sections = ["summary", "analysis", "ledger"];
+  if (!sections.includes(section)) return;
+  reportSection = section;
+  document.querySelectorAll("[data-report-section]").forEach((button) => {
+    const active = button.dataset.reportSection === section;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
+    if (active && focus) button.focus();
   });
+  document.querySelectorAll("[data-report-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.reportPanel !== section;
+  });
+  if (scroll) {
+    document
+      .querySelector('[data-report-panel="' + section + '"]')
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function scrollToReportLedger() {
+  setReportSection("ledger", { scroll: true });
 }
 
 function renderReports() {
@@ -5275,16 +5294,16 @@ function printCommissionReport() {
     '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>' +
       escapeHtml(reportTitle) +
       "</title><style>" +
-      '@page{size:landscape;margin:14mm}*{box-sizing:border-box}body{color:#071a33;font:12px Arial,sans-serif;margin:0}' +
+      '@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{color:#071a33;font:11px Arial,sans-serif;margin:0}' +
       'header{align-items:flex-end;border-bottom:3px solid #b17b18;display:flex;justify-content:space-between;margin-bottom:18px;padding-bottom:14px}' +
       'h1{font:700 28px Georgia,serif;margin:3px 0}.eyebrow{color:#8a5d08;font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase}' +
       'header p,.meta,small{color:#667085}.meta{text-align:right}.summary{display:grid;gap:10px;grid-template-columns:repeat(5,1fr);margin-bottom:18px}' +
       '.summary div{background:#f7f5ef;border:1px solid #ded9cc;border-radius:8px;padding:12px}.summary span{color:#667085;display:block;font-size:10px;margin-bottom:5px;text-transform:uppercase}.summary strong{font-size:18px}' +
-      'table{border-collapse:collapse;width:100%}th{background:#071a33;color:#fff;font-size:10px;letter-spacing:.04em;padding:9px 8px;text-align:left;text-transform:uppercase}' +
-      'td{border-bottom:1px solid #e6e2d8;padding:8px;vertical-align:top}td strong,td small{display:block}.money{text-align:right;white-space:nowrap}' +
+      'table{border-collapse:collapse;width:100%}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}th{background:#071a33;color:#fff;font-size:9px;letter-spacing:.04em;padding:7px 6px;text-align:left;text-transform:uppercase}' +
+      'td{border-bottom:1px solid #e6e2d8;font-size:9px;padding:6px;vertical-align:top}td strong,td small{display:block}.money{text-align:right;white-space:nowrap}' +
       '.status{border-radius:99px;display:inline-block;font-size:9px;font-weight:700;padding:4px 7px;text-transform:uppercase}.status-paid{background:#dff7f0;color:#087568}.status-overdue{background:#fee4e2;color:#b42318}.status-partial,.status-pending{background:#fff3d6;color:#8a5d08}.status-void{background:#eef0f3;color:#667085}' +
-      'h2{font:700 17px Georgia,serif;margin:18px 0 8px}.developer-summary{margin-bottom:18px}.developer-summary th{background:#243a56}.developer-summary td{font-size:10px}' +
-      'footer{color:#667085;font-size:9px;margin-top:12px;text-align:right}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
+      'h2{font:700 17px Georgia,serif;margin:18px 0 8px}.developer-summary{margin-bottom:18px}.developer-summary th{background:#243a56}.developer-summary td{font-size:10px}.detail-title{break-before:page;page-break-before:always;padding-top:2mm}' +
+      'footer{color:#667085;font-size:9px;margin-top:12px;text-align:right}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}header,.summary,.developer-summary{break-inside:avoid;page-break-inside:avoid}}' +
       '</style></head><body><header><div><span class="eyebrow">Antony Fulgencio Real Estate</span><h1>' +
       escapeHtml(reportTitle) +
       "</h1><p>" +
@@ -5309,7 +5328,9 @@ function printCommissionReport() {
       sales.length +
       "</strong></div></section><h2>Resumen por constructora</h2><table class=\"developer-summary\"><thead><tr><th>Constructora</th><th>Operaciones</th><th>Comisión</th><th>Cobrado</th><th>Pendiente</th><th>Vencido</th></tr></thead><tbody>" +
       developerSummaryRows +
-      "</tbody></table><p class=\"meta\" style=\"text-align:left\">Los indicadores resumen la cartera completa del corte; la tabla respeta el filtro de estado de la cuota.</p><table><thead><tr><th>Cliente / operación</th><th>Cuota</th><th>Vencimiento</th><th>Comisión</th><th>Cobrado</th><th>Pendiente</th><th>Estado</th></tr></thead><tbody>" +
+      "</tbody></table><p class=\"meta\" style=\"text-align:left\">Los indicadores resumen la cartera completa del corte; la tabla respeta el filtro de estado de la cuota.</p><h2 class=\"detail-title\">Detalle de cuotas (" +
+      installments.length +
+      ")</h2><table><thead><tr><th>Cliente / operación</th><th>Cuota</th><th>Vencimiento</th><th>Comisión</th><th>Cobrado</th><th>Pendiente</th><th>Estado</th></tr></thead><tbody>" +
       tableRows +
       "</tbody></table><footer>Generado desde el CRM privado de Antony Fulgencio · Los montos reflejan los cobros registrados al momento del corte.</footer></body></html>"
   );
@@ -6293,6 +6314,19 @@ document.querySelector("#reportFilterToggle").addEventListener("click", () => {
     "aria-expanded",
     String(expanded)
   );
+});
+document.querySelectorAll("[data-report-section]").forEach((button, index, buttons) => {
+  button.addEventListener("click", () => setReportSection(button.dataset.reportSection));
+  button.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    let nextIndex = index;
+    if (event.key === "ArrowLeft") nextIndex = (index - 1 + buttons.length) % buttons.length;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % buttons.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = buttons.length - 1;
+    setReportSection(buttons[nextIndex].dataset.reportSection, { focus: true });
+  });
 });
 document.querySelector("#clearReportFilters").addEventListener("click", () => {
   document.querySelector("#reportSearch").value = "";
