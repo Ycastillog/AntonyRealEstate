@@ -10,13 +10,15 @@
  * - humanizeError(error) returns a safe Spanish message. Thrown errors also retain
  *   non-sensitive code, status, and details fields for programmatic handling.
  *
- * Supabase may use browser storage for the auth session. This adapter never uses
- * localStorage (or any browser storage) for CRM business data.
+ * CRM business data never uses browser storage. Authentication uses a volatile
+ * in-memory adapter and removes the one legacy persisted-session key left by
+ * releases prior to the session-only login policy.
  */
 (function (root) {
   'use strict';
 
-  var AUTH_STORAGE_KEY = 'antony-real-estate-crm-auth-v1';
+  var AUTH_STORAGE_KEY = 'antony-real-estate-crm-auth-v2-volatile';
+  var LEGACY_AUTH_STORAGE_KEY = 'antony-real-estate-crm-auth-v1';
   var MAX_AUDIT_ROWS = 300;
   var OMIT = {};
   var BLOCKED_KEYS = {
@@ -24,6 +26,32 @@
     'prototype': true,
     'constructor': true
   };
+
+  function createVolatileAuthStorage() {
+    var values = Object.create(null);
+    return {
+      getItem: function (key) {
+        return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null;
+      },
+      setItem: function (key, value) {
+        values[key] = String(value);
+      },
+      removeItem: function (key) {
+        delete values[key];
+      }
+    };
+  }
+
+  function removeLegacyAuthSession() {
+    try {
+      if (root.localStorage && typeof root.localStorage.removeItem === 'function') {
+        root.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY);
+      }
+    } catch (_error) {
+      // Storage can be blocked by browser privacy settings. The volatile adapter
+      // below still prevents a new session from being persisted.
+    }
+  }
 
   function isPlainObject(value) {
     if (!value || Object.prototype.toString.call(value) !== '[object Object]') {
@@ -426,6 +454,7 @@
       initializationReason = 'supabase_umd_missing';
     } else {
       try {
+        removeLegacyAuthSession();
         client = root.supabase.createClient(configuration.url, configuration.key, {
           auth: {
             // Private-office sessions intentionally live only in memory. A reload,
@@ -433,7 +462,8 @@
             persistSession: false,
             autoRefreshToken: true,
             detectSessionInUrl: true,
-            storageKey: AUTH_STORAGE_KEY
+            storageKey: AUTH_STORAGE_KEY,
+            storage: createVolatileAuthStorage()
           }
         });
       } catch (_error) {

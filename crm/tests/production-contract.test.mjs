@@ -227,12 +227,11 @@ test("CRM contains no embedded admin password or password comparison", () => {
 
 test("backend adapter never reads or writes browser storage for business data", () => {
   const executableBackend = withoutComments(backend);
-  assert.doesNotMatch(
-    executableBackend,
-    /\b(?:localStorage|sessionStorage|indexedDB)\b/,
-    "Only the Supabase auth client may manage its own session storage"
-  );
+  assert.doesNotMatch(executableBackend, /\b(?:sessionStorage|indexedDB)\b/);
+  assert.doesNotMatch(executableBackend, /localStorage\.(?:getItem|setItem)\s*\(/);
+  assert.match(executableBackend, /localStorage\.removeItem\(LEGACY_AUTH_STORAGE_KEY\)/);
   assert.match(backend, /auth:\s*{[\s\S]*?storageKey:\s*AUTH_STORAGE_KEY[\s\S]*?}/);
+  assert.match(backend, /storage:\s*createVolatileAuthStorage\(\)/);
   assert.match(backend, /persistSession:\s*false/);
   assert.doesNotMatch(backend, /persistSession:\s*true/);
 });
@@ -427,7 +426,7 @@ test("commission reports reconcile each installment and support export and print
   assert.match(app, /Todos los vencimientos/);
   assert.match(app, /Todos los cobros registrados/);
   assert.match(app, /activePaymentsForSale\(sale\.id\)\.some/);
-  assert.match(html, /production-v18/);
+  assert.match(html, /production-v19/);
 });
 
 test("desktop sidebar remains fixed while workspace content scrolls", () => {

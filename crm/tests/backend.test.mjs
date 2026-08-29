@@ -34,20 +34,28 @@ function evaluateBackend(options = {}) {
   const { createClient, includeSupabase = true } = options;
   const createClientCalls = [];
   let storageAccesses = 0;
+  let legacyAuthRemovals = 0;
   const windowObject = {
     URL,
     atob(value) {
       return Buffer.from(value, "base64").toString("binary");
+    },
+    localStorage: {
+      removeItem(key) {
+        assert.equal(key, "antony-real-estate-crm-auth-v1");
+        legacyAuthRemovals += 1;
+      },
+      getItem() {
+        storageAccesses += 1;
+        throw new Error("backend.js must not read localStorage");
+      },
+      setItem() {
+        storageAccesses += 1;
+        throw new Error("backend.js must not write localStorage");
+      }
     }
   };
 
-  Object.defineProperty(windowObject, "localStorage", {
-    configurable: true,
-    get() {
-      storageAccesses += 1;
-      throw new Error("backend.js must not access localStorage");
-    }
-  });
   Object.defineProperty(windowObject, "sessionStorage", {
     configurable: true,
     get() {
@@ -85,7 +93,8 @@ function evaluateBackend(options = {}) {
     api: windowObject.AntonyCrmBackend,
     createClientCalls,
     realmValue,
-    storageAccesses: () => storageAccesses
+    storageAccesses: () => storageAccesses,
+    legacyAuthRemovals: () => legacyAuthRemovals
   };
 }
 
@@ -104,6 +113,11 @@ test("Supabase authentication is session-only and never persists a login", () =>
   assert.equal(harness.createClientCalls[0].options.auth.persistSession, false);
   assert.equal(harness.createClientCalls[0].options.auth.autoRefreshToken, true);
   assert.equal(harness.createClientCalls[0].options.auth.detectSessionInUrl, true);
+  assert.equal(harness.createClientCalls[0].options.auth.storageKey, "antony-real-estate-crm-auth-v2-volatile");
+  assert.equal(typeof harness.createClientCalls[0].options.auth.storage?.getItem, "function");
+  assert.equal(typeof harness.createClientCalls[0].options.auth.storage?.setItem, "function");
+  assert.equal(typeof harness.createClientCalls[0].options.auth.storage?.removeItem, "function");
+  assert.equal(harness.legacyAuthRemovals(), 1);
   assert.equal(harness.storageAccesses(), 0);
 });
 
