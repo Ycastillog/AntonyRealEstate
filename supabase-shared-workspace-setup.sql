@@ -35,12 +35,12 @@ begin
     raise exception 'Propietario y soporte deben ser cuentas diferentes';
   end if;
 
-  select count(*), min(id)
+  select count(*), min(id::text)::uuid
     into v_owner_matches, v_owner_id
   from auth.users
   where lower(email) = v_owner_email;
 
-  select count(*), min(id)
+  select count(*), min(id::text)::uuid
     into v_support_matches, v_support_id
   from auth.users
   where lower(email) = v_support_email;
