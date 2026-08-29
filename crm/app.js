@@ -6711,13 +6711,21 @@ function recoveryRedirectUrl() {
   return new URL("./", window.location.href).href;
 }
 
-function showCrmShell(emailLabel) {
+function accountRoleLabel(user) {
+  const role = user?.app_metadata?.crm_access_role;
+  if (role === "owner") return "Propietario";
+  if (role === "support") return "Soporte administrativo";
+  return "Sesión activa";
+}
+
+function showCrmShell(emailLabel, roleLabel = "Sesión activa") {
   const shell = document.querySelector("#authShell");
   const app = document.querySelector("#crmApp");
   shell.hidden = true;
   app.hidden = false;
   app.removeAttribute("inert");
   app.setAttribute("aria-hidden", "false");
+  document.querySelector("#currentUserRole").textContent = roleLabel;
   document.querySelector("#currentUserEmail").textContent = emailLabel;
   document.querySelector("#logoutButton").hidden = DEMO_MODE;
   document.querySelector("#changePasswordButton").hidden = DEMO_MODE;
@@ -6739,7 +6747,10 @@ async function enterCloudSession(session) {
     state = normalizeState(await cloudBackend.loadWorkspace());
     lastWorkspaceSyncAt = new Date();
     cloudReady = true;
-    showCrmShell(session.user.email || "Usuario autorizado");
+    showCrmShell(
+      session.user.email || "Usuario autorizado",
+      accountRoleLabel(session.user)
+    );
     resetClientForm();
     resetSaleForm();
     resetPaymentForm();
@@ -6883,7 +6894,10 @@ document.querySelector("#passwordSetupCancelButton").addEventListener("click", (
   passwordSetupRequired = false;
   document.querySelector("#newPassword").value = "";
   document.querySelector("#confirmPassword").value = "";
-  showCrmShell(currentSession.user.email || "Usuario autorizado");
+  showCrmShell(
+    currentSession.user.email || "Usuario autorizado",
+    accountRoleLabel(currentSession.user)
+  );
   switchView(viewFromHash(), false, false);
 });
 

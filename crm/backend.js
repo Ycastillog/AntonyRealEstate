@@ -428,7 +428,9 @@
       try {
         client = root.supabase.createClient(configuration.url, configuration.key, {
           auth: {
-            persistSession: true,
+            // Private-office sessions intentionally live only in memory. A reload,
+            // browser restart or new visit must return to the password screen.
+            persistSession: false,
             autoRefreshToken: true,
             detectSessionInUrl: true,
             storageKey: AUTH_STORAGE_KEY

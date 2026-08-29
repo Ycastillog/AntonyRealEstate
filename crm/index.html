@@ -14,13 +14,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=production-v17-1" />
+    <link rel="stylesheet" href="styles.css?v=production-v18" />
     <script src="../media-config.js?v=secure-auth-v3" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js" integrity="sha384-ysv13JVP3fufiEXfjML9OdCa/rRbMJvUBOWyor82wfuK8INNZAvmbxHgKIHi+oqz" crossorigin="anonymous" defer></script>
-    <script src="historical.js?v=production-v17-1" defer></script>
-    <script src="backend.js?v=production-v17-1" defer></script>
+    <script src="historical.js?v=production-v18" defer></script>
+    <script src="backend.js?v=production-v18" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" integrity="sha384-uTYyvsSSUZeaPhb5RbKlQa0zY/WpX/QHfvg2mczXyBQOpkWPEDy9lczyp+w7SKXu" crossorigin="anonymous" defer></script>
-    <script src="app.js?v=production-v17-1" defer></script>
+    <script src="app.js?v=production-v18" defer></script>
   </head>
   <body>
     <main class="auth-shell" id="authShell" aria-labelledby="loginTitle">
@@ -51,6 +51,7 @@
           <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
           <button class="auth-text-button" id="forgotPasswordButton" type="button">¿Olvidaste tu contraseña?</button>
           <button class="button button-primary auth-submit" id="loginSubmitButton" type="submit"><span>Ingresar a la oficina</span><i data-lucide="arrow-right" aria-hidden="true"></i></button>
+          <p class="auth-session-note"><i data-lucide="shield-check" aria-hidden="true"></i>Por seguridad, cada visita requiere correo y contraseña.</p>
           <p class="auth-status" id="loginStatus" role="status" aria-live="polite">Usa las credenciales autorizadas para esta oficina privada.</p>
         </form>
         <form class="auth-form" id="recoveryForm" method="post" action="./" aria-describedby="recoveryDescription recoveryStatus" hidden>
@@ -120,7 +121,7 @@
             <span class="environment-badge sync-state" id="environmentBadge" aria-label="Nube segura mediante Supabase" aria-live="polite"><i data-lucide="cloud" aria-hidden="true"></i><span>Nube segura / Supabase</span></span>
             <span class="session-identity" aria-label="Identidad de la sesión actual">
               <span class="session-avatar" aria-hidden="true"><i data-lucide="user-round"></i></span>
-              <span class="session-copy"><small>Sesión activa</small><strong id="currentUserEmail">Verificando sesión…</strong></span>
+              <span class="session-copy"><small id="currentUserRole">Sesión activa</small><strong id="currentUserEmail">Verificando sesión…</strong></span>
             </span>
             <button class="button button-secondary logout-button" type="button" id="logoutButton" aria-label="Cerrar sesión" title="Cerrar sesión"><i data-lucide="log-out" aria-hidden="true"></i><span>Cerrar sesión</span></button>
             <details class="data-menu">

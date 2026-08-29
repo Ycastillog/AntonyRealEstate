@@ -9,6 +9,9 @@ const sqlPath = fileURLToPath(
 const acceptancePath = fileURLToPath(
   new URL("./supabase-acceptance.sql", import.meta.url)
 );
+const sharedWorkspacePath = fileURLToPath(
+  new URL("../../supabase-shared-workspace-setup.sql", import.meta.url)
+);
 
 async function readOptionalFile(path) {
   try {
@@ -21,12 +24,16 @@ async function readOptionalFile(path) {
 
 const sql = await readOptionalFile(sqlPath);
 const acceptanceSql = await readOptionalFile(acceptancePath);
+const sharedWorkspaceSql = await readOptionalFile(sharedWorkspacePath);
 const sqlTestOptions = sql
   ? {}
   : { skip: "supabase-production-setup.sql is not present yet" };
 const acceptanceTestOptions = acceptanceSql
   ? {}
   : { skip: "crm/tests/supabase-acceptance.sql is not present yet" };
+const sharedWorkspaceTestOptions = sharedWorkspaceSql
+  ? {}
+  : { skip: "supabase-shared-workspace-setup.sql is not present yet" };
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -125,7 +132,10 @@ test("RLS policies isolate each CRM table by authenticated owner", sqlTestOption
       `Missing authenticated ${action} policy template`
     );
   }
-  assert.match(rlsBlock, /owner_id\s*=\s*\(select\s+auth\.uid\(\)\)/i);
+  assert.match(
+    rlsBlock,
+    /owner_id\s*=\s*\(select\s+public\.crm_workspace_owner_id\(\)\)/i
+  );
   assert.match(
     rlsBlock,
     /if\s+v_table\s*=\s*'crm_clients'/i,
@@ -166,8 +176,8 @@ test("SQL implements and grants every RPC required by the browser adapter", sqlT
       if (!/security\s+invoker/i.test(definition)) {
         issues.push(`public.${name} must remain SECURITY INVOKER`);
       }
-      if (!/owner_id\s*=\s*auth\.uid\(\)/i.test(definition)) {
-        issues.push(`public.${name} must filter rows by auth.uid()`);
+      if (!/owner_id\s*=\s*public\.crm_workspace_owner_id\(\)/i.test(definition)) {
+        issues.push(`public.${name} must filter rows by the authorized workspace`);
       }
     } else {
       if (!/security\s+definer/i.test(definition)) {
@@ -176,8 +186,8 @@ test("SQL implements and grants every RPC required by the browser adapter", sqlT
       if (!/set\s+search_path\s*=\s*pg_catalog\s*,\s*pg_temp/i.test(definition)) {
         issues.push(`public.${name} must pin a safe search_path`);
       }
-      if (!/auth\.uid\(\)/i.test(definition)) {
-        issues.push(`public.${name} must bind mutations to auth.uid()`);
+      if (!/public\.crm_workspace_owner_id\(\)/i.test(definition)) {
+        issues.push(`public.${name} must bind mutations to the authorized workspace`);
       }
     }
     const grantPattern = new RegExp(
@@ -197,6 +207,50 @@ test("SQL implements and grants every RPC required by the browser adapter", sqlT
   }
 
   assert.deepEqual(issues, [], issues.join("; "));
+});
+
+test("workspace access is resolved only from protected app_metadata", sqlTestOptions, () => {
+  const definition = functionDefinition("crm_workspace_owner_id");
+  assert.ok(definition);
+  assert.match(definition, /auth\.jwt\(\)[\s\S]*?app_metadata[\s\S]*?crm_workspace_owner_id/i);
+  assert.match(definition, /return\s+v_user/i);
+  assert.doesNotMatch(definition, /user_metadata/i);
+  assert.match(
+    sql,
+    /grant\s+execute\s+on\s+function\s+public\.crm_workspace_owner_id\(\)\s+to\s+authenticated/i
+  );
+  assert.doesNotMatch(
+    sql,
+    /grant\s+execute\s+on\s+function\s+public\.crm_workspace_owner_id\(\)\s+to\s+anon/i
+  );
+
+  for (const table of [
+    "crm_clients",
+    "crm_sales",
+    "crm_historical_import_batches",
+    "crm_historical_sales",
+    "crm_commission_installments",
+    "crm_payments",
+    "crm_sale_unit_changes"
+  ]) {
+    assert.match(
+      sql,
+      new RegExp(
+        `alter\\s+table\\s+public\\.${table}[\\s\\S]{0,140}alter\\s+column\\s+owner_id\\s+set\\s+default\\s+public\\.crm_workspace_owner_id\\(\\)`,
+        "i"
+      )
+    );
+  }
+});
+
+test("shared workspace provisioning keeps real emails out of Git and preserves the existing ledger", sharedWorkspaceTestOptions, () => {
+  assert.match(sharedWorkspaceSql, /OWNER_EMAIL_HERE/);
+  assert.match(sharedWorkspaceSql, /SUPPORT_EMAIL_HERE/);
+  assert.match(sharedWorkspaceSql, /crm_workspace_owner_id/);
+  assert.match(sharedWorkspaceSql, /'crm_access_role'\s*,\s*'owner'/i);
+  assert.match(sharedWorkspaceSql, /'crm_access_role'\s*,\s*'support'/i);
+  assert.doesNotMatch(sharedWorkspaceSql, /@[a-z0-9.-]+\.[a-z]{2,}/i);
+  assert.doesNotMatch(sharedWorkspaceSql, /update\s+public\.crm_(?:clients|sales|commission_installments|payments)/i);
 });
 
 test("financial validation, audit, timestamp, and immutability triggers are installed", sqlTestOptions, () => {
@@ -423,7 +477,10 @@ test("historical staging is constrained, idempotent, and RPC-only", sqlTestOptio
     historicalImport,
     /set\s+search_path\s*=\s*pg_catalog\s*,\s*pg_temp/i
   );
-  assert.match(historicalImport, /v_owner\s+uuid\s*:=\s*auth\.uid\(\)/i);
+  assert.match(
+    historicalImport,
+    /v_owner\s+uuid\s*:=\s*public\.crm_workspace_owner_id\(\)/i
+  );
   assert.match(historicalImport, /entre\s+1\s+y\s+5000\s+filas/i);
   assert.match(historicalImport, /limite\s+de\s+10\s+MiB/i);
   assert.match(historicalImport, /jsonb_object_keys\(p_batch\)/i);
@@ -469,7 +526,10 @@ test("historical staging is constrained, idempotent, and RPC-only", sqlTestOptio
   for (const definition of [historicalContactUpdate, historicalContactEnrichment]) {
     assert.match(definition, /security\s+definer/i);
     assert.match(definition, /set\s+search_path\s*=\s*pg_catalog\s*,\s*pg_temp/i);
-    assert.match(definition, /v_owner\s+uuid\s*:=\s*auth\.uid\(\)/i);
+    assert.match(
+      definition,
+      /v_owner\s+uuid\s*:=\s*public\.crm_workspace_owner_id\(\)/i
+    );
     assert.match(definition, /owner_id\s*=\s*v_owner/i);
     assert.match(definition, /review_status\s*<>\s*'Convertida'/i);
   }

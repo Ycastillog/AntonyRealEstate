@@ -97,6 +97,16 @@ function configurationError(error) {
   return true;
 }
 
+test("Supabase authentication is session-only and never persists a login", () => {
+  const harness = evaluateBackend();
+
+  assert.equal(harness.createClientCalls.length, 1);
+  assert.equal(harness.createClientCalls[0].options.auth.persistSession, false);
+  assert.equal(harness.createClientCalls[0].options.auth.autoRefreshToken, true);
+  assert.equal(harness.createClientCalls[0].options.auth.detectSessionInUrl, true);
+  assert.equal(harness.storageAccesses(), 0);
+});
+
 test("invalid Supabase configuration fails closed without touching storage", async (t) => {
   const cases = [
     ["missing config", undefined],

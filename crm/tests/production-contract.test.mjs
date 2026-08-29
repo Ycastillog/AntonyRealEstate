@@ -233,6 +233,8 @@ test("backend adapter never reads or writes browser storage for business data", 
     "Only the Supabase auth client may manage its own session storage"
   );
   assert.match(backend, /auth:\s*{[\s\S]*?storageKey:\s*AUTH_STORAGE_KEY[\s\S]*?}/);
+  assert.match(backend, /persistSession:\s*false/);
+  assert.doesNotMatch(backend, /persistSession:\s*true/);
 });
 
 test("backend names every workspace table and required RPC contract", () => {
@@ -425,7 +427,7 @@ test("commission reports reconcile each installment and support export and print
   assert.match(app, /Todos los vencimientos/);
   assert.match(app, /Todos los cobros registrados/);
   assert.match(app, /activePaymentsForSale\(sale\.id\)\.some/);
-  assert.match(html, /production-v17-1/);
+  assert.match(html, /production-v18/);
 });
 
 test("desktop sidebar remains fixed while workspace content scrolls", () => {

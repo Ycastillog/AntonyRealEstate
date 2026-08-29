@@ -1424,6 +1424,18 @@ th { font-size: 12px; font-weight: 700; letter-spacing: .025em; text-transform: 
 .auth-back-button { justify-self: center; margin-top: 2px; }
 .auth-submit { gap: 9px; margin-top: 12px; width: 100%; }
 .auth-submit svg { height: 17px; width: 17px; }
+.auth-session-note {
+  align-items: center;
+  color: var(--text-secondary);
+  display: flex;
+  font-size: 11px;
+  gap: 7px;
+  justify-content: center;
+  line-height: 1.4;
+  margin: 0;
+  text-align: center;
+}
+.auth-session-note svg { color: var(--success); flex: 0 0 auto; height: 14px; width: 14px; }
 .auth-status {
   background: #f4f2ed;
   border: 1px solid #e2ded5;

@@ -3,7 +3,7 @@
 -- Objetivos de seguridad:
 --   * La sesion anon solo puede leer property_items/evidence_items publicados.
 --   * Solo authenticated puede mutar contenido y objetos del bucket evidencias.
---   * Cada fila CRM pertenece a auth.uid() y todas las relaciones incluyen owner_id.
+--   * Cada fila CRM pertenece a un workspace autorizado y todas las relaciones incluyen owner_id.
 --   * Las invariantes financieras se validan en el servidor y bajo bloqueo de la venta.
 --   * El historial de auditoria se escribe exclusivamente desde triggers.
 --
@@ -415,8 +415,49 @@ using (
 -- 4. Modelo CRM multiusuario
 -- -----------------------------------------------------------------------------
 
+-- El propietario técnico del workspace puede diferir del usuario que inició
+-- sesión. La asignación vive exclusivamente en app_metadata, que un usuario no
+-- puede modificar desde el cliente. Sin asignación, el comportamiento continúa
+-- siendo owner_id = auth.uid() para mantener compatibilidad con instalaciones
+-- existentes y cuentas de un solo usuario.
+create or replace function public.crm_workspace_owner_id()
+returns uuid
+language plpgsql
+stable
+security invoker
+set search_path = pg_catalog, pg_temp
+as $function$
+declare
+  v_user uuid := auth.uid();
+  v_claim text := nullif(
+    btrim(coalesce(auth.jwt() -> 'app_metadata' ->> 'crm_workspace_owner_id', '')),
+    ''
+  );
+begin
+  if v_user is null then
+    return null;
+  end if;
+
+  if v_claim is null then
+    return v_user;
+  end if;
+
+  begin
+    return v_claim::uuid;
+  exception
+    when invalid_text_representation then
+      raise exception using
+        errcode = '28000',
+        message = 'La asignación del workspace no es válida';
+  end;
+end
+$function$;
+
+comment on function public.crm_workspace_owner_id() is
+  'Resuelve el owner_id del workspace desde app_metadata; usa auth.uid() como fallback.';
+
 create table if not exists public.crm_clients (
-  owner_id uuid not null default auth.uid(),
+  owner_id uuid not null default public.crm_workspace_owner_id(),
   id text not null,
   name text not null,
   phone text not null,
@@ -503,10 +544,10 @@ create table if not exists public.crm_clients (
 );
 
 comment on table public.crm_clients is
-  'Prospectos/clientes privados, aislados mediante owner_id = auth.uid().';
+  'Prospectos/clientes privados, aislados mediante el owner_id del workspace.';
 
 create table if not exists public.crm_sales (
-  owner_id uuid not null default auth.uid(),
+  owner_id uuid not null default public.crm_workspace_owner_id(),
   id text not null,
   client_id text not null,
   project text not null,
@@ -714,7 +755,7 @@ alter table public.crm_clients
 -- Staging histórico: conserva ventas verificables aunque todavía falten datos
 -- operativos. Nada de este módulo crea clientes, ventas, cuotas o cobros reales.
 create table if not exists public.crm_historical_import_batches (
-  owner_id uuid not null default auth.uid(),
+  owner_id uuid not null default public.crm_workspace_owner_id(),
   id text not null default gen_random_uuid()::text,
   source_name text not null,
   source_sha256 text not null,
@@ -753,7 +794,7 @@ comment on table public.crm_historical_import_batches is
   'Lotes idempotentes de staging histórico; toda escritura se realiza por RPC.';
 
 create table if not exists public.crm_historical_sales (
-  owner_id uuid not null default auth.uid(),
+  owner_id uuid not null default public.crm_workspace_owner_id(),
   id text not null default gen_random_uuid()::text,
   batch_id text not null,
   source_row integer not null,
@@ -948,7 +989,7 @@ comment on table public.crm_historical_sales is
   'Ventas históricas incompletas; no participan en clientes, comisiones ni cobros hasta su conversión explícita.';
 
 create table if not exists public.crm_commission_installments (
-  owner_id uuid not null default auth.uid(),
+  owner_id uuid not null default public.crm_workspace_owner_id(),
   id text not null,
   sale_id text not null,
   label text not null,
@@ -1039,7 +1080,7 @@ end
 $crm_installment_sequence_constraint$;
 
 create table if not exists public.crm_payments (
-  owner_id uuid not null default auth.uid(),
+  owner_id uuid not null default public.crm_workspace_owner_id(),
   id text not null,
   sale_id text not null,
   installment_id text,
@@ -1114,7 +1155,7 @@ comment on table public.crm_payments is
   'Cobros de comision. Solo status=Contabilizado participa en los totales.';
 
 create table if not exists public.crm_sale_unit_changes (
-  owner_id uuid not null default auth.uid(),
+  owner_id uuid not null default public.crm_workspace_owner_id(),
   id text not null,
   sale_id text not null,
   change_date date not null default current_date,
@@ -1467,6 +1508,23 @@ alter table public.crm_payments
   drop constraint if exists crm_payments_accounted_installment_check;
 
 -- Indices de acceso y unicidad de negocio.
+-- CREATE TABLE IF NOT EXISTS no modifica defaults previos. Esta normalización
+-- hace que una cuenta de soporte escriba siempre dentro del mismo workspace.
+alter table public.crm_clients
+  alter column owner_id set default public.crm_workspace_owner_id();
+alter table public.crm_sales
+  alter column owner_id set default public.crm_workspace_owner_id();
+alter table public.crm_historical_import_batches
+  alter column owner_id set default public.crm_workspace_owner_id();
+alter table public.crm_historical_sales
+  alter column owner_id set default public.crm_workspace_owner_id();
+alter table public.crm_commission_installments
+  alter column owner_id set default public.crm_workspace_owner_id();
+alter table public.crm_payments
+  alter column owner_id set default public.crm_workspace_owner_id();
+alter table public.crm_sale_unit_changes
+  alter column owner_id set default public.crm_workspace_owner_id();
+
 create index if not exists crm_clients_owner_stage_idx
   on public.crm_clients(owner_id, stage);
 create index if not exists crm_clients_owner_captured_idx
@@ -1562,7 +1620,7 @@ security definer
 set search_path = pg_catalog, pg_temp
 as $function$
 declare
-  v_request_owner uuid := auth.uid();
+  v_request_owner uuid := public.crm_workspace_owner_id();
   v_planned numeric := 0;
   v_accounted numeric := 0;
   v_advance_amount numeric := 0;
@@ -1578,7 +1636,7 @@ begin
      and new.owner_id is distinct from v_request_owner then
     raise exception using
       errcode = '42501',
-      message = 'owner_id debe coincidir con auth.uid()';
+      message = 'owner_id debe coincidir con el workspace autorizado';
   end if;
 
   if tg_op = 'UPDATE' and (
@@ -1770,7 +1828,7 @@ security definer
 set search_path = pg_catalog, pg_temp
 as $function$
 declare
-  v_request_owner uuid := auth.uid();
+  v_request_owner uuid := public.crm_workspace_owner_id();
   v_commission numeric;
   v_sale_date date;
   v_sale_status text;
@@ -1784,7 +1842,7 @@ begin
      and new.owner_id is distinct from v_request_owner then
     raise exception using
       errcode = '42501',
-      message = 'owner_id debe coincidir con auth.uid()';
+      message = 'owner_id debe coincidir con el workspace autorizado';
   end if;
 
   if new.installment_kind not in ('advance', 'balance', 'single') then
@@ -1937,7 +1995,7 @@ security definer
 set search_path = pg_catalog, pg_temp
 as $function$
 declare
-  v_request_owner uuid := auth.uid();
+  v_request_owner uuid := public.crm_workspace_owner_id();
   v_owner uuid;
   v_sale_id text;
   v_commission numeric;
@@ -1961,7 +2019,7 @@ begin
   if v_request_owner is not null and v_owner is distinct from v_request_owner then
     raise exception using
       errcode = '42501',
-      message = 'owner_id debe coincidir con auth.uid()';
+      message = 'owner_id debe coincidir con el workspace autorizado';
   end if;
 
   select s.commission_amount
@@ -2031,7 +2089,7 @@ security definer
 set search_path = pg_catalog, pg_temp
 as $function$
 declare
-  v_request_owner uuid := auth.uid();
+  v_request_owner uuid := public.crm_workspace_owner_id();
   v_commission numeric;
   v_commission_currency text;
   v_sale_date date;
@@ -2054,7 +2112,7 @@ begin
      and new.owner_id is distinct from v_request_owner then
     raise exception using
       errcode = '42501',
-      message = 'owner_id debe coincidir con auth.uid()';
+      message = 'owner_id debe coincidir con el workspace autorizado';
   end if;
 
   if tg_op = 'UPDATE' and (
@@ -2313,7 +2371,7 @@ language plpgsql
 set search_path = pg_catalog, pg_temp
 as $function$
 declare
-  v_owner uuid := auth.uid();
+  v_owner uuid := public.crm_workspace_owner_id();
 begin
   if v_owner is not null then
     perform pg_advisory_xact_lock_shared(
@@ -2807,7 +2865,7 @@ begin
 
     execute format(
       'create policy %I on public.%I for select to authenticated using '
-      || '((select auth.uid()) is not null and owner_id = (select auth.uid()))',
+      || '((select auth.uid()) is not null and owner_id = (select public.crm_workspace_owner_id()))',
       v_table || '_owner_select',
       v_table
     );
@@ -2819,20 +2877,20 @@ begin
       );
       execute format(
         'create policy %I on public.%I for insert to authenticated with check '
-        || '((select auth.uid()) is not null and owner_id = (select auth.uid()))',
+        || '((select auth.uid()) is not null and owner_id = (select public.crm_workspace_owner_id()))',
         v_table || '_owner_insert',
         v_table
       );
       execute format(
         'create policy %I on public.%I for update to authenticated using '
-        || '((select auth.uid()) is not null and owner_id = (select auth.uid())) '
-        || 'with check ((select auth.uid()) is not null and owner_id = (select auth.uid()))',
+        || '((select auth.uid()) is not null and owner_id = (select public.crm_workspace_owner_id())) '
+        || 'with check ((select auth.uid()) is not null and owner_id = (select public.crm_workspace_owner_id()))',
         v_table || '_owner_update',
         v_table
       );
       execute format(
         'create policy %I on public.%I for delete to authenticated using '
-        || '((select auth.uid()) is not null and owner_id = (select auth.uid()))',
+        || '((select auth.uid()) is not null and owner_id = (select public.crm_workspace_owner_id()))',
         v_table || '_owner_delete',
         v_table
       );
@@ -2858,7 +2916,7 @@ security definer
 set search_path = pg_catalog, pg_temp
 as $function$
 declare
-  v_owner uuid := auth.uid();
+  v_owner uuid := public.crm_workspace_owner_id();
   v_batch_keys constant text[] := array[
     'id', 'source_name', 'source_sha256', 'source_row_count'
   ];
@@ -3410,7 +3468,7 @@ security definer
 set search_path = pg_catalog, pg_temp
 as $function$
 declare
-  v_owner uuid := auth.uid();
+  v_owner uuid := public.crm_workspace_owner_id();
   v_unknown_key text;
   v_id text;
   v_buyer_name text;
@@ -3561,7 +3619,7 @@ security definer
 set search_path = pg_catalog, pg_temp
 as $function$
 declare
-  v_owner uuid := auth.uid();
+  v_owner uuid := public.crm_workspace_owner_id();
   v_row jsonb;
   v_position bigint;
   v_unknown_key text;
@@ -3765,7 +3823,7 @@ security definer
 set search_path = pg_catalog, pg_temp
 as $function$
 declare
-  v_owner uuid := auth.uid();
+  v_owner uuid := public.crm_workspace_owner_id();
   v_claimed_owner uuid;
   v_clients jsonb;
   v_sales jsonb;
@@ -3896,7 +3954,7 @@ begin
   end if;
 
   -- Validar todo el ownership antes de la primera escritura. La funcion siempre
-  -- fuerza owner_id=auth.uid(); un owner_id provisto solo sirve como verificacion.
+  -- fuerza owner_id al workspace autorizado; un owner_id provisto solo sirve como verificacion.
   for v_item in
     select value from jsonb_array_elements(v_clients)
     union all
@@ -4462,7 +4520,7 @@ begin
     raise exception using
       errcode = '55000',
       message = 'crm_import_workspace solo restaura en un workspace completamente vacio',
-      hint = 'No se permite merge: existen datos o auditoria para auth.uid().';
+      hint = 'No se permite merge: existen datos o auditoria para este workspace.';
   end if;
 
   if exists (
@@ -5110,7 +5168,7 @@ end
 $function$;
 
 comment on function public.crm_import_workspace(jsonb) is
-  'Restaura por INSERT un respaldo CRM solo en un workspace vacio; owner_id siempre es auth.uid().';
+  'Restaura por INSERT un respaldo CRM solo en un workspace vacio; owner_id siempre es el workspace autorizado.';
 
 -- -----------------------------------------------------------------------------
 -- 8. RPCs publicas de escritura del CRM
@@ -5126,7 +5184,7 @@ security definer
 set search_path = pg_catalog, pg_temp
 as $function$
 declare
-  v_owner uuid := auth.uid();
+  v_owner uuid := public.crm_workspace_owner_id();
   v_claimed_owner uuid;
   v_installments jsonb;
   v_item jsonb;
@@ -5257,7 +5315,7 @@ begin
     if v_claimed_owner <> v_owner then
       raise exception using
         errcode = '42501',
-        message = 'p_sale.owner_id no coincide con auth.uid()';
+        message = 'p_sale.owner_id no coincide con el workspace autorizado';
     end if;
   end if;
 
@@ -5872,7 +5930,7 @@ end
 $function$;
 
 comment on function public.crm_save_sale(jsonb, jsonb) is
-  'Upsert atomico de venta y reemplazo exacto de su plan de cuotas para auth.uid().';
+  'Upsert atomico de venta y reemplazo exacto de su plan de cuotas para el workspace autorizado.';
 
 drop function if exists public.crm_change_sale_contract(jsonb, jsonb, jsonb);
 
@@ -5888,7 +5946,7 @@ security definer
 set search_path = pg_catalog, pg_temp
 as $function$
 declare
-  v_owner uuid := auth.uid();
+  v_owner uuid := public.crm_workspace_owner_id();
   v_sale_id text := nullif(btrim(p_sale ->> 'id'), '');
   v_change_id text := nullif(btrim(p_change ->> 'id'), '');
   v_reason text := nullif(btrim(p_change ->> 'reason'), '');
@@ -6157,7 +6215,7 @@ security definer
 set search_path = pg_catalog, pg_temp
 as $function$
 declare
-  v_owner uuid := auth.uid();
+  v_owner uuid := public.crm_workspace_owner_id();
   v_claimed_owner uuid;
   v_id text;
   v_sale_id text;
@@ -6204,7 +6262,7 @@ begin
     if v_claimed_owner <> v_owner then
       raise exception using
         errcode = '42501',
-        message = 'p_payment.owner_id no coincide con auth.uid()';
+        message = 'p_payment.owner_id no coincide con el workspace autorizado';
     end if;
   end if;
 
@@ -6421,7 +6479,7 @@ security definer
 set search_path = pg_catalog, pg_temp
 as $function$
 declare
-  v_owner uuid := auth.uid();
+  v_owner uuid := public.crm_workspace_owner_id();
   v_payment_id text := nullif(btrim(p_payment_id), '');
   v_reason text := nullif(btrim(p_reason), '');
   v_payment public.crm_payments%rowtype;
@@ -6550,7 +6608,7 @@ as $function$
       and cp.sale_id = s.id
       and cp.status = 'Contabilizado'
   ) as p on true
-  where s.owner_id = auth.uid()
+  where s.owner_id = public.crm_workspace_owner_id()
   order by s.sale_date desc, s.id;
 $function$;
 
@@ -6560,6 +6618,7 @@ comment on function public.crm_workspace_health() is
 -- Las funciones trigger no son APIs. PostgreSQL concede EXECUTE a PUBLIC por
 -- defecto, por lo que se revoca expresamente y solo se exponen las RPC destinadas
 -- al frontend.
+revoke all on function public.crm_workspace_owner_id() from public, anon, authenticated;
 revoke all on function public.crm_touch_updated_at() from public, anon, authenticated;
 revoke all on function public.crm_enforce_immutable_identity() from public, anon, authenticated;
 revoke all on function public.crm_validate_sale_financials() from public, anon, authenticated;
@@ -6579,6 +6638,7 @@ revoke all on function public.crm_record_payment(jsonb) from public, anon, authe
 revoke all on function public.crm_void_payment(text, text) from public, anon, authenticated;
 revoke all on function public.crm_workspace_health() from public, anon, authenticated;
 
+grant execute on function public.crm_workspace_owner_id() to authenticated;
 grant execute on function public.crm_import_historical_sales(jsonb, jsonb) to authenticated;
 grant execute on function public.crm_update_historical_contact(jsonb) to authenticated;
 grant execute on function public.crm_enrich_historical_contacts(jsonb) to authenticated;

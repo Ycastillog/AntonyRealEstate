@@ -18,8 +18,9 @@ Este documento cubre la publicación del sitio público, el portal de contenido 
 2. En SQL Editor, ejecutar `supabase-production-setup.sql` como una sola migración.
 3. Confirmar que existen las tablas `crm_clients`, `crm_sales`, `crm_historical_import_batches`, `crm_historical_sales`, `crm_commission_installments`, `crm_payments` y `crm_audit_log`.
 4. Confirmar que RLS está activa y que `anon` no tiene permisos de escritura.
-5. En Authentication, desactivar nuevos registros públicos y crear el usuario de Antony.
-6. En SQL Editor, concederle el rol de portal sustituyendo el correo del ejemplo:
+5. En Authentication, desactivar nuevos registros públicos y crear o invitar las cuentas de Antony y de soporte.
+6. En SQL Editor, ejecutar `supabase-shared-workspace-setup.sql` después de sustituir sus dos marcadores de correo. Antony recibe el rol `owner`; Yei conserva `support` y ambas cuentas abren la misma cartera sin duplicar registros.
+7. Para una cuenta que solo administrará el portal público, conceder el rol sustituyendo el correo del ejemplo:
 
 ```sql
 update auth.users
@@ -28,9 +29,9 @@ set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb)
 where lower(email) = lower('CORREO-AUTORIZADO');
 ```
 
-7. Cerrar y volver a iniciar sesión para que el JWT incluya `app_metadata.role=admin`.
-8. Configurar Site URL como `https://antonyrealestate.com/crm/` y permitir exactamente `https://antonyrealestate.com/crm/` como redirección.
-9. En Storage, comprobar que el bucket `evidencias` es público para lectura; solo el rol `admin` puede escribir y únicamente dentro de su carpeta de usuario.
+8. Cerrar y volver a iniciar sesión en ambas cuentas para que el JWT incluya `app_metadata.role`, `crm_workspace_owner_id` y `crm_access_role`.
+9. Configurar Site URL como `https://antonyrealestate.com/crm/` y permitir exactamente `https://antonyrealestate.com/crm/` como redirección.
+10. En Storage, comprobar que el bucket `evidencias` es público para lectura; solo el rol `admin` puede escribir y únicamente dentro de su carpeta de usuario.
 
 ## 3. Conectar el frontend
 
@@ -89,6 +90,8 @@ Usar un usuario y datos ficticios:
 - Rotar inmediatamente credenciales si una clave privada o contraseña llega a Git, un chat o una captura pública.
 - La contraseña administrativa histórica del frontend ya está revocada por diseño y nunca debe reutilizarse.
 - La cuenta autenticada puede cambiar su contraseña desde **Sistema → Cambiar contraseña** sin depender de un enlace de invitación.
+- El CRM usa sesiones solo en memoria: recargar, cerrar el navegador o abrir una visita nueva requiere correo y contraseña. Los enlaces de invitación o recuperación siguen siendo de un solo uso.
+- La cuenta `owner` y la cuenta `support` comparten el workspace mediante `app_metadata.crm_workspace_owner_id`. Ese dato se asigna únicamente desde SQL Editor; nunca desde el navegador.
 - Para corregir un cobro, anularlo con motivo y registrar uno nuevo; nunca editar la base directamente.
 - Un respaldo de nube solo se restaura en un workspace vacío; nunca se usa para sobrescribir movimientos financieros existentes.
 - Las bases históricas con nombres, teléfonos o correos son datos privados: no se guardan en Git ni se publican como activos del sitio. Se cargan únicamente desde la sesión autenticada del CRM.
