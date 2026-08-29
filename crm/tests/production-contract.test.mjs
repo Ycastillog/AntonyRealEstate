@@ -426,7 +426,7 @@ test("commission reports reconcile each installment and support export and print
   assert.match(app, /Todos los vencimientos/);
   assert.match(app, /Todos los cobros registrados/);
   assert.match(app, /activePaymentsForSale\(sale\.id\)\.some/);
-  assert.match(html, /production-v19/);
+  assert.match(html, /production-v20/);
 });
 
 test("desktop sidebar remains fixed while workspace content scrolls", () => {

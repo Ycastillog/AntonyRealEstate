@@ -88,6 +88,22 @@ begin
     )
   where id = v_support_id;
 
+  if to_regclass('public.crm_public_lead_settings') is null then
+    raise exception
+      'Falta crm_public_lead_settings; ejecute primero supabase-production-setup.sql';
+  end if;
+
+  insert into public.crm_public_lead_settings (
+    singleton, owner_id, enabled, created_at, updated_at
+  )
+  values (
+    true, v_workspace_owner_id, true, clock_timestamp(), clock_timestamp()
+  )
+  on conflict (singleton) do update
+  set owner_id = excluded.owner_id,
+      enabled = true,
+      updated_at = clock_timestamp();
+
   raise notice
     'Workspace compartido: owner %, support %, clientes %, ventas %, cuotas %, cobros %',
     v_owner_email,

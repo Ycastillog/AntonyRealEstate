@@ -2332,7 +2332,12 @@ function renderClients() {
           ).includes(query))
       );
     })
-    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+    .sort(
+      (a, b) =>
+        String(b.capturedAt || b.createdAt || "").localeCompare(
+          String(a.capturedAt || a.createdAt || "")
+        ) || a.name.localeCompare(b.name, "es")
+    );
   const visibleClients = paginatedRecords(clients, "clients", "clients");
   const filtersActive = query || stage;
   document.querySelector("#clientOverviewTotal").textContent = state.clients.length;

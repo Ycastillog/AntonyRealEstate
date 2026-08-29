@@ -18,11 +18,11 @@
     <meta property="og:url" content="https://antonyrealestate.com/" />
     <meta property="og:type" content="website" />
     <link rel="preconnect" href="https://images.unsplash.com" />
-    <link rel="stylesheet" href="styles.css?v=home-case-albums-v1" />
+    <link rel="stylesheet" href="styles.css?v=public-leads-v1" />
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" integrity="sha384-uTYyvsSSUZeaPhb5RbKlQa0zY/WpX/QHfvg2mczXyBQOpkWPEDy9lczyp+w7SKXu" crossorigin="anonymous" defer></script>
     <script src="media-config.js?v=secure-auth-v3" defer></script>
     <script src="contact.js?v=sticky-header-v2" defer></script>
-    <script src="app.js?v=home-case-albums-v2" defer></script>
+    <script src="app.js?v=public-leads-v1" defer></script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -574,35 +574,82 @@
             </a>
           </div>
         </div>
-        <form class="lead-form" id="leadForm">
+        <form class="lead-form" id="leadForm" aria-describedby="leadFormStatus">
           <label>
             Nombre
-            <input name="clientName" autocomplete="name" placeholder="Nombre del cliente" />
+            <input name="clientName" autocomplete="name" maxlength="200" placeholder="Nombre y apellido" required />
           </label>
           <label>
             Telefono
-            <input name="clientPhone" autocomplete="tel" placeholder="809-000-0000" />
+            <input name="clientPhone" type="tel" autocomplete="tel" inputmode="tel" maxlength="40" placeholder="809-000-0000" required />
           </label>
           <label>
-            Presupuesto
-            <input name="clientBudget" placeholder="US$150,000 - US$250,000" />
+            Correo electronico
+            <input name="clientEmail" type="email" autocomplete="email" maxlength="320" placeholder="nombre@correo.com" required />
           </label>
           <label>
-            Zona deseada
-            <input name="clientZone" placeholder="Santo Domingo, Punta Cana..." />
+            Zona de interes
+            <select name="clientZone" required>
+              <option value="">Selecciona una zona</option>
+              <option>Santo Domingo Norte</option>
+              <option>Santo Domingo Este</option>
+              <option>Santo Domingo Oeste</option>
+              <option>Distrito Nacional</option>
+              <option>Punta Cana</option>
+              <option>El Cibao</option>
+              <option>El Sur</option>
+              <option>El Norte</option>
+            </select>
+          </label>
+          <label>
+            Presupuesto aproximado
+            <input name="clientBudget" type="number" min="1" max="1000000000" step="100" inputmode="decimal" placeholder="150000" />
+          </label>
+          <label>
+            Moneda
+            <select name="clientBudgetCurrency">
+              <option value="USD">US$ Dolares</option>
+              <option value="DOP">RD$ Pesos dominicanos</option>
+            </select>
+          </label>
+          <label>
+            Tipo de propiedad
+            <select name="clientPropertyStage" required>
+              <option value="">Selecciona una opcion</option>
+              <option value="Listo">Lista para entrega</option>
+              <option value="En planos / En construcción">En planos / En construccion</option>
+              <option value="Indiferente">Cualquiera de las dos</option>
+            </select>
           </label>
           <label>
             Compra para
-            <select name="clientIntent">
-              <option value="vivir">Vivir</option>
-              <option value="invertir">Invertir</option>
-              <option value="ambas">Vivir o invertir</option>
+            <select name="clientIntent" required>
+              <option value="Vivir">Vivir</option>
+              <option value="Invertir">Invertir</option>
+              <option value="Vivir o invertir">Vivir o invertir</option>
             </select>
           </label>
-          <button class="primary-button" type="submit">
+          <label class="lead-form-wide">
+            Mensaje o detalle adicional
+            <textarea name="clientMessage" rows="3" maxlength="1500" placeholder="Cuantas habitaciones buscas, cuando deseas comprar o cualquier detalle importante."></textarea>
+          </label>
+          <label class="lead-consent lead-form-wide">
+            <input name="privacyConsent" type="checkbox" required />
+            <span>Acepto que Antony use estos datos para responder mi solicitud de asesoria. <a href="politica-privacidad/">Ver politica de privacidad</a>.</span>
+          </label>
+          <label class="lead-trap" aria-hidden="true">
+            Sitio web
+            <input name="companyWebsite" type="text" autocomplete="off" tabindex="-1" />
+          </label>
+          <p class="lead-form-status lead-form-wide" id="leadFormStatus" role="status" aria-live="polite">Tus datos se guardaran de forma segura en la cartera privada de Antony.</p>
+          <button class="primary-button lead-submit" type="submit">
             <i data-lucide="send"></i>
-            <span>Solicitar informacion</span>
+            <span>Enviar solicitud</span>
           </button>
+          <a class="ghost-button lead-whatsapp-followup" id="leadWhatsappFollowup" href="#" target="_blank" rel="noreferrer" hidden>
+            <i data-lucide="message-circle"></i>
+            <span>Continuar por WhatsApp</span>
+          </a>
         </form>
       </section>
 <section class="workspace inventory-secondary admin-only" id="catalogo" aria-label="Catalogo de referencia">

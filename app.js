@@ -91,6 +91,9 @@ const profilePhoto = document.querySelector("#profilePhoto");
 const profileFallback = document.querySelector("#profileFallback");
 const profilePhotoInput = document.querySelector("#profilePhotoInput");
 const leadForm = document.querySelector("#leadForm");
+const leadFormStatus = document.querySelector("#leadFormStatus");
+const leadSubmitButton = leadForm?.querySelector("button[type='submit']");
+const leadWhatsappFollowup = document.querySelector("#leadWhatsappFollowup");
 const floatingWhatsapp = document.querySelector("#floatingWhatsapp");
 const heroWhatsapp = document.querySelector("#heroWhatsapp");
 const footerWhatsapp = document.querySelector("#footerWhatsapp");
@@ -169,6 +172,52 @@ function whatsappUrl(message) {
 
 function openWhatsapp(message) {
   window.open(whatsappUrl(message), "_blank", "noreferrer");
+}
+
+function setLeadFormStatus(message, state = "idle") {
+  if (!leadFormStatus) return;
+  leadFormStatus.textContent = message;
+  leadFormStatus.dataset.state = state;
+}
+
+function setLeadFormPending(pending) {
+  if (!leadSubmitButton) return;
+  leadSubmitButton.disabled = pending;
+  leadSubmitButton.setAttribute("aria-busy", String(pending));
+  const label = leadSubmitButton.querySelector("span");
+  if (label) label.textContent = pending ? "Guardando solicitud..." : "Enviar solicitud";
+}
+
+async function submitPublicLead(payload) {
+  if (!remoteEvidenceReady) {
+    throw new Error("El formulario seguro no esta disponible.");
+  }
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(
+      `${mediaConfig.supabaseUrl}/rest/v1/rpc/crm_submit_public_lead`,
+      {
+        method: "POST",
+        headers: {
+          apikey: mediaConfig.supabaseAnonKey,
+          Authorization: `Bearer ${mediaConfig.supabaseAnonKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ p_payload: payload }),
+        signal: controller.signal
+      }
+    );
+    if (!response.ok) throw new Error("Supabase no acepto la solicitud.");
+    const result = await response.json();
+    if (!result || result.accepted !== true) {
+      throw new Error("La solicitud no fue confirmada.");
+    }
+    return result;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 function fallbackPhoto(title) {
@@ -702,18 +751,61 @@ document.querySelector("#printListing").addEventListener("click", () => {
   window.print();
 });
 
-leadForm.addEventListener("submit", (event) => {
+leadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(leadForm);
-  const name = formData.get("clientName").toString().trim() || "Cliente";
-  const phone = formData.get("clientPhone").toString().trim() || "No indicado";
-  const budget = formData.get("clientBudget").toString().trim() || "No indicado";
-  const zone = formData.get("clientZone").toString().trim() || "No indicada";
-  const intent = formData.get("clientIntent").toString();
-  const message = `Hola Antony, soy ${name}. Quiero asesoria inmobiliaria. Telefono: ${phone}. Presupuesto: ${budget}. Zona: ${zone}. Compra para: ${intent}.`;
+  const name = String(formData.get("clientName") || "").trim();
+  const phone = String(formData.get("clientPhone") || "").trim();
+  const email = String(formData.get("clientEmail") || "").trim();
+  const budget = String(formData.get("clientBudget") || "").trim();
+  const budgetCurrency = String(formData.get("clientBudgetCurrency") || "USD").trim();
+  const zone = String(formData.get("clientZone") || "").trim();
+  const propertyStage = String(formData.get("clientPropertyStage") || "").trim();
+  const intent = String(formData.get("clientIntent") || "").trim();
+  const detail = String(formData.get("clientMessage") || "").trim();
+  const privacyConsent = formData.get("privacyConsent") === "on";
+  const companyWebsite = String(formData.get("companyWebsite") || "").trim();
+  const budgetLabel = budget ? `${budgetCurrency} ${budget}` : "No indicado";
+  const whatsappMessage = `Hola Antony, soy ${name}. Complete la solicitud de asesoria en tu pagina. Telefono: ${phone}. Correo: ${email}. Presupuesto: ${budgetLabel}. Zona: ${zone}. Tipo: ${propertyStage}. Compra para: ${intent}.`;
 
-  copyText(message, "Solicitud copiada para WhatsApp");
-  openWhatsapp(message);
+  leadWhatsappFollowup.href = whatsappUrl(whatsappMessage);
+  leadWhatsappFollowup.hidden = true;
+  setLeadFormPending(true);
+  setLeadFormStatus("Guardando tu solicitud de forma segura...", "loading");
+
+  try {
+    await submitPublicLead({
+      name,
+      phone,
+      email,
+      budget,
+      budget_currency: budgetCurrency,
+      desired_zone: zone,
+      property_stage: propertyStage,
+      intent,
+      property_interest: "",
+      message: detail,
+      page_path: window.location.pathname,
+      privacy_consent: privacyConsent,
+      website: companyWebsite
+    });
+    leadForm.reset();
+    leadWhatsappFollowup.hidden = false;
+    setLeadFormStatus(
+      "Solicitud recibida. Antony ya puede verla como cliente nuevo en su CRM.",
+      "success"
+    );
+    showToast("Solicitud guardada correctamente");
+    if (window.lucide) lucide.createIcons();
+  } catch (_error) {
+    leadWhatsappFollowup.hidden = false;
+    setLeadFormStatus(
+      "No pudimos confirmar el registro ahora. Puedes continuar por WhatsApp sin perder los datos.",
+      "error"
+    );
+  } finally {
+    setLeadFormPending(false);
+  }
 });
 
 document.querySelector("#deleteListing").addEventListener("click", () => {

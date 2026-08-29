@@ -546,6 +546,57 @@ create table if not exists public.crm_clients (
 comment on table public.crm_clients is
   'Prospectos/clientes privados, aislados mediante el owner_id del workspace.';
 
+-- Configuración privada del único workspace que recibe formularios públicos.
+-- La fila se habilita después de la migración con el owner_id técnico existente;
+-- el repositorio nunca contiene correos ni UUID reales de clientes.
+create table if not exists public.crm_public_lead_settings (
+  singleton boolean primary key default true,
+  owner_id uuid not null,
+  enabled boolean not null default false,
+  created_at timestamptz not null default clock_timestamp(),
+  updated_at timestamptz not null default clock_timestamp(),
+
+  constraint crm_public_lead_settings_singleton_check check (singleton is true),
+  constraint crm_public_lead_settings_owner_fk
+    foreign key (owner_id) references auth.users(id) on delete restrict,
+  constraint crm_public_lead_settings_timestamps_check check (updated_at >= created_at)
+);
+
+comment on table public.crm_public_lead_settings is
+  'Configuración privada y de fila única para dirigir formularios web al workspace correcto.';
+
+-- Registro privado y acotado de intentos. Permite deduplicar y limitar abuso sin
+-- conceder lectura o escritura directa a anon/authenticated.
+create table if not exists public.crm_public_lead_submissions (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null,
+  client_id text,
+  normalized_phone text not null,
+  normalized_email text not null,
+  outcome text not null,
+  submitted_at timestamptz not null default clock_timestamp(),
+
+  constraint crm_public_lead_submissions_owner_fk
+    foreign key (owner_id) references auth.users(id) on delete restrict,
+  constraint crm_public_lead_submissions_phone_check check (
+    normalized_phone ~ '^[0-9]{7,15}$'
+  ),
+  constraint crm_public_lead_submissions_email_check check (
+    char_length(normalized_email) <= 320
+    and normalized_email ~* '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+  ),
+  constraint crm_public_lead_submissions_outcome_check check (
+    outcome in ('created', 'duplicate')
+  ),
+  constraint crm_public_lead_submissions_client_check check (
+    (outcome = 'created' and client_id is not null)
+    or outcome = 'duplicate'
+  )
+);
+
+comment on table public.crm_public_lead_submissions is
+  'Bitácora privada de recepción, deduplicación y rate limiting del formulario público.';
+
 create table if not exists public.crm_sales (
   owner_id uuid not null default public.crm_workspace_owner_id(),
   id text not null,
@@ -1529,6 +1580,12 @@ create index if not exists crm_clients_owner_stage_idx
   on public.crm_clients(owner_id, stage);
 create index if not exists crm_clients_owner_captured_idx
   on public.crm_clients(owner_id, captured_at desc);
+create index if not exists crm_public_lead_submissions_owner_time_idx
+  on public.crm_public_lead_submissions(owner_id, submitted_at desc);
+create index if not exists crm_public_lead_submissions_contact_time_idx
+  on public.crm_public_lead_submissions(
+    owner_id, normalized_email, normalized_phone, submitted_at desc
+  );
 
 create index if not exists crm_sales_owner_client_idx
   on public.crm_sales(owner_id, client_id);
@@ -2898,6 +2955,38 @@ begin
   end loop;
 end
 $crm_rls$;
+
+do $crm_public_lead_private_tables$
+declare
+  v_table text;
+  v_policy record;
+begin
+  foreach v_table in array array[
+    'crm_public_lead_settings',
+    'crm_public_lead_submissions'
+  ]
+  loop
+    for v_policy in
+      select policyname
+      from pg_policies
+      where schemaname = 'public'
+        and tablename = v_table
+    loop
+      execute format(
+        'drop policy if exists %I on public.%I',
+        v_policy.policyname,
+        v_table
+      );
+    end loop;
+
+    execute format('alter table public.%I enable row level security', v_table);
+    execute format(
+      'revoke all privileges on table public.%I from public, anon, authenticated',
+      v_table
+    );
+  end loop;
+end
+$crm_public_lead_private_tables$;
 
 -- -----------------------------------------------------------------------------
 -- 7. RPC atomica para importar staging histórico
@@ -6537,6 +6626,275 @@ $function$;
 comment on function public.crm_void_payment(text, text) is
   'Anula un cobro Contabilizado del owner actual; no elimina el registro.';
 
+-- Entrada pública de prospectos. La función no acepta owner_id, source ni stage
+-- desde el navegador, no devuelve datos privados y es la única superficie que
+-- anon puede ejecutar sobre el CRM.
+drop function if exists public.crm_submit_public_lead(jsonb);
+
+create function public.crm_submit_public_lead(p_payload jsonb)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, pg_temp
+as $function$
+declare
+  v_allowed_keys constant text[] := array[
+    'name', 'phone', 'email', 'budget', 'budget_currency', 'desired_zone',
+    'property_stage', 'intent', 'property_interest', 'message', 'page_path',
+    'privacy_consent', 'website'
+  ];
+  v_allowed_zones constant text[] := array[
+    'Santo Domingo Norte', 'Santo Domingo Este', 'Santo Domingo Oeste',
+    'Distrito Nacional', 'Punta Cana', 'El Cibao', 'El Sur', 'El Norte'
+  ];
+  v_allowed_property_stages constant text[] := array[
+    'Sin definir', 'Listo', 'En planos / En construcción', 'Indiferente'
+  ];
+  v_allowed_intents constant text[] := array['Vivir', 'Invertir', 'Vivir o invertir'];
+  v_unknown_key text;
+  v_owner uuid;
+  v_now timestamptz := clock_timestamp();
+  v_headers jsonb := '{}'::jsonb;
+  v_origin text;
+  v_name text;
+  v_phone text;
+  v_phone_digits text;
+  v_email text;
+  v_budget_text text;
+  v_budget numeric(18,2);
+  v_budget_currency text;
+  v_zone text;
+  v_property_stage text;
+  v_intent text;
+  v_property_interest text;
+  v_message text;
+  v_page_path text;
+  v_notes text;
+  v_existing_client_id text;
+  v_client_id text;
+  v_is_duplicate boolean := false;
+begin
+  if p_payload is null or jsonb_typeof(p_payload) <> 'object' then
+    raise exception using
+      errcode = '22023',
+      message = 'La solicitud no tiene un formato válido';
+  end if;
+
+  select key into v_unknown_key
+  from jsonb_object_keys(p_payload) as key
+  where not (key = any(v_allowed_keys))
+  limit 1;
+  if v_unknown_key is not null then
+    raise exception using
+      errcode = '22023',
+      message = 'La solicitud contiene campos no permitidos';
+  end if;
+
+  if coalesce(nullif(btrim(p_payload ->> 'website'), ''), '') <> '' then
+    raise exception using
+      errcode = '22023',
+      message = 'No se pudo validar la solicitud';
+  end if;
+  if coalesce((p_payload ->> 'privacy_consent')::boolean, false) is not true then
+    raise exception using
+      errcode = '22023',
+      message = 'Debes aceptar la política de privacidad';
+  end if;
+
+  begin
+    v_headers := coalesce(
+      nullif(current_setting('request.headers', true), '')::jsonb,
+      '{}'::jsonb
+    );
+  exception when others then
+    v_headers := '{}'::jsonb;
+  end;
+  v_origin := nullif(btrim(v_headers ->> 'origin'), '');
+  if session_user = 'authenticator'
+     and coalesce(v_origin, '') not in (
+       'https://antonyrealestate.com',
+       'https://www.antonyrealestate.com'
+     )
+     and coalesce(v_origin, '') !~ '^http://(localhost|127\.0\.0\.1)(:[0-9]{2,5})?$' then
+    raise exception using
+      errcode = '42501',
+      message = 'Origen de solicitud no autorizado';
+  end if;
+
+  select s.owner_id
+    into v_owner
+  from public.crm_public_lead_settings as s
+  where s.singleton is true
+    and s.enabled is true;
+
+  if v_owner is null then
+    raise exception using
+      errcode = '55000',
+      message = 'La recepción de solicitudes no está disponible';
+  end if;
+
+  v_name := regexp_replace(btrim(coalesce(p_payload ->> 'name', '')), '[[:space:]]+', ' ', 'g');
+  v_phone := regexp_replace(btrim(coalesce(p_payload ->> 'phone', '')), '[[:space:]]+', ' ', 'g');
+  v_phone_digits := regexp_replace(v_phone, '[^0-9]', '', 'g');
+  v_email := lower(btrim(coalesce(p_payload ->> 'email', '')));
+  v_budget_text := nullif(btrim(p_payload ->> 'budget'), '');
+  v_budget_currency := upper(nullif(btrim(p_payload ->> 'budget_currency'), ''));
+  v_zone := nullif(btrim(p_payload ->> 'desired_zone'), '');
+  v_property_stage := coalesce(nullif(btrim(p_payload ->> 'property_stage'), ''), 'Sin definir');
+  v_intent := nullif(btrim(p_payload ->> 'intent'), '');
+  v_property_interest := nullif(regexp_replace(
+    btrim(p_payload ->> 'property_interest'), '[[:space:]]+', ' ', 'g'
+  ), '');
+  v_message := nullif(btrim(p_payload ->> 'message'), '');
+  v_page_path := coalesce(nullif(btrim(p_payload ->> 'page_path'), ''), '/');
+
+  if char_length(v_name) not between 2 and 200 or v_name ~ '[[:cntrl:]]' then
+    raise exception using errcode = '22023', message = 'Escribe un nombre válido';
+  end if;
+  if v_phone !~ '^[0-9+(). -]{7,40}$'
+     or char_length(v_phone_digits) not between 7 and 15 then
+    raise exception using errcode = '22023', message = 'Escribe un teléfono válido';
+  end if;
+  if char_length(v_email) > 320
+     or v_email !~* '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' then
+    raise exception using errcode = '22023', message = 'Escribe un correo válido';
+  end if;
+  if v_zone is null or not (v_zone = any(v_allowed_zones)) then
+    raise exception using errcode = '22023', message = 'Selecciona una zona válida';
+  end if;
+  if not (v_property_stage = any(v_allowed_property_stages)) then
+    raise exception using errcode = '22023', message = 'Selecciona una etapa válida';
+  end if;
+  if v_intent is null or not (v_intent = any(v_allowed_intents)) then
+    raise exception using errcode = '22023', message = 'Selecciona el objetivo de compra';
+  end if;
+  if v_property_interest is not null
+     and (char_length(v_property_interest) > 200 or v_property_interest ~ '[[:cntrl:]]') then
+    raise exception using errcode = '22023', message = 'La propiedad consultada no es válida';
+  end if;
+  if v_message is not null and char_length(v_message) > 1500 then
+    raise exception using errcode = '22023', message = 'El mensaje es demasiado largo';
+  end if;
+  if char_length(v_page_path) > 500
+     or left(v_page_path, 1) <> '/'
+     or v_page_path ~ '[[:cntrl:]]' then
+    raise exception using errcode = '22023', message = 'La página de origen no es válida';
+  end if;
+
+  if v_budget_text is not null then
+    if v_budget_text !~ '^[0-9]{1,12}([.][0-9]{1,2})?$' then
+      raise exception using errcode = '22023', message = 'Escribe un presupuesto válido';
+    end if;
+    v_budget := round(v_budget_text::numeric, 2);
+    if v_budget <= 0 or v_budget > 1000000000 then
+      raise exception using errcode = '22023', message = 'El presupuesto está fuera del rango permitido';
+    end if;
+    if v_budget_currency not in ('USD', 'DOP') then
+      raise exception using errcode = '22023', message = 'Selecciona una moneda válida';
+    end if;
+  else
+    v_budget := null;
+    v_budget_currency := null;
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended('crm:public-leads:' || v_owner::text, 0)
+  );
+
+  delete from public.crm_public_lead_submissions
+  where owner_id = v_owner
+    and submitted_at < v_now - interval '90 days';
+
+  if (
+    select count(*)
+    from public.crm_public_lead_submissions
+    where owner_id = v_owner
+      and submitted_at >= v_now - interval '1 minute'
+  ) >= 12 or (
+    select count(*)
+    from public.crm_public_lead_submissions
+    where owner_id = v_owner
+      and submitted_at >= v_now - interval '1 day'
+  ) >= 300 then
+    raise exception using
+      errcode = '54000',
+      message = 'Hay demasiadas solicitudes. Intenta nuevamente más tarde';
+  end if;
+
+  select c.id
+    into v_existing_client_id
+  from public.crm_clients as c
+  where c.owner_id = v_owner
+    and (
+      lower(btrim(c.email)) = v_email
+      or regexp_replace(c.phone, '[^0-9]', '', 'g') = v_phone_digits
+    )
+  order by
+    (
+      lower(btrim(c.email)) = v_email
+      and regexp_replace(c.phone, '[^0-9]', '', 'g') = v_phone_digits
+    ) desc,
+    c.created_at
+  limit 1;
+
+  v_is_duplicate := v_existing_client_id is not null or exists (
+    select 1
+    from public.crm_public_lead_submissions as submission
+    where submission.owner_id = v_owner
+      and submission.submitted_at >= v_now - interval '15 minutes'
+      and (
+        submission.normalized_email = v_email
+        or submission.normalized_phone = v_phone_digits
+      )
+  );
+
+  if v_is_duplicate then
+    insert into public.crm_public_lead_submissions (
+      owner_id, client_id, normalized_phone, normalized_email, outcome, submitted_at
+    )
+    values (
+      v_owner, v_existing_client_id, v_phone_digits, v_email, 'duplicate', v_now
+    );
+    return jsonb_build_object('accepted', true);
+  end if;
+
+  v_client_id := 'client-web-' || replace(gen_random_uuid()::text, '-', '');
+  v_notes := concat_ws(
+    E'\n',
+    'Solicitud recibida desde antonyrealestate.com.',
+    'Objetivo: ' || v_intent || '.',
+    'Página de origen: ' || v_page_path || '.',
+    case when v_property_interest is not null
+      then 'Propiedad consultada: ' || v_property_interest || '.' end,
+    case when v_message is not null then 'Mensaje: ' || v_message end
+  );
+
+  insert into public.crm_clients (
+    owner_id, id, name, phone, email, source, stage, desired_zone,
+    property_stage, budget, budget_currency, captured_at, notes,
+    created_at, updated_at
+  )
+  values (
+    v_owner, v_client_id, v_name, v_phone, v_email, 'Página web', 'Nuevo', v_zone,
+    v_property_stage, v_budget, v_budget_currency, v_now, v_notes,
+    v_now, v_now
+  );
+
+  insert into public.crm_public_lead_submissions (
+    owner_id, client_id, normalized_phone, normalized_email, outcome, submitted_at
+  )
+  values (
+    v_owner, v_client_id, v_phone_digits, v_email, 'created', v_now
+  );
+
+  return jsonb_build_object('accepted', true);
+end
+$function$;
+
+comment on function public.crm_submit_public_lead(jsonb) is
+  'Recibe un prospecto web validado, deduplica y crea un cliente Nuevo sin exponer el CRM.';
+
 -- Salud financiera del workspace. plan_matches exige tanto el total exacto como
 -- una estructura valida: Pago unico o Avance + Saldo.
 create or replace function public.crm_workspace_health()
@@ -6636,6 +6994,7 @@ revoke all on function public.crm_save_sale(jsonb, jsonb) from public, anon, aut
 revoke all on function public.crm_change_sale_contract(jsonb, jsonb, jsonb) from public, anon, authenticated;
 revoke all on function public.crm_record_payment(jsonb) from public, anon, authenticated;
 revoke all on function public.crm_void_payment(text, text) from public, anon, authenticated;
+revoke all on function public.crm_submit_public_lead(jsonb) from public, anon, authenticated;
 revoke all on function public.crm_workspace_health() from public, anon, authenticated;
 
 grant execute on function public.crm_workspace_owner_id() to authenticated;
@@ -6647,6 +7006,7 @@ grant execute on function public.crm_save_sale(jsonb, jsonb) to authenticated;
 grant execute on function public.crm_change_sale_contract(jsonb, jsonb, jsonb) to authenticated;
 grant execute on function public.crm_record_payment(jsonb) to authenticated;
 grant execute on function public.crm_void_payment(text, text) to authenticated;
+grant execute on function public.crm_submit_public_lead(jsonb) to anon;
 grant execute on function public.crm_workspace_health() to authenticated;
 
 -- Publica inmediatamente las tablas y RPC nuevas en el cache de PostgREST.

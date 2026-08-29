@@ -3106,6 +3106,84 @@ main {
   align-self: end;
 }
 
+.lead-form-wide {
+  grid-column: 1 / -1;
+}
+
+.lead-consent {
+  display: flex;
+  grid-template-columns: none;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  background: #f7f3e8;
+  border: 1px solid #e4d4aa;
+  border-radius: 8px;
+  color: #344054;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.lead-consent input {
+  flex: 0 0 auto;
+  width: 18px;
+  min-height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--gold-strong);
+}
+
+.lead-consent a {
+  color: var(--accent-strong);
+  font-weight: 850;
+}
+
+.lead-trap {
+  position: absolute !important;
+  left: -10000px !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+}
+
+.lead-form-status {
+  min-height: 46px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #f4f6f9;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.lead-form-status[data-state="loading"] {
+  background: #f7f3e8;
+  color: #6f5116;
+}
+
+.lead-form-status[data-state="success"] {
+  background: #e9f7f2;
+  color: #176b52;
+}
+
+.lead-form-status[data-state="error"] {
+  background: #fff0f0;
+  color: #9e2525;
+}
+
+.lead-submit:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.lead-whatsapp-followup {
+  min-height: 48px;
+  justify-content: center;
+  align-self: end;
+  border-color: #128c7e;
+  color: #0f725f;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: 292px minmax(0, 1fr);

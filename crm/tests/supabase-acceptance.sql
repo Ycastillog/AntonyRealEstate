@@ -1068,6 +1068,23 @@ begin
 end
 $qa_final_contracts$;
 
+-- Habilitar temporalmente el mismo workspace para validar la entrada pública.
+reset role;
+insert into public.crm_public_lead_settings (
+  singleton, owner_id, enabled, created_at, updated_at
+)
+values (
+  true,
+  current_setting('qa.owner_id', true)::uuid,
+  true,
+  clock_timestamp(),
+  clock_timestamp()
+)
+on conflict (singleton) do update
+set owner_id = excluded.owner_id,
+    enabled = true,
+    updated_at = clock_timestamp();
+
 -- Un visitante anonimo no puede leer contenido aun no publicado.
 reset role;
 select set_config(
@@ -1076,6 +1093,43 @@ select set_config(
   true
 );
 set local role anon;
+
+select public.crm_submit_public_lead(
+  jsonb_build_object(
+    'name', 'QA Prospecto Web',
+    'phone', '809-555-0299',
+    'email', 'qa-public-lead@example.test',
+    'budget', '175000',
+    'budget_currency', 'USD',
+    'desired_zone', 'Punta Cana',
+    'property_stage', 'En planos / En construcción',
+    'intent', 'Invertir',
+    'property_interest', 'Proyecto QA',
+    'message', 'Prueba transaccional de captura web',
+    'page_path', '/',
+    'privacy_consent', true,
+    'website', ''
+  )
+);
+
+-- El mismo contacto no debe crear un segundo cliente.
+select public.crm_submit_public_lead(
+  jsonb_build_object(
+    'name', 'QA Prospecto Web',
+    'phone', '809-555-0299',
+    'email', 'qa-public-lead@example.test',
+    'budget', '175000',
+    'budget_currency', 'USD',
+    'desired_zone', 'Punta Cana',
+    'property_stage', 'En planos / En construcción',
+    'intent', 'Invertir',
+    'property_interest', 'Proyecto QA',
+    'message', 'Reintento idempotente',
+    'page_path', '/',
+    'privacy_consent', true,
+    'website', ''
+  )
+);
 
 select set_config(
   'qa.anon_hidden',
@@ -1086,6 +1140,31 @@ select set_config(
 );
 
 reset role;
+
+do $qa_public_lead_contract$
+begin
+  if (
+    select count(*)
+    from public.crm_clients
+    where owner_id = current_setting('qa.owner_id', true)::uuid
+      and lower(email) = 'qa-public-lead@example.test'
+      and source = 'Página web'
+      and stage = 'Nuevo'
+      and desired_zone = 'Punta Cana'
+  ) <> 1 then
+    raise exception 'QA fallo: el formulario público no creó exactamente un cliente Nuevo';
+  end if;
+
+  if (
+    select count(*)
+    from public.crm_public_lead_submissions
+    where owner_id = current_setting('qa.owner_id', true)::uuid
+      and normalized_email = 'qa-public-lead@example.test'
+  ) <> 2 then
+    raise exception 'QA fallo: la bitácora pública no registró creación y duplicado';
+  end if;
+end
+$qa_public_lead_contract$;
 
 -- Si RLS expusiera el borrador, el divisor sería cero y toda la prueba fallaría.
 select 1 / (
