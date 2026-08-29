@@ -7,15 +7,17 @@ import { fileURLToPath } from "node:url";
 const repoDir = fileURLToPath(new URL("../../", import.meta.url));
 const htmlPath = fileURLToPath(new URL("../index.html", import.meta.url));
 const appPath = fileURLToPath(new URL("../app.js", import.meta.url));
+const stylesPath = fileURLToPath(new URL("../styles.css", import.meta.url));
 const backendPath = fileURLToPath(new URL("../backend.js", import.meta.url));
 const historicalPath = fileURLToPath(new URL("../historical.js", import.meta.url));
 const mediaConfigPath = fileURLToPath(new URL("../../media-config.js", import.meta.url));
 const portalHtmlPath = fileURLToPath(new URL("../../portal/index.html", import.meta.url));
 const adminPath = fileURLToPath(new URL("../../admin.js", import.meta.url));
 
-const [html, app, backend, historical, portalHtml, admin] = await Promise.all([
+const [html, app, styles, backend, historical, portalHtml, admin] = await Promise.all([
   readFile(htmlPath, "utf8"),
   readFile(appPath, "utf8"),
+  readFile(stylesPath, "utf8"),
   readFile(backendPath, "utf8"),
   readFile(historicalPath, "utf8"),
   readFile(portalHtmlPath, "utf8"),
@@ -423,7 +425,15 @@ test("commission reports reconcile each installment and support export and print
   assert.match(app, /Todos los vencimientos/);
   assert.match(app, /Todos los cobros registrados/);
   assert.match(app, /activePaymentsForSale\(sale\.id\)\.some/);
-  assert.match(html, /production-v17/);
+  assert.match(html, /production-v17-1/);
+});
+
+test("desktop sidebar remains fixed while workspace content scrolls", () => {
+  assert.match(styles, /\.workspace-shell\s*\{[^}]*grid-column:\s*2/);
+  assert.match(styles, /\.sidebar\s*\{[^}]*height:\s*100dvh/);
+  assert.match(styles, /\.sidebar\s*\{[^}]*position:\s*fixed/);
+  assert.match(styles, /\.sidebar\s*\{[^}]*width:\s*var\(--sidebar\)/);
+  assert.match(styles, /@media\s*\(max-width:\s*767px\)[\s\S]*?\.sidebar\s*\{[^}]*bottom:\s*0/);
 });
 
 test("large operational lists paginate without changing their totals", () => {

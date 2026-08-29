@@ -761,12 +761,19 @@ label { color: #344054; display: grid; font-size: 12px; font-weight: 700; gap: 6
 
 body { background: var(--page-bg); }
 .app-shell { min-height: 100vh; }
-.workspace-shell { min-width: 0; }
+.workspace-shell { grid-column: 2; min-width: 0; }
 .sidebar {
-  height: 100vh;
+  bottom: 0;
+  height: 100dvh;
+  left: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 18px 16px 20px;
-  position: sticky;
+  position: fixed;
+  scrollbar-gutter: stable;
   top: 0;
+  width: var(--sidebar);
+  z-index: 45;
 }
 .sidebar .brand {
   align-items: center;
